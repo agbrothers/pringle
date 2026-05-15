@@ -16,9 +16,10 @@ import numpy as np
 import PyQt6  # must be imported before rendercanvas.qt  # noqa: F401
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QSplitter,
-    QVBoxLayout, QLabel, QFrame,
+    QVBoxLayout, QLabel, QFrame, QFileDialog, QMessageBox,
 )
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QKeySequence, QShortcut
 from rendercanvas.qt import QRenderWidget
 
 import pygfx as gfx
@@ -130,6 +131,107 @@ class PringleWindow(QMainWindow):
         splitter.setStretchFactor(1, 1)
 
         self._splitter = splitter
+
+        # Session state
+        self._session_path: str | None = None
+        self._modified = False
+
+        self._setup_shortcuts()
+
+    # ------------------------------------------------------------------
+    # Session persistence
+    # ------------------------------------------------------------------
+
+    def _setup_shortcuts(self) -> None:
+        for keys, slot in [
+            (QKeySequence.StandardKey.New,   self._on_new),
+            (QKeySequence.StandardKey.Open,  self._on_open),
+            (QKeySequence.StandardKey.Save,  self._on_save),
+            (QKeySequence("Ctrl+Shift+S"),   self._on_save_as),
+        ]:
+            sc = QShortcut(keys, self)
+            sc.activated.connect(slot)
+
+    def _mark_modified(self) -> None:
+        if not self._modified:
+            self._modified = True
+            self._update_title()
+
+    def _update_title(self) -> None:
+        name = (
+            self._session_path.rsplit("/", 1)[-1]
+            if self._session_path else "untitled"
+        )
+        prefix = "* " if self._modified else ""
+        self.setWindowTitle(f"{prefix}pringle — {name}")
+
+    def _confirm_discard(self) -> bool:
+        """Return True if it's safe to discard the current session."""
+        if not self._modified:
+            return True
+        btn = QMessageBox.question(
+            self, "Unsaved changes",
+            "You have unsaved changes. Discard them?",
+            QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
+        )
+        return btn == QMessageBox.StandardButton.Discard
+
+    def _on_new(self) -> None:
+        if not self._confirm_discard():
+            return
+        for cell in list(self._cell_list._cells):
+            self._cell_list.remove_cell(cell.cell_id)
+        self._session_path = None
+        self._modified = False
+        self._update_title()
+
+    def _on_open(self) -> None:
+        if not self._confirm_discard():
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Open session", "", "Pringle session (*.pringle);;YAML (*.yaml *.yml)"
+        )
+        if not path:
+            return
+        from pringle.session import load_session, restore_cell_list
+        try:
+            data = load_session(path)
+        except Exception as exc:
+            QMessageBox.critical(self, "Load error", str(exc))
+            return
+        restore_cell_list(self._cell_list, data.get("cells", []))
+        if data.get("grid"):
+            from pringle.session import grid_config_from_dict
+            cfg = grid_config_from_dict(data["grid"])
+            self._grid = make_grid(cfg)
+            self._cell_list.update_grid(self._grid)
+        self._session_path = path
+        self._modified = False
+        self._update_title()
+
+    def _on_save(self) -> None:
+        if self._session_path:
+            self._write_session(self._session_path)
+        else:
+            self._on_save_as()
+
+    def _on_save_as(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save session", "", "Pringle session (*.pringle);;YAML (*.yaml *.yml)"
+        )
+        if path:
+            self._write_session(path)
+
+    def _write_session(self, path: str) -> None:
+        from pringle.session import save_session
+        try:
+            save_session(path, self._cell_list, self._grid.config)
+        except Exception as exc:
+            QMessageBox.critical(self, "Save error", str(exc))
+            return
+        self._session_path = path
+        self._modified = False
+        self._update_title()
 
     # ------------------------------------------------------------------
     # Viewport update callback
