@@ -24,145 +24,194 @@ The Pringle UI is split into two primary areas:
 └─────────────────────┴────────────────────────────────────────┘
 ```
 
-The left panel is vertically divided into the **Equation Panel** (top) and the **Data Panel** (bottom). The divider is draggable. Both panels share a common namespace — data panel names are visible to equation panel cells.
+The left panel is vertically divided into the **Equation Panel** (top) and the **Data Panel** (bottom). The divider is draggable. Both panels operate on the **same dependency graph** — the panel separation is a UI and cell-type distinction only.
 
 ---
 
-## Equation Panel
+## The Unified Dependency Graph
 
-The equation panel contains cells that define what is rendered. Cells are **reactive**: they re-evaluate automatically when their slider or animation dependencies change. They do **not** re-evaluate when data panel cells change (only when the user explicitly re-runs a data cell).
+All cells — equation and data — live on a single directed acyclic graph (DAG). The graph determines evaluation order. Visual order within each panel is cosmetic; cells can be freely dragged and reordered in either panel.
 
-### Execution Model
+Edges in the DAG: cell A → cell B if A defines a name that B references (determined by AST free-variable analysis).
 
-- **Namespace**: numpy/scipy whitelist + no builtins + spatial grid variables (`x`, `y`, `u`, `v`) + shared namespace (slider values, lambda helpers, data panel outputs)
-- **Order**: determined by the dependency graph, not visual order. Visual order is for the user's organizational benefit only.
-- **Error handling**: errors are caught per-cell and displayed as inline warnings. The rest of the scene continues rendering.
-- **Visibility**: each cell has a toggle. When off, the cell still runs (so its namespace contributions remain available), but its rendered output is suppressed.
+**The key axis is reactivity, not panel membership:**
 
-### Ordering and the Dependency Graph
+| Cell type | Panel | Re-evaluates when... |
+|---|---|---|
+| Slider | Equation | User drags or animation ticks |
+| Lambda / helper | Equation | Any upstream cell changes |
+| Surface / curve / scatter | Equation | Any upstream dependency changes |
+| Data cell | Data | User clicks ▶ Run only |
+| Recurrence cell | Data | User clicks ▶ Run only |
 
-Desmos evaluates expressions in dependency order, not visual order. This is the correct model and Pringle adopts it:
+Non-reactive cells (data, recurrence) show a **stale indicator** (visual badge) when any upstream dependency has changed since their last run. The user chooses when to re-run them. They do not auto-run — not on slider changes, not on lambda edits, not on animation ticks. This prevents chaotic re-sampling of stochastic data.
 
-1. At parse time, each cell's **free variables** are extracted from the AST — names that are referenced but not defined within the cell itself.
-2. These free variables are matched against names defined in other cells (slider cells, lambda/helper cells, data panel cells).
-3. A directed acyclic graph (DAG) is built: cell A → cell B means A's output is needed before B can run.
-4. A topological sort gives the evaluation order.
-5. If a cycle is detected (A depends on B depends on A), both cells are flagged with an error.
-6. If a free variable is not defined anywhere, the cell shows a warning and a **"suggest" button** (see below).
+When the user clicks ▶ Run on a data cell:
+1. All upstream reactive cells (sliders, lambdas) are already current — they evaluate continuously
+2. Any upstream data cells that are stale are also run first (in dependency order)
+3. The target cell runs
+4. Downstream cells that have already been run are marked stale
 
-When a slider value changes, only the topological subgraph downstream of that slider is re-evaluated.
+A **▶▶ Run All** button at the top of the data panel re-runs all data cells in dependency order. This is the recommended way to initialize a session on load.
 
-### Undefined Variable Suggestion
+### Why Unified?
 
-When a cell references a name not defined in any other cell, Pringle displays an inline suggestion:
+A data cell referencing a lambda from the equation panel is handled correctly by the graph — the lambda cell is guaranteed to have evaluated before the data cell runs. No manual boot sequencing required. The separation into two visual panels is purely organizational; it does not affect graph topology.
 
-```
-⚠ 'a' is not defined   [+ Add slider for 'a']
-```
+### Cycle Detection
 
-Clicking the button inserts a new slider cell with:
-- Name: `a`
-- Default value: `1`
-- Range: `[0, 10]`
-- Animation mode: static
-
-This mirrors Desmos's UX and guides users toward completing their expression. The suggestion is non-blocking — the cell can still attempt to evaluate; the warning is informational.
-
-### Dragging and Reordering
-
-Visual order is cosmetic. Cells can be freely dragged to any position in the panel. Evaluation order is always determined by the dependency graph, never by visual position. This matches Desmos behavior exactly.
-
-### Folders
-
-Cells can be grouped into **folders** — collapsible sections in the equation panel. Folders:
-- Are purely organizational; they have no effect on evaluation order or namespacing
-- Can be collapsed to hide their contents from view
-- Have a name/label editable by the user
-- Can be toggled (all cells within are treated as invisible when folder is toggled off)
-
-### Comment Cells
-
-Any cell whose content begins with `#` (or is explicitly set to comment type) is treated as a comment — a text annotation with no code execution. Markdown rendering is a stretch goal.
+If a cycle is detected (e.g., data cell A references name `g` from lambda cell B, and lambda cell B references output from data cell A), both cells are flagged with a cycle error. Cycles cannot be resolved automatically and require the user to break the dependency chain.
 
 ---
 
-## Data Panel
+## Session Initialization (Boot Sequence)
 
-The data panel is a **Python execution context for setup code**. It is designed for:
-- Sampling from distributions: `d = random.normal(0, 1, (200, 3))`
-- Loading data from files
-- Running algorithms (sklearn, scipy) whose output is visualized
-- Any computation that should run once, not reactively
+When Pringle opens a saved YAML session:
 
-### Execution Model
+1. **Load YAML** — restore all cell content, style, slider values, and viewport state from file
+2. **Build dependency graph** — parse all cells, extract free variables, construct DAG
+3. **Evaluate reactive cells** — run all slider and lambda cells in dependency order (no renders yet)
+4. **Run data panel** — ▶▶ Run All in dependency order — data cells now have slider values and lambdas available
+5. **Evaluate render cells** — run all equation surface/curve/scatter cells in dependency order
+6. **First render** — renderer draws the scene
 
-- **Namespace**: same numpy/scipy whitelist + no builtins, but no AST safety check (more permissive by design — document this clearly)
-- **Order**: cells run top-to-bottom within the data panel (linear execution, like a notebook)
-- **Triggering**: cells run **only when explicitly triggered** by the user via a per-cell run button. They do not re-evaluate when sliders change or `t` ticks.
-- **Output**: names assigned in a data cell are exported into the shared namespace, where equation panel cells can reference them by name
-
-### Per-Cell Run Button
-
-Each data cell has a **▶ Run** button. Clicking it:
-1. Executes that cell's code in the shared data namespace (all previously run cells' outputs are visible)
-2. Updates the shared namespace with any new or changed names
-3. Triggers re-evaluation of any equation panel cells that reference the changed names
-
-A **▶▶ Run All** button at the top of the data panel re-runs all data cells top-to-bottom. This is the typical starting point when opening a saved session.
-
-This design prevents stochastic operations (random sampling) from being accidentally triggered by slider changes or animation ticks.
-
-### Data Panel Security Note
-
-The data panel runs more permissive code than the equation panel. While `__builtins__` is still removed, no AST check is applied, allowing things like attribute access, comprehensions, and multi-statement logic. The design relies on the numpy/scipy namespace restriction as the primary security boundary. Before any public deployment, the data panel should run in a subprocess or container.
+This sequence ensures that data cells which call equation-panel lambdas always have those lambdas available at run time.
 
 ---
 
 ## Shared Namespace
 
-The shared namespace is the communication channel between panels. It has layers:
+The shared namespace is the communication channel between all cells. It has layers:
 
 ```
 Layer 1 (lowest):  numpy/scipy whitelist (always present)
-Layer 2:           spatial grid vars injected per-execution (x, y, u, v, t, etc.)
-Layer 3:           slider values (updated reactively)
-Layer 4:           data panel outputs (updated on explicit run)
-Layer 5:           equation panel helper functions / lambdas (updated on cell change)
+Layer 2:           slider values (reactive; updated on drag/animation)
+Layer 3:           equation panel lambda / helper definitions (reactive)
+Layer 4:           data panel outputs (updated on explicit ▶ Run)
+Layer 5:           grid vars injected per-execution (x, y, u, v, t, etc.)
+                   — highest priority; cannot be shadowed
 ```
 
-Higher layers can shadow lower layers. Slider names cannot shadow spatial reserved names (`x`, `y`, `z`, `u`, `v`, `t`). The UI should warn if a slider is given a reserved name.
+**Magic variable names (`z`, `y`, `xyz`, `points`, etc.) are NOT exported to the shared namespace.** They are consumed locally by the renderer and scoped to the cell's local execution namespace only. This means:
+- Two cells both using `z = expr` produce two independent surfaces without namespace collision
+- The spatial `z` grid variable (if ever injected) is never shadowed by a surface expression
+- To reference cell A's surface in cell B, use a lambda: `f(x,y) = expr` in cell A, then `z = a * f(x,y)` in cell B
+
+Slider names cannot shadow spatial reserved names (`x`, `y`, `u`, `v`, `t`). The UI warns if a slider is given a reserved name.
+
+---
+
+## Parametric Grid Defaults
+
+The `(u, v)` parametric grid defaults to `[0, 2π] × [0, 2π]` — captures full rotation for cylindrical and spherical surfaces, the most common parametric surface types. Configurable in the View Settings panel alongside the `(x, y, z)` axis bounds. Resolution matches the `(x, y)` grid resolution.
+
+---
+
+## Camera Controls
+
+The 3D viewport supports both mouse-based and keyboard-based navigation:
+
+**Mouse (default orbit mode):**
+- Left-drag: orbit (rotate around scene center)
+- Right-drag / middle-drag: pan
+- Scroll: zoom
+
+**Keyboard (WASD + Space/Shift):**
+- `W` / `S`: zoom in / out (move camera toward/away from center)
+- `A` / `D`: orbit left / right
+- `Space` / `Shift`: orbit up / down (traverse z axis)
+- Speed is configurable; holding Shift while using mouse panning accelerates movement
+
+Both modes operate on the same orbit camera model — the camera always orbits a center point ("up" is always up). A first-person fly mode (`FlyController` in pygfx / `FlyCamera` in Vispy) is available as a toggle for exploring vector fields or enclosed regions from inside.
+
+Keyboard events are handled by the GPU canvas widget. In PyQt6, these are connected to the camera controller's `pan()`, `zoom()`, and `rotate()` methods. No additional library support is required — both Vispy and pygfx support this natively via key press event callbacks.
+
+---
+
+## Equation Panel
+
+Contains cells that define what is rendered. Cells are reactive: they re-evaluate when their slider or animation dependencies change.
+
+### Ordering and the Dependency Graph
+
+Evaluation order is determined by the unified DAG, not visual position. When a slider value changes, only the topological subgraph downstream of that slider is re-evaluated.
+
+### Undefined Variable Suggestion
+
+When a cell references a name not defined in any other cell:
+
+```
+⚠ 'a' is not defined   [+ Add slider for 'a']
+```
+
+Clicking inserts a new slider cell with name `a`, default value `1`, range `[0, 10]`, static mode.
+
+### Folders
+
+Collapsible groups of cells. Purely organizational — no effect on evaluation order or namespacing. Folder visibility toggle treats all contained cells as invisible.
+
+### Comment Cells
+
+Detected automatically. A cell is a comment if its content is:
+- Entirely `#`-prefixed lines
+- A bare string literal: `"""..."""`, `'''...'''`, `"..."`, or `'...'`
+
+No execution; no namespace contribution.
+
+---
+
+## Data Panel
+
+Contains cells for setup computation — sampling distributions, loading data, running algorithms. Cells are **non-reactive**: they only run when explicitly triggered.
+
+### Per-Cell Run Button
+
+Each data cell has a ▶ Run button. Clicking it runs the cell and all upstream stale data dependencies in dependency order. Downstream cells are marked stale.
+
+### Stale Indicator
+
+When any upstream dependency of a data cell has changed since the cell's last run, the cell displays a stale badge (e.g., a small orange dot or "↻ stale" label). The user re-runs manually.
+
+Data cells do NOT auto-update when:
+- A slider value changes
+- A lambda cell is edited
+- Another data cell is re-run
+
+This prevents chaotic re-sampling of stochastic data and avoids triggering expensive computation on every keystroke.
+
+### Security Note
+
+Data cells run more permissive code than equation cells. `__builtins__` is removed but no AST check is applied. The numpy/scipy namespace restriction is the primary security boundary. Before public deployment, data cells should run in a subprocess or container.
 
 ---
 
 ## View Settings Panel
 
-A collapsible panel (right side or bottom of viewport) for viewport configuration:
-- Axis bounds (x/y/z min, max)
+Collapsible panel (right side or bottom of viewport):
+- `(x, y, z)` axis bounds (min, max)
+- `(u, v)` parametric grid range (min, max)
 - Grid visibility and density
 - Axis labels
 - Background color
-- Surface default opacity
 - Camera preset buttons (top, front, isometric, reset)
 - Animation controls (global play/pause, speed multiplier)
-
-These settings do not interact with the expression evaluation system.
 
 ---
 
 ## Cell State
 
-Each cell (equation or data) carries the following state:
+Each cell carries the following state, serialized to YAML:
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | UUID | Stable identifier (used in dependency graph) |
-| `type` | enum | `surface`, `curve`, `scatter`, `slider`, `lambda`, `data`, `comment`, `folder` |
+| `id` | UUID | Stable identifier for dependency graph edges |
+| `type` | enum | See `07-cell-types-and-blocks.md` |
 | `content` | str | The code/text content |
 | `visible` | bool | Whether rendered output is shown |
-| `color` | RGB | Per-expression render color |
+| `style` | CellStyle | Color, opacity, line width, display mode, etc. |
 | `error` | str or None | Last execution error message |
 | `warning` | str or None | Shape mismatch or undefined variable warning |
+| `stale` | bool | Data cells: true if upstream deps changed since last run |
 | `last_run` | timestamp | When data cells were last explicitly run |
 | `collapsed` | bool | For folder cells |
-
-Cell state is serialized to disk for session persistence (JSON or similar).
+| `panel` | enum | `equation` or `data` — UI placement only |

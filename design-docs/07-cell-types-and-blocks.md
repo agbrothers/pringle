@@ -62,6 +62,19 @@ def preprocess_func_def(line: str) -> str:
 
 ---
 
+## Magic Variable Scoping
+
+Magic variable names (`z`, `y`, `x`, `xyz`, `points`, `vectors`) are **local to the cell's execution and consumed by the renderer only**. They are never exported to the shared namespace.
+
+This means:
+- Two cells both writing `z = expr` produce two independent surfaces — no namespace collision
+- The spatial `z` grid (if ever injected for implicit surfaces) is never shadowed by a surface expression
+- To reference one cell's surface in another, use a lambda: define `f(x,y) = expr` in cell A, then write `z = a * f(x,y)` in cell B
+
+Constraint sub-cells receive the computed magic variable in their local namespace — the post-evaluation surface array, not a spatial grid variable.
+
+---
+
 ## Bare Expression Auto-Plot
 
 A cell whose content is a bare expression (no assignment) is auto-detected and plotted based on return shape. Priority order for output detection:

@@ -36,6 +36,15 @@ This document tracks the high-level design decisions for Pringle and the open qu
 | Recurrence relations | Data cell sub-cells: `initial_condition:` and `recursion:`; executed as a generated for loop | Confined to data panel; no equation panel changes; valid Python rule syntax |
 | Session persistence | YAML file serializing all cell content, sub-cells, style, slider config, and viewport state | Diffable, version-controllable, shareable; human-readable |
 | Grid evaluation (v1) | CPU numpy vectorized eval + buffer re-upload | Simple, debuggable, sufficient for 30fps at 128×128 |
+| Magic variable scoping | Magic names (`z`, `y`, `xyz`, etc.) are local to cell execution; never exported to shared namespace | Allows multiple `z = expr` cells without collision; spatial grid vars are never shadowed |
+| Duplicate magic name cells | Two cells both writing `z = expr` → two independent surfaces | Each renders separately; no shared namespace conflict |
+| Unified dependency graph | All cells (equation and data) on the same DAG; panel separation is UI-only | Solves boot order; data cells can reference equation lambdas; both panels freely reorderable |
+| Data cell reactivity | Non-reactive — never auto-run; show stale indicator when upstream deps change | Prevents chaotic re-sampling; user controls when data updates |
+| Session boot sequence | (1) load YAML, (2) build DAG, (3) eval reactive cells (sliders/lambdas), (4) ▶▶ Run All data, (5) eval render cells, (6) first render | Guarantees lambdas available to data cells at load time |
+| Comment cell detection | `#`-only lines OR bare string literals (`"""`, `'''`, `"`, `'`) | Supports both Python comment styles and docstring-style notes |
+| (u,v) parametric grid default | `[0, 2π] × [0, 2π]`; configurable in View Settings panel | Captures full rotation for common cylindrical/spherical surfaces |
+| WASD camera controls | Keyboard navigation in orbit mode: W/S = zoom, A/D = orbit left/right, Space/Shift = orbit up/down | Supported natively via key event callbacks in both Vispy and pygfx |
+| Recurrence loop index | User writes `n`; internally renamed to `_pringle_loop_n` before execution | Prevents collision with any slider or variable named `n` |
 
 ## f(x,y) Auto-Render Rules
 
@@ -61,20 +70,28 @@ When no magic name is found, infer render type from the output shape:
 | `(N, M)` not matching grid | No render; defer | Future: assume z=0 plane |
 | Python list / non-array | No render; warn | |
 
-## Open Questions
+## Decided: Library Choices
 
-### 1. GPU / Rendering Library
-**Options**: Vispy (`gloo` + `scene`) vs. wgpu-py + pygfx
+### GPU / Rendering Library: **pygfx + wgpu-py**
 
-- **Vispy**: mature, stable, large community, good documentation, OpenGL
-- **pygfx/wgpu-py**: modern WebGPU API, better long-term foundation, smaller community, better material system (cleaner styling)
+Chosen over Vispy for the following reasons:
+- Material system maps 1:1 to style panel controls (color, opacity, line width, display mode)
+- Line width works correctly on macOS (rendered as screen-space quads, not GL lines which are clamped to 1px)
+- Transparency handling (WBOIT) available without manual depth sorting
+- Modern WebGPU API — better long-term foundation for v2 features (compute shaders, GPU-side expression eval)
+- WASD camera controls supported via `FlyController` and `OrbitController` key event callbacks
 
-*Recommendation*: prototype with **Vispy** (faster to get something working); migrate to pygfx if Vispy's API becomes limiting. pygfx is preferred long-term for styling and transparency.
+Trade-off accepted: smaller community, less documentation, more initial setup time than Vispy.
 
-### 2. UI Framework for Expression Panel + Sliders
-**Options**: Dear PyGui, PyQt6, PySide6, imgui-bundle
+### UI Framework: **PyQt6 / PySide6**
 
-*Needs prototyping*: evaluate how easily each embeds a Vispy/wgpu canvas in the same window.
+Chosen over Dear PyGui for the following reasons:
+- First-class native widget embedding for pygfx canvas (via `QOpenGLWidget` / native window handle)
+- Widget system suited for the panel architecture: draggable cells, sub-cells, collapsible folders
+- QWidget-based constraint sub-cells and style popovers are straightforward
+- PySide6 (same API, LGPL license) is an acceptable drop-in if licensing matters
+
+Trade-off accepted: more boilerplate than Dear PyGui's immediate-mode API.
 
 ### 3. GLSL Compilation of Expressions (GPU-side eval)
 Deferred to v2. CPU numpy path is good enough for v1.

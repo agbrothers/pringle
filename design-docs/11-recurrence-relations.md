@@ -10,45 +10,104 @@ This sidesteps the problems with general programming recursion (stack limits, no
 
 A recurrence data cell has:
 1. **Primary expression**: allocates the output array — e.g., `path = zeros((10, 2))`
-2. **`initial_condition:` sub-cell**: an expression that evaluates to the value of `array[0]`
+2. **One or more `initial_condition:` sub-cells**: each is a statement `array[index] = expr` that explicitly sets a specific index
 3. **`recursion:` sub-cell**: a statement of the form `array[n] = expr(array[n-1], ...)` defining the update rule
 
 ```
 [Data cell]  path = zeros((10, 2))
-  [initial_condition]  array([1.0, 0.1])
+  [initial_condition]  path[0] = array([1.0, 0.1])
+  [initial_condition]  path[1] = array([2.0, 0.2])   ← optional; for multi-step recurrences
   [recursion]          path[n] = 2 * path[n-1]
 ```
+
+Multiple initial conditions allow multi-step recurrences (Fibonacci-style: `path[n] = path[n-1] + path[n-2]` requires both `path[0]` and `path[1]` to be set).
 
 In the YAML session format:
 ```yaml
 - id: "data-002"
   type: recurrence
   expression: "path = zeros((10, 2))"
-  initial_condition: "array([1.0, 0.1])"
+  initial_conditions:
+    - "path[0] = array([1.0, 0.1])"
+    - "path[1] = array([2.0, 0.2])"
   recursion: "path[n] = 2 * path[n-1]"
 ```
 
 ## Execution Model
 
-The recurrence cell is executed when the user clicks ▶ Run (same as any data cell). The execution sequence:
+The recurrence cell is executed when the user clicks ▶ Run. The execution sequence:
 
 ```python
-# Step 1: execute the primary expression to allocate the array
+# Step 1: allocate the array filled with NaN (not zeros) for error detection
 exec(primary_code, data_namespace)
-# → path = zeros((10, 2)) is now in data_namespace
+# Immediately overwrite with NaN so unset indices are detectable:
+array_name = extract_array_name(recursion_rule)
+data_namespace[array_name][:] = nan
 
-# Step 2: evaluate the initial condition and set index 0
-init_val = eval(initial_condition_expr, data_namespace)
-array_name = extract_array_name(recursion_rule)   # "path"
-data_namespace[array_name][0] = init_val
+# Step 2: apply all initial conditions (explicit index assignments)
+for ic_expr in initial_condition_exprs:
+    exec(ic_expr, data_namespace)   # e.g., exec("path[0] = array([1.0, 0.1])", ...)
 
-# Step 3: run the recursion rule as a generated for loop
+# Step 3: determine loop start from the highest set initial condition index + 1
+# (parsed from the initial condition LHS subscripts)
+loop_start = max_initial_index + 1
+
+# Step 4: run the recursion rule as a generated for loop
 array_name, index_var, rule_stmt = parse_recursion_rule(recursion_rule)
-loop_code = f"for {index_var} in range(1, len({array_name})):\n    {rule_stmt}"
+loop_code = (
+    f"for {index_var} in range({loop_start}, len({array_name})):\n"
+    f"    if any(isnan({array_name}[{index_var}-1])):\n"
+    f"        break\n"
+    f"    {rule_stmt}"
+)
 exec(loop_code, data_namespace)
-
-# Result: data_namespace["path"] is now a fully populated (10, 2) array
 ```
+
+**NaN-fill error detection:** the array is pre-filled with NaN before initial conditions are applied. If the recursion rule ever reads a NaN value (because a required prior index was not set), the loop detects this, stops, and reports a warning: `"Recurrence halted at index N: prior value was NaN — check initial conditions."` This catches missing initial conditions (e.g., setting only `path[0]` for a two-step recurrence that reads `path[n-2]`).
+
+The `isnan` check is applied to the prior element before each iteration. For scalar arrays, it's `isnan(array[n-1])`; for vector arrays, `any(isnan(array[n-1]))`. The `isnan` function is in the numpy whitelist namespace.
+
+## Shared Namespace Access in Recursion Rules
+
+The recursion loop executes in the shared data namespace, which includes:
+- All previously run data cell outputs
+- All equation panel lambda/helper functions (from the shared namespace)
+- Slider values
+
+This means recursion rules can call equation panel functions:
+```python
+# Equation panel cell:
+f(x,y) = x**2 + y**2   # → f = lambda x, y: x**2 + y**2 in shared namespace
+
+# Data recurrence cell:
+path = zeros((50, 2))
+# initial_condition: path[0] = array([1.0, 0.5])
+# recursion: path[n] = path[n-1] + 0.01 * custom_step(path[n-1])
+```
+
+Functions must be defined (equation panel cells evaluated, or prior data cells run) before the recurrence cell is run. The ▶ Run button triggers evaluation at that moment in time.
+
+## Loop Index Variable: `n` → `_pringle_loop_n`
+
+The user writes `n` as the loop index in the recursion sub-cell for readability. Internally, the parser renames all occurrences of `n` to `_pringle_loop_n` using an AST name-substitution pass before the loop is executed. This prevents any collision with a slider or data variable also named `n`.
+
+```python
+class RenameLoopVar(ast.NodeTransformer):
+    def __init__(self, old, new): self.old, self.new = old, new
+    def visit_Name(self, node):
+        if node.id == self.old:
+            return ast.copy_location(ast.Name(id=self.new, ctx=node.ctx), node)
+        return node
+
+def rename_index_var(tree, user_name="_pringle_loop_n"):
+    # Detect the index variable from the LHS subscript
+    assign = tree.body[0]
+    index_var = assign.targets[0].slice.id   # e.g., "n"
+    renamed = RenameLoopVar(index_var, user_name).visit(tree)
+    return renamed, index_var, user_name
+```
+
+The user-visible name (`n`) is only used in the sub-cell text editor. The loop variable `_pringle_loop_n` is transient and scoped to the loop — it is not present in the shared namespace before or after execution.
 
 ## Parsing the Recursion Rule
 

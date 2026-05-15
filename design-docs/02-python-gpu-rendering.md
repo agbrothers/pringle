@@ -62,8 +62,26 @@ For animated surfaces, encoding the time parameter as a **GLSL uniform** (a sing
 
 The CPU approach is the right starting point. GLSL compilation can be added later as an optimization for smooth animation.
 
-## Open Questions
+## Decision: pygfx + wgpu-py
 
-- **Implicit surfaces in v1?** If yes, need marching cubes path. If no, can start much simpler with explicit + parametric only.
-- **Vispy vs pygfx?** Vispy is safer for near-term productivity; pygfx is the better long-term foundation.
-- **Shader compilation of expressions?** Highly desirable for smooth animation but adds significant complexity. Probably v2.
+**pygfx** is the chosen rendering backend for Pringle. See `05-architecture-decisions.md` for full rationale. Key factors: clean material system, correct line width on macOS, WBOIT transparency, WebGPU future-proofing.
+
+Implicit surfaces are deferred to v2. Shader compilation of expressions is deferred to v2. CPU numpy + buffer re-upload is the v1 evaluation strategy.
+
+## WASD Camera Controls
+
+Both Vispy and pygfx support keyboard-driven camera navigation via key press event callbacks.
+
+**pygfx implementation:** `OrbitController` handles mouse-based orbit. WASD is connected to controller methods in the canvas key event handler:
+
+```python
+def on_key_press(event):
+    if event.key == "w":   controller.zoom(0.95)
+    elif event.key == "s": controller.zoom(1.05)
+    elif event.key == "a": controller.rotate(0, -0.05)
+    elif event.key == "d": controller.rotate(0,  0.05)
+    elif event.key == " ": controller.rotate(-0.05, 0)
+    elif event.key == "shift": controller.rotate(0.05, 0)
+```
+
+The camera always orbits a center point (up is always up), preserving spatial orientation — essential for inspecting mathematical surfaces. A `FlyController` (first-person, WASD built-in) is available as an alternative mode for exploring enclosed regions or vector fields from inside.
