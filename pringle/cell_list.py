@@ -221,7 +221,12 @@ class CellListWidget(QWidget):
         source = cell.source()
         if not source.strip():
             return CellResult()
-        result = run_cell(source, shared, self._grid)
+        c_exprs = cell.constraint_exprs() if hasattr(cell, "constraint_exprs") else []
+        d_exprs = cell.condition_exprs() if hasattr(cell, "condition_exprs") else []
+        result = run_cell(
+            source, shared, self._grid,
+            constraint_exprs=c_exprs, condition_exprs=d_exprs,
+        )
         if result.error:
             cell.set_error(result.error)
         elif result.warning:

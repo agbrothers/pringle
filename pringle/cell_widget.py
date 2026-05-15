@@ -2,11 +2,12 @@
 CellWidget — a single expression cell in the equation panel.
 
 Layout (horizontal):
-  [color dot] [QPlainTextEdit] [visibility eye] [delete ✕]
+  [color dot] [QPlainTextEdit] [+sub] [visibility eye] [delete ✕]
 
 Below the text edit (conditionally):
-  [error label]    — red, shown on eval error
-  [warning label]  — orange, shown on shape mismatch or undefined variable
+  [ConstraintSubCell ...]  — indented sub-cells (constraint / condition)
+  [error label]            — red, shown on eval error
+  [warning label]          — orange, shown on shape mismatch or undefined variable
 
 The widget emits:
   content_changed(cell_id)  — debounced 300ms after each keystroke
@@ -20,13 +21,72 @@ from __future__ import annotations
 
 import uuid
 from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
-    QLabel, QPlainTextEdit, QSizePolicy, QFrame,
+    QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QMenu,
+    QLabel, QPlainTextEdit, QLineEdit, QSizePolicy, QFrame,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeyEvent, QColor, QPalette
 
 from pringle.style import CellStyle, palette_color
+
+
+# ---------------------------------------------------------------------------
+# Constraint / condition sub-cell
+# ---------------------------------------------------------------------------
+
+class ConstraintSubCell(QWidget):
+    """
+    An indented sub-cell attached to a CellWidget.
+
+    sub_type:
+      "constraint" — boolean mask that sets z=NaN where False  (icon: ⊂)
+      "condition"  — piecewise branch selector                  (icon: ≡)
+    """
+
+    content_changed = pyqtSignal()
+    delete_requested = pyqtSignal()
+
+    _ICONS = {"constraint": "⊂", "condition": "≡"}
+
+    def __init__(self, sub_type: str = "constraint", parent=None):
+        super().__init__(parent)
+        self._sub_type = sub_type
+        self._build_ui()
+
+    def _build_ui(self):
+        row = QHBoxLayout(self)
+        row.setContentsMargins(28, 1, 6, 1)
+        row.setSpacing(4)
+
+        icon = QLabel(self._ICONS.get(self._sub_type, "⊂"))
+        icon.setStyleSheet("color: #888; font-size: 13px;")
+        icon.setFixedWidth(16)
+        row.addWidget(icon)
+
+        self._edit = QLineEdit()
+        self._edit.setPlaceholderText(
+            "boolean expression (x, y, z in scope)"
+            if self._sub_type == "constraint"
+            else "condition expression (x, y in scope)"
+        )
+        self._edit.setStyleSheet(
+            "QLineEdit { border: 1px dashed #bbb; border-radius: 3px; "
+            "padding: 1px 4px; font-size: 12px; background: #fafafa; }"
+        )
+        self._edit.textChanged.connect(self.content_changed)
+        row.addWidget(self._edit, 1)
+
+        del_btn = QPushButton("✕")
+        del_btn.setFixedSize(20, 20)
+        del_btn.setFlat(True)
+        del_btn.clicked.connect(self.delete_requested)
+        row.addWidget(del_btn)
+
+    def source(self) -> str:
+        return self._edit.text()
+
+    def sub_type(self) -> str:
+        return self._sub_type
 
 
 # ---------------------------------------------------------------------------
@@ -98,6 +158,7 @@ class CellWidget(QWidget):
         self.cell_id: str = cell_id or str(uuid.uuid4())
         self.style: CellStyle = style or CellStyle()
         self._visible: bool = True
+        self._sub_cells: list[ConstraintSubCell] = []
 
         self._build_ui()
         self._debounce = QTimer(self)
@@ -144,6 +205,13 @@ class CellWidget(QWidget):
         self._eye_btn.clicked.connect(self._on_visibility_toggled)
         row.addWidget(self._eye_btn)
 
+        self._add_sub_btn = QPushButton("⊂")
+        self._add_sub_btn.setFixedSize(24, 24)
+        self._add_sub_btn.setFlat(True)
+        self._add_sub_btn.setToolTip("Add sub-cell")
+        self._add_sub_btn.clicked.connect(self._on_add_sub_clicked)
+        row.addWidget(self._add_sub_btn)
+
         self._delete_btn = QPushButton("✕")
         self._delete_btn.setFixedSize(24, 24)
         self._delete_btn.setFlat(True)
@@ -152,6 +220,13 @@ class CellWidget(QWidget):
         row.addWidget(self._delete_btn)
 
         outer.addLayout(row)
+
+        # Sub-cell container (empty initially)
+        self._sub_container = QWidget()
+        self._sub_layout = QVBoxLayout(self._sub_container)
+        self._sub_layout.setContentsMargins(0, 0, 0, 0)
+        self._sub_layout.setSpacing(1)
+        outer.addWidget(self._sub_container)
 
         # Error label (hidden until needed)
         self._error_label = QLabel()
@@ -205,6 +280,29 @@ class CellWidget(QWidget):
         self.set_error(None)
         self.set_warning(None)
 
+    def add_sub_cell(self, sub_type: str = "constraint") -> ConstraintSubCell:
+        """Append a constraint or condition sub-cell below this cell."""
+        sub = ConstraintSubCell(sub_type=sub_type, parent=self)
+        sub.content_changed.connect(self._on_text_changed)
+        sub.delete_requested.connect(lambda: self._remove_sub_cell(sub))
+        self._sub_cells.append(sub)
+        self._sub_layout.addWidget(sub)
+        self._debounce.start()
+        return sub
+
+    def _remove_sub_cell(self, sub: ConstraintSubCell) -> None:
+        if sub in self._sub_cells:
+            self._sub_cells.remove(sub)
+        self._sub_layout.removeWidget(sub)
+        sub.deleteLater()
+        self._debounce.start()
+
+    def constraint_exprs(self) -> list[str]:
+        return [s.source() for s in self._sub_cells if s.sub_type() == "constraint" and s.source().strip()]
+
+    def condition_exprs(self) -> list[str]:
+        return [s.source() for s in self._sub_cells if s.sub_type() == "condition" and s.source().strip()]
+
     def set_style(self, style: CellStyle) -> None:
         self.style = style
         self._update_color_dot()
@@ -230,6 +328,14 @@ class CellWidget(QWidget):
             f"border-radius: 9px; border: 1px solid rgba(0,0,0,0.15); }}"
             f"QPushButton:hover {{ border: 1px solid rgba(0,0,0,0.35); }}"
         )
+
+    def _on_add_sub_clicked(self):
+        menu = QMenu(self)
+        menu.addAction("Add Constraint (filter surface)", lambda: self.add_sub_cell("constraint"))
+        menu.addAction("Add Condition (piecewise branch)", lambda: self.add_sub_cell("condition"))
+        menu.exec(self._add_sub_btn.mapToGlobal(
+            self._add_sub_btn.rect().bottomLeft()
+        ))
 
     def _on_text_changed(self):
         self._debounce.start()
