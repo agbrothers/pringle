@@ -7,7 +7,8 @@ d
 d_rand
 
 ### Plot a surface parametrized by a point created in data
-z = dot([x,y], d[2])
+equation_block:
+    z = dot([x,y], d[2])
 
 
 # ---------------------- Data ----------------------
