@@ -19,9 +19,11 @@ classifiers = [
   "Programming Language :: Python :: 3"
 ]
 dependencies = [
-    "tqdm",
-    "numpy",
-    "matplotlib",
+    "dash>=4.1.0",
+    "dash-bootstrap-components>=2.0.4",
+    "numpy>=2.4.4",
+    "plotly>=6.7.0",
+    "pyyaml>=6.0.3",
 ]
 
 [project.urls]
