@@ -22,7 +22,7 @@ from pringle.preprocess import (
     MAGIC_NAMES, SPATIAL_NAMES,
 )
 from pringle.safety import check_ast, SecurityError, get_free_names, get_store_names
-from pringle.namespace import build_equation_namespace
+from pringle.namespace import build_equation_namespace, build_data_namespace
 from pringle.grid import Grid, grid_vars
 
 
@@ -286,8 +286,8 @@ def run_cell(
             return result
 
     # --- Build execution namespace ---
-    # Layer 1: whitelist
-    local_ns = build_equation_namespace()
+    # Layer 1: whitelist (data cells get full numpy alias `np`)
+    local_ns = build_data_namespace() if is_data_cell else build_equation_namespace()
     # Layer 2+3+4: shared namespace (sliders, lambdas, data outputs)
     local_ns.update(shared_namespace)
     # Layer 5: grid vars (highest priority — cannot be shadowed)

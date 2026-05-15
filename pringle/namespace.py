@@ -110,8 +110,11 @@ def build_data_namespace() -> dict:
     """
     Return a namespace for data panel cells.
 
-    Same numpy/scipy whitelist as equation namespace.  No AST safety check
-    is applied (see design-docs/05 — data panel is intentionally more
-    permissive for setup/sampling code).  Still no builtins.
+    Same numpy/scipy whitelist as equation namespace, plus the full `np`
+    module alias for convenience (e.g. np.random.randn).  No AST safety
+    check is applied (data panel is intentionally more permissive for
+    setup/sampling code).  Still no Python builtins.
     """
-    return build_equation_namespace()
+    ns = build_equation_namespace()
+    ns["np"] = _np
+    return ns

@@ -46,7 +46,18 @@ class ConstraintSubCell(QWidget):
     content_changed = pyqtSignal()
     delete_requested = pyqtSignal()
 
-    _ICONS = {"constraint": "⊂", "condition": "≡"}
+    _ICONS = {
+        "constraint":         "⊂",
+        "condition":          "≡",
+        "initial_condition":  "∅",
+        "recursion":          "↺",
+    }
+    _PLACEHOLDERS = {
+        "constraint":        "boolean expression (x, y, z in scope)",
+        "condition":         "condition expression (x, y in scope)",
+        "initial_condition": "initial condition, e.g. path[0] = array([1, 0])",
+        "recursion":         "recurrence rule, e.g. path[n] = path[n-1] * 0.9",
+    }
 
     def __init__(self, sub_type: str = "constraint", parent=None):
         super().__init__(parent)
@@ -65,9 +76,7 @@ class ConstraintSubCell(QWidget):
 
         self._edit = QLineEdit()
         self._edit.setPlaceholderText(
-            "boolean expression (x, y, z in scope)"
-            if self._sub_type == "constraint"
-            else "condition expression (x, y in scope)"
+            self._PLACEHOLDERS.get(self._sub_type, "expression")
         )
         self._edit.setStyleSheet(
             "QLineEdit { border: 1px dashed #bbb; border-radius: 3px; "
