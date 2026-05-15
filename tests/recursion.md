@@ -1,6 +1,6 @@
 # ---------------------- Expressions ----------------------
 
-## SURFACE TOGGLED OFF
+### SURFACE TOGGLED OFF
 g(x,y) = a*x**2 + b*y**2
    `visible: False`
 

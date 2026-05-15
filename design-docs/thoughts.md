@@ -139,3 +139,16 @@ I would expect this to plot both surfaces, where `z =` is sort of a generic synt
 9. Can we replace it with an underscore or something during the parsing and computation step? Since that variable is only computationally used in a for loop on run, it has a very transient scope. We don't want to cause namespace conflicts, but it is a useful/intuitive name to provide to the user. 
 
 10. The user should have to click run each time they want to update data like that. We do not want data to update automatically from lambda changes, as that can cause chaotic effects, heavy lag, and the could trigger for each little edit a user makes. That would probably create an annoying experience for the user. 
+
+
+-------------------------------
+
+I've compacted the context, but all of our core design decisions are capture d in `design-docs`. Please refer to those for key details from our earlier conversations. I agree with your recommendations to use pygfx + wgpu-py + PyQt6, as well as the unified DAG and YAML. 
+
+The last remaining thing that we haven't talked through in depth is user input. It should basically be all the standard Desmos input. Scroll controls zoom. Click and drag does an orbital rotation around the origin. 
+
+We also want to use Desmos's axis settings. That is, we want to be able to manually set the axis bounds, recenter, and other basic quality of life features. Please review what desmos allows for in that regard. 
+
+On the expression panel, clicking on a cell should select it and add an active cursor to the test box. Pressing enter should add a new cell inline and below the currently selected cell. The expression/data split and text panel vs GUI panel should be draggable. 
+
+If there's any obvious user considerations I'm forgetting, please mention them. Document these and then provide me with a development plan -- what pieces should be built in what order and why. I'd also like to know how you would test each piece to ensure functionality. Since much of this requires visual verification, it would be useful to save off frames from the viewer as png files so that you can close the loop with development, testing, and validation. 
