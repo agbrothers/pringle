@@ -3,6 +3,7 @@ Qt application shell for Pringle.
 
 Creates the top-level QMainWindow with:
   - Left panel: CellListWidget (equation cells, live evaluation)
+               + ViewSettingsWidget (axis bounds, camera presets)
   - Right panel: QRenderWidget embedding the pygfx canvas
   - Horizontal QSplitter between left and right
 """
@@ -26,6 +27,7 @@ from pringle.grid import GridConfig, Grid, make_grid
 from pringle.evaluator import run_cell, CellResult
 from pringle.style import CellStyle
 from pringle.cell_list import CellListWidget
+from pringle.view_settings import ViewSettingsWidget
 
 
 class PringleViewport(QRenderWidget):
@@ -59,6 +61,18 @@ class PringleViewport(QRenderWidget):
     def set_visible(self, cell_id: str, visible: bool) -> None:
         self._pr.set_visible(cell_id, visible)
 
+    def set_camera_preset(self, name: str) -> None:
+        """Position the camera at a standard viewpoint."""
+        cam = self._pr._camera
+        positions = {
+            "iso":   (6, -8, 6),
+            "top":   (0, 0, 12),
+            "front": (0, -12, 0),
+        }
+        if name in positions:
+            cam.local.position = positions[name]
+            cam.look_at((0, 0, 0))
+
 
 class PringleWindow(QMainWindow):
     """
@@ -66,7 +80,9 @@ class PringleWindow(QMainWindow):
 
     Layout:
         QSplitter (horizontal)
-          ├── CellListWidget   (expression cells, live evaluation)
+          ├── Left panel (QWidget)
+          │     ├── CellListWidget   (equation cells, live evaluation)
+          │     └── ViewSettingsWidget (axis bounds, camera presets)
           └── PringleViewport  (3D GPU canvas)
     """
 
@@ -83,17 +99,29 @@ class PringleWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Horizontal, self)
         self.setCentralWidget(splitter)
 
-        # 3D viewport (created first so on_cell_result can reference it)
+        # 3D viewport
         self._viewport = PringleViewport(splitter)
 
-        # Cell list — wired to viewport via on_cell_result callback
+        # Left panel: cell list + view settings stacked vertically
+        left = QWidget()
+        left_layout = QVBoxLayout(left)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(0)
+
         self._cell_list = CellListWidget(
             on_cell_result=self._on_cell_result,
             grid=self._grid,
-            parent=splitter,
         )
+        left_layout.addWidget(self._cell_list, 1)
 
-        splitter.insertWidget(0, self._cell_list)
+        self._view_settings = ViewSettingsWidget(config=self._grid.config)
+        self._view_settings.bounds_changed.connect(self._on_bounds_changed)
+        self._view_settings.resolution_changed.connect(self._on_resolution_changed)
+        self._view_settings.camera_preset_requested.connect(self._viewport.set_camera_preset)
+        self._view_settings.fit_all_requested.connect(self._viewport.renderer.fit_camera)
+        left_layout.addWidget(self._view_settings)
+
+        splitter.insertWidget(0, left)
         splitter.addWidget(self._viewport)
 
         # Initial split proportions
@@ -136,6 +164,28 @@ class PringleWindow(QMainWindow):
             vp.remove_object(cell_id)
 
     # ------------------------------------------------------------------
+    # View settings handlers
+    # ------------------------------------------------------------------
+
+    def _on_bounds_changed(self, x_min: float, x_max: float, y_min: float, y_max: float) -> None:
+        config = GridConfig(
+            x_min=x_min, x_max=x_max,
+            y_min=y_min, y_max=y_max,
+            n=self._grid.config.n,
+        )
+        self._grid = make_grid(config)
+        self._cell_list.update_grid(self._grid)
+
+    def _on_resolution_changed(self, n: int) -> None:
+        config = GridConfig(
+            x_min=self._grid.config.x_min, x_max=self._grid.config.x_max,
+            y_min=self._grid.config.y_min, y_max=self._grid.config.y_max,
+            n=n,
+        )
+        self._grid = make_grid(config)
+        self._cell_list.update_grid(self._grid)
+
+    # ------------------------------------------------------------------
     # Properties
     # ------------------------------------------------------------------
 
@@ -146,6 +196,10 @@ class PringleWindow(QMainWindow):
     @property
     def cell_list(self) -> CellListWidget:
         return self._cell_list
+
+    @property
+    def view_settings(self) -> ViewSettingsWidget:
+        return self._view_settings
 
 
 def launch(argv=None) -> int:

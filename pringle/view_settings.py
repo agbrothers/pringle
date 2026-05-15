@@ -1,0 +1,126 @@
+"""
+ViewSettingsWidget — axis bounds, grid resolution, and camera controls.
+
+Signals
+-------
+bounds_changed(x_min, x_max, y_min, y_max)
+    Emitted when the user clicks "Apply" after editing bounds.
+resolution_changed(n: int)
+    Emitted immediately as the resolution spinbox changes.
+camera_preset_requested(name: str)
+    "iso" | "top" | "front"
+fit_all_requested()
+    Camera should frame all visible objects.
+"""
+
+from __future__ import annotations
+
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QDoubleSpinBox, QSpinBox, QPushButton, QGroupBox,
+)
+from PyQt6.QtCore import pyqtSignal
+
+from pringle.grid import GridConfig
+
+
+class ViewSettingsWidget(QWidget):
+    bounds_changed = pyqtSignal(float, float, float, float)
+    resolution_changed = pyqtSignal(int)
+    camera_preset_requested = pyqtSignal(str)
+    fit_all_requested = pyqtSignal()
+
+    def __init__(self, config: GridConfig | None = None, parent=None):
+        super().__init__(parent)
+        self._config = config or GridConfig()
+        self._build_ui()
+
+    def _build_ui(self):
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(6, 4, 6, 8)
+        outer.setSpacing(6)
+
+        # Axis bounds
+        bounds_box = QGroupBox("Axis Bounds")
+        bl = QVBoxLayout(bounds_box)
+        bl.setContentsMargins(4, 4, 4, 4)
+        bl.setSpacing(2)
+
+        for axis, attr_min, attr_max in (
+            ("X", "_x_min", "_x_max"),
+            ("Y", "_y_min", "_y_max"),
+        ):
+            row = QHBoxLayout()
+            row.addWidget(QLabel(f"{axis}:"))
+            lo = QDoubleSpinBox()
+            lo.setRange(-1e4, 1e4)
+            lo.setDecimals(1)
+            lo.setValue(getattr(self._config, f"{axis.lower()}_min"))
+            lo.setFixedWidth(60)
+            setattr(self, attr_min, lo)
+            row.addWidget(lo)
+            row.addWidget(QLabel("to"))
+            hi = QDoubleSpinBox()
+            hi.setRange(-1e4, 1e4)
+            hi.setDecimals(1)
+            hi.setValue(getattr(self._config, f"{axis.lower()}_max"))
+            hi.setFixedWidth(60)
+            setattr(self, attr_max, hi)
+            row.addWidget(hi)
+            row.addStretch(1)
+            bl.addLayout(row)
+
+        apply_btn = QPushButton("Apply Bounds")
+        apply_btn.setObjectName("apply_bounds_btn")
+        apply_btn.setFixedHeight(24)
+        apply_btn.clicked.connect(self._on_apply)
+        bl.addWidget(apply_btn)
+        outer.addWidget(bounds_box)
+
+        # Resolution
+        res_row = QHBoxLayout()
+        res_row.addWidget(QLabel("Resolution n:"))
+        self._res_spin = QSpinBox()
+        self._res_spin.setRange(8, 256)
+        self._res_spin.setValue(self._config.n)
+        self._res_spin.setSingleStep(8)
+        self._res_spin.valueChanged.connect(self.resolution_changed)
+        res_row.addWidget(self._res_spin)
+        res_row.addStretch(1)
+        outer.addLayout(res_row)
+
+        # Camera presets
+        cam_box = QGroupBox("Camera")
+        cl = QHBoxLayout(cam_box)
+        cl.setContentsMargins(4, 4, 4, 4)
+        cl.setSpacing(4)
+        for name, label in [("iso", "Iso"), ("top", "Top"), ("front", "Front")]:
+            btn = QPushButton(label)
+            btn.setObjectName(f"preset_{name}_btn")
+            btn.setFixedHeight(24)
+            btn.clicked.connect(
+                lambda _checked=False, n=name: self.camera_preset_requested.emit(n)
+            )
+            cl.addWidget(btn)
+        fit_btn = QPushButton("Fit All")
+        fit_btn.setObjectName("fit_all_btn")
+        fit_btn.setFixedHeight(24)
+        fit_btn.clicked.connect(self.fit_all_requested)
+        cl.addWidget(fit_btn)
+        outer.addWidget(cam_box)
+
+    def _on_apply(self):
+        self.bounds_changed.emit(
+            self._x_min.value(), self._x_max.value(),
+            self._y_min.value(), self._y_max.value(),
+        )
+
+    def current_config(self) -> GridConfig:
+        """Return a GridConfig reflecting the current widget state."""
+        return GridConfig(
+            x_min=self._x_min.value(),
+            x_max=self._x_max.value(),
+            y_min=self._y_min.value(),
+            y_max=self._y_max.value(),
+            n=self._res_spin.value(),
+        )
