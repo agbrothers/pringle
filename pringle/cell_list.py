@@ -3,15 +3,16 @@ CellListWidget — scrollable list of CellWidget instances.
 
 Manages:
 - Ordered list of cells (visual order)
-- Shared namespace (accumulated left-to-right through the cell list)
-- Re-evaluation on content_changed signal (sequential, no DAG yet — Phase 7)
+- Shared namespace built via DAG-ordered evaluation
+- Topological re-evaluation on content_changed / value_changed signals
 - Signaling the viewport to update rendered objects
 
 The viewport is updated by calling an injected callback:
     on_cell_result(cell_id, result, style)
 
-This decouples the cell list from the Qt viewport — Phase 5 only.
-The dependency graph (DAG) is wired in Phase 7.
+Phase 7: evaluation order follows the dependency graph (DAG) rather than
+visual order; cycle detection and undefined-name warnings are surfaced inline.
+Slider changes trigger incremental re-evaluation of only their downstream cells.
 """
 
 from __future__ import annotations
@@ -172,18 +173,46 @@ class CellListWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _rebuild_namespace(self) -> None:
-        """Re-evaluate all cells in order, accumulating the shared namespace."""
+        """
+        Re-evaluate all cells in dependency (topological) order.
+
+        Cycle detection: cyclic cells are flagged with an error and skipped.
+        Undefined-name detection: cells using names not defined by any cell
+        receive an inline warning.
+        """
+        from pringle.dag import build_dag, topo_order, undefined_names
+
+        dag = build_dag(self._cells)
+        ordered_cells, cyclic_ids = topo_order(dag, self._cells)
+        undef = undefined_names(self._cells)
+
         shared: dict = {}
-        for cell in self._cells:
+        for cell in ordered_cells:
             if isinstance(cell, SliderWidget):
                 shared[cell.name] = cell.value
                 continue
+
+            if cell.cell_id in cyclic_ids:
+                cell.clear_diagnostics()
+                cell.set_error("Circular dependency detected")
+                self._on_cell_result(cell.cell_id, CellResult(), cell.style)
+                continue
+
             result = self._eval_cell(cell, shared)
+
+            # Augment with undefined-name warning if eval succeeded
+            if not result.error and cell.cell_id in undef:
+                names_str = ", ".join(f"'{n}'" for n in undef[cell.cell_id])
+                extra = f"Undefined: {names_str}"
+                if not result.warning:
+                    cell.set_warning(extra)
+
             shared.update(result.exports)
             if cell.is_visible_cell():
                 self._on_cell_result(cell.cell_id, result, cell.style)
             else:
                 self._on_cell_result(cell.cell_id, CellResult(), cell.style)
+
         self._shared_ns = shared
 
     def _eval_cell(self, cell: CellWidget, shared: dict) -> CellResult:
@@ -207,7 +236,44 @@ class CellListWidget(QWidget):
         self._rebuild_namespace()
 
     def _on_slider_value_changed(self, name: str, value: float) -> None:
-        self._rebuild_namespace()
+        """
+        Incremental re-evaluation: only cells downstream of the changed slider
+        are re-evaluated.  All other cell outputs stay as-is from _shared_ns.
+        Falls back to full rebuild if the namespace is not yet initialised.
+        """
+        from pringle.dag import build_dag, downstream_of
+
+        if not self._shared_ns and self._cells:
+            self._rebuild_namespace()
+            return
+
+        slider_cell = next(
+            (c for c in self._cells if isinstance(c, SliderWidget) and c.name == name),
+            None,
+        )
+        if slider_cell is None:
+            self._rebuild_namespace()
+            return
+
+        dag = build_dag(self._cells)
+        descendants = downstream_of(dag, slider_cell.cell_id, self._cells)
+
+        # Start from the last full namespace snapshot, updated with the new value
+        shared = dict(self._shared_ns)
+        shared[name] = value
+
+        for cell in descendants:
+            if isinstance(cell, SliderWidget):
+                shared[cell.name] = cell.value
+                continue
+            result = self._eval_cell(cell, shared)
+            shared.update(result.exports)
+            if cell.is_visible_cell():
+                self._on_cell_result(cell.cell_id, result, cell.style)
+            else:
+                self._on_cell_result(cell.cell_id, CellResult(), cell.style)
+
+        self._shared_ns = shared
 
     def _on_delete_requested(self, cell_id: str) -> None:
         self.remove_cell(cell_id)
