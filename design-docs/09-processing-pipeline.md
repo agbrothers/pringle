@@ -5,18 +5,18 @@ This document describes the full pipeline from raw cell content to rendered outp
 ## Overview
 
 ```
-Raw cell string (from UI)
+Raw cell string (from UI) + constraint sub-cell strings (from UI)
     │
     ▼
 [1] PREPROCESS
-    • Detect and convert f(args) = expr → lambda assignments
-    • Extract constraint sub-cell expressions (from UI, not parsed text)
+    • Detect f(args) = expr → lambda assignments
+    • Detect bare string → comment cell (skip remaining stages)
     │
     ▼
 [2] PARSE & VALIDATE
     • ast.parse() → AST
     • AST safety check (block dangerous node types)
-    • Free variable extraction → dependency edges
+    • Free variable extraction → dependency edges → undefined-variable warnings
     │
     ▼ (on slider/t change, or explicit run)
 [3] EXECUTE
@@ -24,23 +24,30 @@ Raw cell string (from UI)
     • Capture bare expression values via AST transform
     │
     ▼
-[4] OUTPUT DETECTION
-    • Check namespace for magic variable names (z, y, xyz, points, ...)
-    • Fall back to bare expression auto-plot (shape-based inference)
+[4] OUTPUT DETECTION  (priority order)
+    • (1) Check for magic name assignment
+    • (2) Check for function signature auto-render
+    • (3) Shape inference for bare expression values
     │
     ▼
-[5] CONSTRAINT APPLICATION
-    • Evaluate constraint expressions in same namespace (z now available)
+[5] PIECEWISE DETECTION
+    • If magic variable is a Python list → piecewise mode
+    • Validate len(pieces) == len(conditions); warn and abort if not
+    • Evaluate all pieces; apply np.select with implicit prior-negation
+    │
+    ▼
+[6] CONSTRAINT APPLICATION
+    • Evaluate each constraint sub-cell expression (z now available)
     • Combine masks with logical_and
     • Apply: np.where(mask, value, nan)
     │
     ▼
-[6] SHAPE VALIDATION
+[7] SHAPE VALIDATION
     • Check output shape against expected shape for render type
     • On mismatch: emit inline cell warning; skip renderer
     │
     ▼
-[7] RENDERER SUBMISSION
+[8] RENDERER SUBMISSION
     • Upload / update geometry buffer
     • Apply CellStyle (color, opacity, display mode, etc.)
 ```
@@ -49,15 +56,27 @@ Raw cell string (from UI)
 
 ## Stage 1: Preprocessing
 
-Preprocessing transforms syntax sugar into valid Python before `ast.parse()` sees it. It operates line-by-line on the primary expression cell content. Constraint expressions come from their own sub-cell UI inputs and are never mixed into the primary cell text.
+### 1a. Comment Cell Detection
 
-### 1a. Function Definition Detection
+Before any other processing, check if the entire cell content is a bare string literal:
 
-Detects the pattern `name(args) = expr` — never valid Python — and converts it to a lambda assignment.
+```python
+def is_comment_cell(code: str) -> bool:
+    try:
+        tree = ast.parse(code.strip(), mode="eval")
+        return isinstance(tree.body, ast.Constant) and isinstance(tree.body.value, str)
+    except SyntaxError:
+        return False
+```
+
+If true, the cell renders as a text annotation. All remaining stages are skipped.
+
+### 1b. Function Definition Detection
+
+Detects `name(args) = expr` and converts to lambda assignment. Applied line-by-line.
 
 ```python
 import re
-
 FUNC_DEF = re.compile(r'^(\w+)\(([^)]*)\)\s*=\s*(.+)$')
 
 def preprocess_func_def(line: str) -> str:
@@ -66,36 +85,22 @@ def preprocess_func_def(line: str) -> str:
         name, args, body = m.groups()
         return f"{name} = lambda {args}: {body}"
     return line
+
+def preprocess_cell(code: str) -> str:
+    return "\n".join(preprocess_func_def(line) for line in code.splitlines())
 ```
 
-Examples:
-```
-f(x,y) = x**2 + y**2      →   f = lambda x, y: x**2 + y**2
-g(x,y) = -x**2 - y**2     →   g = lambda x, y: -x**2 - y**2
-h(t) = sin(t) * cos(t)    →   h = lambda t: sin(t) * cos(t)
-```
+Constraint sub-cell expressions are preprocessed with the same function (a constraint could reference `f(x,y)` defined inline).
 
-This transformation is applied to every line of the primary cell content before AST parsing.
+### 1c. Constraint and Condition Sub-cells
 
-### 1b. Constraint Extraction
-
-Constraint expressions come from the UI — each constraint sub-cell is a separate input box. The pipeline receives them as a list of strings, not extracted from the primary cell text. No text parsing is needed.
+Constraint expressions come from the UI as separate strings — not parsed from the primary cell text. The pipeline receives:
 
 ```python
-# From UI layer:
-primary_code: str       # the main expression cell content
-constraints: list[str]  # one string per constraint sub-cell
+primary_code: str           # the main expression cell content
+constraint_exprs: list[str] # from constraint sub-cells
+condition_exprs: list[str]  # from piecewise condition sub-cells (if any)
 ```
-
-### 1c. Full Preprocessing Function
-
-```python
-def preprocess_cell(primary_code: str) -> str:
-    lines = primary_code.splitlines()
-    return "\n".join(preprocess_func_def(line) for line in lines)
-```
-
-Constraint sub-cells are preprocessed identically (each is a single expression, but function definition detection is still applied in case a constraint calls `f(args)`).
 
 ---
 
@@ -107,14 +112,15 @@ import ast
 BLOCKED_NODES = {
     ast.Import, ast.ImportFrom,
     ast.With, ast.AsyncWith,
-    ast.Try,
+    ast.Try, ast.TryStar,
     ast.Global, ast.Nonlocal,
     ast.Delete,
     ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef,
 }
-
-BLOCKED_ATTRS = {"__class__", "__bases__", "__subclasses__", "__globals__",
-                 "__builtins__", "__dict__", "__module__"}
+BLOCKED_ATTRS = {
+    "__class__", "__bases__", "__subclasses__", "__globals__",
+    "__builtins__", "__dict__", "__module__",
+}
 
 class SafetyChecker(ast.NodeVisitor):
     def generic_visit(self, node):
@@ -133,68 +139,56 @@ def parse_and_validate(code: str) -> ast.AST:
     return tree
 ```
 
-### Free Variable Extraction (Dependency Analysis)
+### Free Variable Extraction
 
 ```python
-RESERVED = {"x", "y", "z", "u", "v", "t"}  # spatial + time vars
-BUILTINS_NS = set(EQUATION_NAMESPACE.keys())  # sin, cos, pi, ...
+RESERVED = {"x", "y", "z", "u", "v", "t"}
+BUILTINS_NS = set(EQUATION_NAMESPACE.keys())
 
 def get_free_names(tree: ast.AST) -> set[str]:
     assigned, referenced = set(), set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Name):
-            if isinstance(node.ctx, ast.Store):
-                assigned.add(node.id)
-            elif isinstance(node.ctx, ast.Load):
-                referenced.add(node.id)
+            (assigned if isinstance(node.ctx, ast.Store) else referenced).add(node.id)
     return referenced - assigned - RESERVED - BUILTINS_NS
 ```
 
-Free names are compared against all other cells' defined names to build the dependency DAG. Any free name not defined anywhere triggers the "undefined variable" inline warning and "add slider" suggestion.
+Free names not defined in any other cell trigger an inline warning and "add slider" suggestion.
 
 ---
 
 ## Stage 3: Execute
 
-### Bare Expression Capture via AST Transform
+### Bare Expression Capture
 
-Bare expression statements (`ast.Expr` nodes) are wrapped in auto-named assignments so their values are captured after execution:
+`ast.Expr` nodes are wrapped in auto-named assignments so their values survive into the local namespace:
 
 ```python
 class CaptureExprs(ast.NodeTransformer):
-    def __init__(self):
-        self._count = 0
-
+    def __init__(self): self._count = 0
     def visit_Expr(self, node):
-        name = f"_expr_{self._count}"
-        self._count += 1
-        assign = ast.Assign(
+        name = f"_expr_{self._count}"; self._count += 1
+        return ast.fix_missing_locations(ast.Assign(
             targets=[ast.Name(id=name, ctx=ast.Store())],
-            value=node.value,
-            lineno=node.lineno, col_offset=node.col_offset,
-        )
-        return ast.fix_missing_locations(assign)
+            value=node.value, lineno=node.lineno, col_offset=node.col_offset,
+        ))
 ```
-
-After this transform, bare `d` becomes `_expr_0 = d` in the executed code, and the result can be inspected from the local namespace.
 
 ### Execution
 
 ```python
-import numpy as np
-
 def execute_cell(code: str, shared_ns: dict, grid_vars: dict) -> dict:
-    tree = parse_and_validate(preprocess_cell(code))
+    clean_code = preprocess_cell(code)
+    tree = parse_and_validate(clean_code)
     tree = CaptureExprs().visit(tree)
     ast.fix_missing_locations(tree)
 
     local_ns = {
-        **EQUATION_NAMESPACE,   # numpy/scipy whitelist
-        **shared_ns,            # sliders, lambdas, data panel outputs
-        **grid_vars,            # x, y, u, v as meshgrid arrays; t as scalar
+        **EQUATION_NAMESPACE,
+        **shared_ns,
+        **grid_vars,
         "__builtins__": {},
     }
-
     exec(compile(tree, "<cell>", "exec"), local_ns)
     return local_ns
 ```
@@ -203,116 +197,171 @@ def execute_cell(code: str, shared_ns: dict, grid_vars: dict) -> dict:
 
 ## Stage 4: Output Detection
 
+Detection runs in strict priority order:
+
 ```python
 MAGIC_NAMES = ["z", "y", "x", "xyz", "points", "vectors"]
-SCATTER_SHAPES = {2, 3}  # valid column counts for auto-scatter
+SPATIAL_ARGS = {"x", "y", "u", "v"}
 
-def detect_output(local_ns: dict, code: str):
-    # 1. Check for magic name assignment (first magic name found in source order)
-    for line in code.splitlines():
-        line = line.strip()
+def detect_output(local_ns: dict, source_code: str):
+    clean = preprocess_cell(source_code)
+
+    # Priority 1: magic name assignment — check source order
+    for line in clean.splitlines():
+        stripped = line.strip()
         for name in MAGIC_NAMES:
-            if line.startswith(f"{name} =") and name in local_ns:
+            if stripped.startswith(f"{name} =") and name in local_ns:
                 return name, local_ns[name]
 
-    # 2. Fall back to bare expression auto-plot
+    # Priority 2: function auto-render — check for callable with spatial args
+    for line in clean.splitlines():
+        m = re.match(r'^(\w+)\s*=\s*lambda\s+([^:]+):', line.strip())
+        if m:
+            fname, args_str = m.group(1), m.group(2)
+            args = {a.strip() for a in args_str.split(",")}
+            if args == {"x", "y"} and fname in local_ns:
+                fn = local_ns[fname]
+                return "z", fn(local_ns["x"], local_ns["y"])
+            if args == {"x"} and fname in local_ns:
+                fn = local_ns[fname]
+                return "y", fn(local_ns["x"])
+            if args == {"u", "v"} and fname in local_ns:
+                fn = local_ns[fname]
+                return "xyz", fn(local_ns["u"], local_ns["v"])
+
+    # Priority 3: shape inference from bare captured expressions
     for key in sorted(k for k in local_ns if k.startswith("_expr_")):
         val = local_ns[key]
-        if isinstance(val, np.ndarray) and val.ndim == 2:
-            if val.shape[1] in SCATTER_SHAPES:
-                return "points", val
+        if not isinstance(val, np.ndarray):
+            continue
+        if val.ndim == 2 and val.shape[1] in (2, 3):
+            return "points", val
+        if val.shape == (2,) or val.shape == (3,):
+            return "points", val.reshape(1, -1)
 
     return None, None
 ```
 
 ---
 
-## Stage 5: Constraint Application
+## Stage 5: Piecewise Detection
 
-Constraints come from the UI as a list of expression strings. Each is evaluated in the same namespace with the magic variable available:
+Runs after output detection if the raw magic variable value is a Python list:
 
 ```python
-def apply_constraints(value: np.ndarray, magic_name: str,
-                       constraint_exprs: list[str], namespace: dict) -> np.ndarray:
+def handle_piecewise(piece_list, condition_exprs, namespace, grid_vars):
+    if not isinstance(piece_list, list):
+        return piece_list, None  # not piecewise; pass through
+
+    if len(piece_list) != len(condition_exprs):
+        return None, f"Piecewise has {len(piece_list)} pieces but {len(condition_exprs)} conditions"
+
+    # Evaluate pieces (callable → call with grid; array → use as-is)
+    x, y = grid_vars.get("x"), grid_vars.get("y")
+    pieces = []
+    for p in piece_list:
+        if callable(p):
+            # Try to infer the call signature
+            import inspect
+            sig = inspect.signature(p)
+            param_names = list(sig.parameters.keys())
+            args = [grid_vars[n] for n in param_names if n in grid_vars]
+            pieces.append(p(*args))
+        else:
+            pieces.append(np.asarray(p))
+
+    # Evaluate conditions with implicit prior-negation
+    exclusive, accumulated = [], np.zeros_like(x, dtype=bool)
+    for cexpr in condition_exprs:
+        raw = eval(cexpr, {**namespace, **grid_vars, "__builtins__": {}})
+        excl = raw & ~accumulated
+        exclusive.append(excl)
+        accumulated |= raw
+
+    return np.select(exclusive, pieces, default=np.nan), None
+```
+
+---
+
+## Stage 6: Constraint Application
+
+```python
+def apply_constraints(value, magic_name, constraint_exprs, namespace, grid_vars):
     if not constraint_exprs:
         return value
 
-    eval_ns = {**namespace, magic_name: value, "__builtins__": {}}
+    eval_ns = {**namespace, **grid_vars, magic_name: value, "__builtins__": {}}
     masks = []
     for expr in constraint_exprs:
         tree = parse_and_validate(expr)
         result = eval(compile(tree, "<constraint>", "eval"), eval_ns)
-        if isinstance(result, np.ndarray) and result.dtype == bool:
-            masks.append(result)
-        else:
-            raise ValueError(f"Constraint did not produce a boolean array: {expr!r}")
+        if not (isinstance(result, np.ndarray) and result.dtype == bool):
+            raise ValueError(f"Constraint did not return a boolean array: {expr!r}")
+        masks.append(result)
 
-    combined = np.logical_and.reduce(masks)
-    return np.where(combined, value, np.nan)
+    return np.where(np.logical_and.reduce(masks), value, np.nan)
 ```
-
-The combined mask is applied with `np.where`. NaN values produce degenerate mesh triangles that the renderer skips.
-
-**Piecewise note:** constraints produce a masked subset of the surface. For true piecewise functions (different formulas in different regions), use `where()` directly in the primary expression:
-```python
-z = where(x > 0, x**2, -x**2)
-```
-Or use two separate equation cells with complementary constraints.
 
 ---
 
-## Stage 6: Shape Validation
+## Stage 7: Shape Validation
 
 ```python
-EXPECTED_SHAPES = {
-    "z": lambda grid: grid["x"].shape,
-    "y": lambda grid: (grid["x"].shape[0],),   # 1D if x is a 1D grid
-    "x": lambda grid: (grid["y"].shape[0],),
-    "xyz": lambda grid: None,  # checked by axis-3 heuristic
-    "points": lambda grid: None,  # checked by column count
-}
-
-def validate_shape(magic_name: str, value: np.ndarray, grid_vars: dict) -> str | None:
+def validate_shape(magic_name, value, grid_vars):
     if magic_name == "xyz":
         if 3 not in value.shape:
-            return f"'xyz' must have an axis of size 3; got shape {value.shape}"
-        return None
-    if magic_name == "points":
+            return f"'xyz' must have an axis of size 3; got {value.shape}"
+    elif magic_name == "points":
         if value.ndim != 2 or value.shape[1] not in (2, 3):
-            return f"'points' must be (N,2) or (N,3); got shape {value.shape}"
-        return None
-    expected = EXPECTED_SHAPES[magic_name](grid_vars)
-    if value.shape != expected:
-        return f"Shape mismatch for '{magic_name}': expected {expected}, got {value.shape}"
+            return f"'points' must be (N,2) or (N,3); got {value.shape}"
+    elif magic_name == "z":
+        expected = grid_vars["x"].shape
+        if value.shape != expected:
+            return f"Shape mismatch: expected {expected}, got {value.shape}"
+    elif magic_name in ("y", "x"):
+        expected = (grid_vars["x"].shape[0],)
+        if value.shape != expected:
+            return f"Shape mismatch: expected {expected}, got {value.shape}"
     return None
 ```
-
-Returns `None` if valid, or an error string that is displayed as an inline cell warning.
 
 ---
 
 ## Full Pipeline Function
 
 ```python
-def run_cell(primary_code: str, constraint_exprs: list[str],
-             shared_ns: dict, grid_vars: dict) -> CellResult:
+def run_cell(primary_code, constraint_exprs, condition_exprs,
+             shared_ns, grid_vars):
     try:
+        if is_comment_cell(primary_code):
+            return CellResult(comment=primary_code)
+
         local_ns = execute_cell(primary_code, shared_ns, grid_vars)
-        magic_name, value = detect_output(local_ns, preprocess_cell(primary_code))
+        magic_name, raw_value = detect_output(local_ns, primary_code)
 
         if magic_name is None:
             return CellResult(warning="No renderable output detected")
 
+        # Piecewise check
+        value, pw_error = handle_piecewise(raw_value, condition_exprs,
+                                           local_ns, grid_vars)
+        if pw_error:
+            return CellResult(warning=pw_error)
+
+        # Constraints
+        value = apply_constraints(value, magic_name, constraint_exprs,
+                                  local_ns, grid_vars)
+
+        # Shape validation
         warning = validate_shape(magic_name, value, grid_vars)
         if warning:
             return CellResult(warning=warning)
 
-        value = apply_constraints(value, magic_name, constraint_exprs, local_ns)
-
-        return CellResult(magic_name=magic_name, value=value)
+        return CellResult(magic_name=magic_name, value=value,
+                          namespace_contributions=local_ns)
 
     except Exception as e:
         return CellResult(error=str(e))
 ```
 
-Errors from any stage are caught and returned as inline cell errors. The renderer is not invoked for cells in error or warning state.
+Namespace contributions from a successful cell are merged into `shared_ns` before dependent cells execute.
