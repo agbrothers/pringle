@@ -1,195 +1,168 @@
 # Cell Types and Multi-line Blocks
 
-## Cell Types
+## Block Structure
 
-### 1. Equation Cells (Equation Panel)
+An equation **block** is one primary expression cell plus its typed sub-cells. Sub-cells are added via a "+" button on the primary cell and represent equation-specific metadata — not general computation. The allowed sub-cell types are:
 
-Equation cells are multi-line Python blocks that produce something renderable. The cell's **output type** is determined by which magic variable name was assigned during execution. Magic names are checked after `exec()` by inspecting the cell's local namespace.
+```
+[Primary expression cell]      ← magic name assignment or bare auto-plot expression
+  [Constraint sub-cell]        ← boolean expression; added via + button
+  [Constraint sub-cell]        ← multiple constraints allowed
+  [Color function sub-cell]    ← future: scalar → color mapping
+```
 
-#### Magic Variable Names
+**Sub-equations are not allowed within a block.** Helper functions (`f(x,y) = ...`) and intermediate computations are their own top-level cells. The dependency graph handles ordering — a cell that references `f` will automatically evaluate after the cell that defines `f`, regardless of visual position. See `06-panel-architecture.md` for the ordering model.
+
+---
+
+## Primary Expression Cell
+
+The primary cell contains a single Python expression — either a magic name assignment or a bare expression. It does not contain multiple assignment lines. All computation beyond the magic name itself belongs in separate top-level cells (lambdas, sliders, data cells).
+
+### Magic Variable Names
+
+The output type is determined by which magic name is assigned:
 
 | Magic name | Render type | Expected shape | Example |
 |---|---|---|---|
-| `z` | Explicit surface | `(N, M)` float array matching `(x, y)` grid | `z = sin(x) * cos(y)` |
-| `y` | Curve / line | `(N,)` float array matching `x` grid | `y = x**2` |
-| `x` | Curve (implicit role) | `(N,)` float array matching `y` grid | `x = sin(y)` |
-| `xyz` | Parametric surface or curve | `(3, N, M)` or `(3, N)` float array | `xyz = array([cos(u), sin(u), v])` |
-| `points` | Scatter plot | `(N, 3)` float array | `points = random.normal(0,1,(100,3))` |
-| `vectors` | Vector field | `(N, M, 6)` — origin xyz + direction xyz | `vectors = ...` |
+| `z` | Explicit surface | `(N, M)` float, matching `(x, y)` grid | `z = sin(x) * cos(y)` |
+| `y` | Curve in 3D | `(N,)` float, matching `x` grid | `y = x**3` |
+| `x` | Curve (implicit role) | `(N,)` float, matching `y` grid | `x = sin(y)` |
+| `xyz` | Parametric surface or curve | `(3, N, M)` or `(3, N)` float | `xyz = array([cos(u), sin(u), v])` |
+| `points` | Scatter plot | `(N, 3)` float | `points = d` |
+| `vectors` | Vector field | future | |
 
-If multiple magic names are assigned in a single block, the one appearing on the **first line** (the topmost magic assignment) is used as the primary render output. The others become namespace contributions only.
+### Bare Expression Auto-Plot
 
-The **first line** convention is cosmetic: it visually declares what the block is for. Evaluation order within the block is still top-to-bottom as Python executes it. The first line is checked for the primary magic name to determine render type.
+A primary cell whose content is a bare expression — no assignment, just a name or expression that evaluates to an array — is auto-detected and plotted based on output shape:
 
-#### Constraint Lines
+| Output shape | Inferred type | Notes |
+|---|---|---|
+| `(N, 2)` | 2D scatter | Two-column array of (x, y) points |
+| `(N, 3)` | 3D scatter | Three-column array of (x, y, z) points |
+| `(N, M)` matching grid | Explicit surface | Rare for bare expressions; more common via `z =` |
 
-Any line in an equation cell that is a **bare boolean expression** (not an assignment) is treated as a constraint:
+**Rationale:** This mirrors Desmos's behavior (writing a list name plots it as points) and enables the most natural way to visualize data from the data panel — write the variable name and it appears. It also means scatter plots can be created without the ceremony of `points = d` when the shape is unambiguous.
 
+**Previous assumption (revised):** The original design required all renderable output to come from explicit magic name assignments. The bare auto-plot feature is a deliberate extension of this to reduce friction for data visualization.
+
+### `f(x,y) = expr` Function Definition Cells
+
+A top-level cell whose content matches the pattern `name(args) = expr` is detected during preprocessing and converted to a lambda assignment before execution:
+
+```
+f(x,y) = x**2 + y**2
+→ (preprocessed to) →
+f = lambda x, y: x**2 + y**2
+```
+
+This is not a sub-cell; it is a standalone top-level cell. After preprocessing and execution, `f` is available in the shared namespace for any other cell that references it. The dependency graph tracks `f` as a defined name in this cell and a free variable in cells that call it.
+
+**Rationale:** `f(x,y) = expr` is unambiguous (never valid Python syntax), closely matches mathematical notation, and is far more readable than the explicit lambda form. The preprocessing step is trivial. This is a direct Python analog to Desmos's `f(x,y) = ...` function definition.
+
+**Detection pattern:**
 ```python
-z = y**2 - x**2            # magic name — the surface
-x**2 + y**2 < 1            # constraint — a boolean array over the grid
-z > -0.5                   # second constraint
+import re
+FUNC_DEF = re.compile(r'^(\w+)\(([^)]*)\)\s*=\s*(.+)$')
+
+def preprocess_func_def(line):
+    m = FUNC_DEF.match(line.strip())
+    if m:
+        name, args, body = m.groups()
+        return f"{name} = lambda {args}: {body}"
+    return line
 ```
-
-After execution:
-1. The magic variable value is extracted
-2. All bare expression values that are boolean arrays are collected as constraints
-3. `mask = constraint_1 & constraint_2 & ...`
-4. Final render value: `where(mask, z, nan)` — NaN regions are not rendered
-
-Constraints are detected by inspecting the local namespace after `exec()`: any name auto-assigned to boolean-typed numpy arrays that were not explicitly named by the user. More precisely: the `exec()` runs against a wrapper that intercepts bare expression statements and records their values.
-
-Implementing bare expression capture requires a small AST transform: wrap bare `ast.Expr` nodes in an assignment to a generated name (e.g., `_constraint_0 = expr`), then collect all `_constraint_*` names from the namespace after execution.
-
-#### Helper / Intermediate Lines
-
-Assignment lines that don't assign to magic names are helpers — intermediate computations:
-
-```python
-r = sqrt(x**2 + y**2)     # helper
-theta = arctan2(y, x)      # helper
-z = sin(r) * cos(theta)    # magic name
-r < 4                      # constraint
-```
-
-Helpers are local to the block and do not leak into the shared namespace unless the block defines a lambda (see below).
-
-### 2. Lambda / Helper Cells
-
-A cell whose top-level assignment is a callable (lambda or defined via `f = lambda ...`) contributes that name to the shared namespace, making it available to all other equation cells:
-
-```python
-# Standalone helper cell
-f = lambda x, y: sin(sqrt(x**2 + y**2)) / sqrt(x**2 + y**2)
-```
-
-Or within an equation cell, a lambda defined before the magic name is available to the block but does not automatically become shared (unless it's a top-level assignment in a dedicated helper cell).
-
-This mirrors Desmos's `f(x,y) = ...` pattern. Lambda names should not conflict with magic names or reserved spatial variables.
-
-### 3. Slider Cells
-
-A slider cell is a single assignment of a scalar:
-
-```
-a = 1.5   ──●────────────  [0.0 ............. 5.0]   ▷ loop
-```
-
-Controls per slider:
-- **Value display**: editable text field showing current value
-- **Range inputs**: editable min / max
-- **Drag handle**: continuous drag updates value reactively
-- **Animation mode button**: cycles through `static → loop → bounce → once`
-- **Rate input** (when animating): units per second
-
-Sliders inject their current value as a scalar into the shared namespace. When the value changes (drag or animation tick), all equation cells that reference the slider name are re-evaluated.
-
-`t` is a special built-in slider: always present, controls animation time. Its rate and range are controlled from the View Settings panel.
-
-### 4. Data Cells (Data Panel)
-
-Multi-line Python blocks in the data panel. Executed manually via a ▶ Run button. Results exported into the shared namespace.
-
-```python
-# Data cell: sample Gaussian clusters
-from numpy import random
-centers = array([[0,0,0], [3,0,0], [0,3,0]])
-d = vstack([random.normal(c, 0.5, (50, 3)) for c in centers])
-labels = repeat([0,1,2], 50)
-```
-
-After running, `d` and `labels` are available in the equation panel:
-
-```python
-# Equation cell using data
-points = d          # scatter plot of all points
-```
-
-Or with color mapped to labels (future feature).
-
-### 5. Comment Cells
-
-Plain text cells. Content is displayed as-is (markdown in v2). No execution. No namespace contribution.
-
-### 6. Folder Cells
-
-A collapsible container for other cells. Folders:
-- Have a user-editable label
-- Can be collapsed (contents hidden in panel, still evaluated unless folder is toggled off)
-- Have their own visibility toggle (when off, all contained cells are treated as invisible)
-- Do not affect namespacing or evaluation order
 
 ---
 
-## Multi-line Block Execution in Detail
+## Constraint Sub-cells
+
+Constraint sub-cells are UI elements — they appear as distinct input boxes attached to the primary cell, not as text the user types in the main expression. The user adds them by clicking a "+" button. Each constraint sub-cell contains one boolean expression.
+
+The cell visually distinguishes constraint sub-cells (e.g., shaded differently, labeled "where" or with a filter icon) so the user does not need to write any constraint syntax in the primary expression.
+
+**Backend evaluation:**
+
+1. Execute the primary expression to obtain the magic variable value (e.g., `z`)
+2. For each constraint sub-cell expression, evaluate it in the same namespace with `z` available:
+   ```python
+   mask_i = eval(constraint_expr, {**namespace, "z": z})  # shape (N, M), dtype bool
+   ```
+3. Combine all masks:
+   ```python
+   mask = np.logical_and.reduce([mask_1, mask_2, ...])
+   ```
+4. Apply mask:
+   ```python
+   z_out = np.where(mask, z, np.nan)
+   ```
+
+NaN values cause the corresponding mesh triangles to be degenerate (collapsed) and are skipped by the renderer. This produces clean clipping without visual artifacts when the grid is sufficiently dense near the boundary.
+
+**What constraints cover:**
+- Spatial domain restriction: `x**2 + y**2 < 1` — clips the surface to a disk
+- z-value filtering: `z > 0` — shows only the positive lobe (z must be evaluated first)
+- Compound regions: multiple constraints → intersection (AND). Union requires either separate cells with complementary constraints or an OR expression within a single constraint box
+- Arbitrary boundary shapes: any boolean-valued expression over the grid
+
+**What constraints do NOT cover — use `where()` instead:**
+
+True piecewise functions (different formulas in different regions, not just masking) are best expressed with `where()` directly in the primary expression:
 
 ```python
-def execute_equation_cell(code_str, shared_ns, grid_vars):
-    # Step 1: AST safety check
-    tree = ast.parse(code_str, mode="exec")
-    SafetyChecker().visit(tree)
-
-    # Step 2: transform bare expressions into named assignments for constraint capture
-    tree = ConstraintCapture().visit(tree)  # wraps Expr nodes: _c0 = expr, _c1 = expr, ...
-
-    # Step 3: build execution namespace
-    local_ns = {**EQUATION_NAMESPACE, **shared_ns, **grid_vars, "__builtins__": {}}
-
-    # Step 4: execute
-    exec(compile(tree, "<cell>", "exec"), local_ns)
-
-    # Step 5: extract magic variable
-    magic_name, render_type = detect_magic(local_ns, code_str)
-    if magic_name is None:
-        return CellResult(error="No renderable output found")
-
-    magic_value = local_ns[magic_name]
-
-    # Step 6: validate shape
-    expected = expected_shape(render_type, grid_vars)
-    if magic_value.shape != expected:
-        return CellResult(warning=f"Shape mismatch: got {magic_value.shape}, expected {expected}")
-
-    # Step 7: collect constraints
-    constraints = [v for k, v in local_ns.items()
-                   if k.startswith("_c") and isinstance(v, np.ndarray) and v.dtype == bool]
-    if constraints:
-        mask = constraints[0]
-        for c in constraints[1:]:
-            mask = mask & c
-        magic_value = np.where(mask, magic_value, np.nan)
-
-    return CellResult(value=magic_value, type=render_type)
+z = where(x > 0, x**2, -x**2)
 ```
 
-`detect_magic` checks the first assignment line in the source for a magic name, then falls back to scanning all assignments in the result namespace.
+`where` is in the numpy namespace. For complex piecewise logic, multiple `where` calls can be nested, or multiple equation cells with complementary constraint sub-cells can be used (each rendering a separate mesh that together appears as one surface).
+
+**Constraint evaluation note:** if the primary expression produces `nan` at some grid points (e.g., `sqrt` of a negative number), those points evaluate as `nan < 1 → False`, so they are naturally excluded by any constraint. No special handling required.
 
 ---
 
-## Visibility Toggle Semantics
+## Slider Cells
 
-| State | Evaluates? | Renders? | Namespace contribution? |
-|---|---|---|---|
-| Visible | Yes | Yes | Yes |
-| Hidden (toggle off) | Yes | No | Yes |
-| Folder hidden | Yes | No | Yes |
-| Error | Yes (failed) | No | Partial |
+A single scalar assignment: `a = 1.5`. The UI renders this as a drag handle with editable range and animation controls. The value is injected as a scalar into the shared namespace.
 
-Cells always evaluate (so lambda helpers and intermediate names remain available to dependent cells). Only the renderer submission is gated by visibility. This lets you build modular expressions where `f` is defined in a hidden helper cell, and a visible surface cell uses `f`.
+`t` is a reserved built-in slider controlling animation time. It is always present and cannot be redefined.
+
+---
+
+## Data Cells
+
+See `06-panel-architecture.md` for the data panel. Data cells are in a separate panel section with their own per-cell ▶ Run button. They are not part of the equation block structure.
+
+---
+
+## Comment Cells
+
+Plain text. No execution. No namespace contribution. Used for annotation and organization.
+
+---
+
+## Visibility Toggle
+
+Each cell has a visibility toggle. When toggled off:
+- The cell still executes (namespace contributions remain available to dependent cells)
+- The rendered output is suppressed — nothing is submitted to the renderer
+
+This allows:
+- Building modular helper definitions (lambdas, sliders) that are never directly visible
+- Composing multiple expressions and selectively rendering only the final result
+- A/B comparisons by toggling cells on and off
 
 ---
 
 ## Shape Validation
 
-Shape validation runs after every cell execution. Errors are displayed inline on the cell, never propagated as exceptions to the renderer.
+Shape validation runs after every cell execution. Mismatches are displayed as inline warnings on the cell; the renderer is not invoked for that cell.
 
-| Render type | Expected shape | Common mistake |
+| Magic name | Expected shape | Common mistake |
 |---|---|---|
-| Surface (`z`) | `(N, M)` matching `x.shape` | Scalar returned instead of array |
-| Curve (`y` or `x`) | `(N,)` matching x/y grid | 2D array returned |
-| Parametric (`xyz`) | `(3, N)` or `(3, N, M)` | Wrong axis order; `(N, 3)` instead of `(3, N)` |
-| Scatter (`points`) | `(N, 3)` | Wrong number of columns |
+| `z` | `(N, M)` matching `x.shape` | Scalar returned; forgot that x, y are 2D arrays |
+| `y` / `x` | `(N,)` matching x/y grid size | 2D array returned instead of 1D |
+| `xyz` | `(3, N)` or `(3, N, M)` | Wrong axis: `(N, 3)` instead of `(3, N)` |
+| `points` (auto) | `(N, 2)` or `(N, 3)` | Wrong number of columns |
 
-For `xyz`, both `(3, N, M)` and `(N, M, 3)` are common; Pringle should accept both by checking which axis has size 3.
+For `xyz`, both `(3, N, M)` and `(N, M, 3)` are accepted — Pringle checks which axis has size 3 and transposes if needed.
 
-Shape warnings are displayed as yellow inline banners on the cell. Shape errors that produce NaN or Inf are silently filtered at the renderer level (NaN vertices are skipped).
+NaN and Inf values in the output are not errors — they are filtered at the renderer level (NaN vertices produce degenerate triangles that are skipped).

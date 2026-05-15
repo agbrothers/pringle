@@ -50,6 +50,23 @@ Expressions are compiled to fast numerical functions — not evaluated symbolica
 | Animated surfaces | GLSL uniforms updated per frame | CPU re-evaluation + buffer re-upload |
 | Float precision | 64-bit in JS; 32-bit in GLSL | Trade-off: 32-bit is faster but causes artifacts at large coordinates |
 
+## Visual Styling
+
+Each expression cell has a colored dot that opens a per-expression style panel. Controls vary by expression type:
+
+| Control | Applies to | Notes |
+|---|---|---|
+| Color (preset swatches + hex input) | All types | Stored as rendering metadata, passed as a shader uniform — no expression re-evaluation |
+| Opacity (0–100%) | Surfaces | Alpha channel; requires sorted or OIT blending for multiple overlapping surfaces |
+| Line width | Curves, wireframe overlay | WebGL `gl_LineWidth`; clamped to 1px on many modern drivers — usually implemented as textured quads |
+| Point size | Scatter | Passed as a vertex attribute or uniform |
+| Line style (solid / dashed / dotted) | Curves | Implemented as a texture-based dash pattern in the fragment shader |
+| Display mode | Surfaces | Filled, wireframe, or both; wireframe is a second render pass with polygon offset to prevent z-fighting |
+| "Reverse contrast" | Surfaces | Inverts surface shading for readability on dark backgrounds |
+| Label visibility | All types | Toggles the expression's text label in the viewport |
+
+Style properties are stored separately from the expression string — they are rendering metadata attached to each cell. Changing a color or opacity does not re-evaluate the expression; it only updates a shader uniform. This makes style changes instantaneous.
+
 ## What Desmos 3D Does Not Support
 
 These are gaps a Python clone could address:
