@@ -1,0 +1,213 @@
+"""
+CellListWidget — scrollable list of CellWidget instances.
+
+Manages:
+- Ordered list of cells (visual order)
+- Shared namespace (accumulated left-to-right through the cell list)
+- Re-evaluation on content_changed signal (sequential, no DAG yet — Phase 7)
+- Signaling the viewport to update rendered objects
+
+The viewport is updated by calling an injected callback:
+    on_cell_result(cell_id, result, style)
+
+This decouples the cell list from the Qt viewport — Phase 5 only.
+The dependency graph (DAG) is wired in Phase 7.
+"""
+
+from __future__ import annotations
+
+from typing import Callable
+import numpy as np
+
+from PyQt6.QtWidgets import (
+    QWidget, QScrollArea, QVBoxLayout, QPushButton,
+    QFrame, QSizePolicy,
+)
+from PyQt6.QtCore import Qt
+
+from pringle.cell_widget import CellWidget
+from pringle.style import CellStyle, palette_color
+from pringle.grid import Grid, make_grid, GridConfig
+from pringle.evaluator import run_cell, CellResult
+
+
+class CellListWidget(QWidget):
+    """
+    Scrollable ordered list of CellWidget objects.
+
+    Parameters
+    ----------
+    on_cell_result : callable(cell_id, result, style) invoked after each
+                     successful re-evaluation.  The viewport connects here.
+    grid : the spatial grid used for all evaluations.
+    """
+
+    def __init__(
+        self,
+        on_cell_result: Callable[[str, CellResult, CellStyle], None],
+        grid: Grid | None = None,
+        parent=None,
+    ):
+        super().__init__(parent)
+        self._on_cell_result = on_cell_result
+        self._grid = grid or make_grid()
+        self._cells: list[CellWidget] = []
+        self._shared_ns: dict = {}
+        self._cell_index: int = 0  # for palette cycling
+
+        self._build_ui()
+
+    # ------------------------------------------------------------------
+    # UI
+    # ------------------------------------------------------------------
+
+    def _build_ui(self):
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        outer.addWidget(scroll)
+
+        self._container = QWidget()
+        self._layout = QVBoxLayout(self._container)
+        self._layout.setContentsMargins(0, 4, 0, 4)
+        self._layout.setSpacing(0)
+        self._layout.addStretch(1)  # push cells to top
+        scroll.setWidget(self._container)
+
+        # "+" button to add a new cell at the bottom
+        self._add_btn = QPushButton("+ Add expression")
+        self._add_btn.setFlat(True)
+        self._add_btn.setStyleSheet(
+            "QPushButton { color: #555; padding: 8px; font-size: 13px; }"
+            "QPushButton:hover { color: #222; }"
+        )
+        self._add_btn.clicked.connect(lambda: self.add_cell())
+        outer.addWidget(self._add_btn)
+
+    # ------------------------------------------------------------------
+    # Cell management
+    # ------------------------------------------------------------------
+
+    def add_cell(
+        self,
+        source: str = "",
+        after_id: str | None = None,
+        style: CellStyle | None = None,
+    ) -> CellWidget:
+        """Add a new cell, optionally after a given cell_id."""
+        if style is None:
+            style = CellStyle(color=palette_color(self._cell_index))
+        self._cell_index += 1
+
+        cell = CellWidget(style=style)
+        cell.content_changed.connect(self._on_cell_changed)
+        cell.delete_requested.connect(self._on_delete_requested)
+        cell.enter_pressed.connect(self._on_enter_pressed)
+
+        if after_id is not None:
+            idx = self._index_of(after_id)
+            if idx >= 0:
+                self._cells.insert(idx + 1, cell)
+                # Insert before the stretch item (last item in layout)
+                self._layout.insertWidget(idx + 1, cell)
+                if source:
+                    cell.set_source(source)
+                cell.focus()
+                if source:
+                    self._rebuild_namespace()
+                return cell
+
+        # Append before the stretch
+        stretch_pos = self._layout.count() - 1
+        self._layout.insertWidget(stretch_pos, cell)
+        self._cells.append(cell)
+
+        if source:
+            cell.set_source(source)
+        cell.focus()
+        if source:
+            self._rebuild_namespace()
+        return cell
+
+    def remove_cell(self, cell_id: str) -> None:
+        idx = self._index_of(cell_id)
+        if idx < 0:
+            return
+        cell = self._cells.pop(idx)
+        self._layout.removeWidget(cell)
+        cell.deleteLater()
+        # Focus the cell above (or below if first)
+        if self._cells:
+            target_idx = max(0, idx - 1)
+            self._cells[target_idx].focus()
+        # Remove from viewport
+        self._on_cell_result(cell_id, CellResult(), cell.style)
+        self._rebuild_namespace()
+
+    def cell_sources(self) -> list[tuple[str, str]]:
+        """Return (cell_id, source) pairs in visual order."""
+        return [(c.cell_id, c.source()) for c in self._cells]
+
+    def update_grid(self, grid: Grid) -> None:
+        self._grid = grid
+        self._rebuild_namespace()
+
+    # ------------------------------------------------------------------
+    # Evaluation
+    # ------------------------------------------------------------------
+
+    def _rebuild_namespace(self) -> None:
+        """Re-evaluate all cells in order, accumulating the shared namespace."""
+        shared: dict = {}
+        for cell in self._cells:
+            result = self._eval_cell(cell, shared)
+            # Accumulate exports into shared namespace for downstream cells
+            shared.update(result.exports)
+            # Notify viewport (even if result has no render — signals removal)
+            if cell.is_visible_cell():
+                self._on_cell_result(cell.cell_id, result, cell.style)
+            else:
+                # Hidden cell: still evaluate (exports stay), but don't render
+                self._on_cell_result(cell.cell_id, CellResult(), cell.style)
+        self._shared_ns = shared
+
+    def _eval_cell(self, cell: CellWidget, shared: dict) -> CellResult:
+        """Evaluate one cell against the current shared namespace + grid."""
+        cell.clear_diagnostics()
+        source = cell.source()
+        if not source.strip():
+            return CellResult()
+        result = run_cell(source, shared, self._grid)
+        if result.error:
+            cell.set_error(result.error)
+        elif result.warning:
+            cell.set_warning(result.warning)
+        return result
+
+    # ------------------------------------------------------------------
+    # Signal handlers
+    # ------------------------------------------------------------------
+
+    def _on_cell_changed(self, cell_id: str) -> None:
+        self._rebuild_namespace()
+
+    def _on_delete_requested(self, cell_id: str) -> None:
+        self.remove_cell(cell_id)
+
+    def _on_enter_pressed(self, cell_id: str) -> None:
+        self.add_cell(after_id=cell_id)
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _index_of(self, cell_id: str) -> int:
+        for i, c in enumerate(self._cells):
+            if c.cell_id == cell_id:
+                return i
+        return -1

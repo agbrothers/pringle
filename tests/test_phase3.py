@@ -23,7 +23,7 @@ import numpy as np
 def test_imports():
     """All Phase 3 modules import without error."""
     import PyQt6  # noqa: F401
-    from pringle.app import PringleWindow, PringleViewport, LeftPanelPlaceholder, launch
+    from pringle.app import PringleWindow, PringleViewport, launch
     assert PringleWindow is not None
 
 

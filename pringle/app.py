@@ -2,12 +2,9 @@
 Qt application shell for Pringle.
 
 Creates the top-level QMainWindow with:
-  - Left panel (expression + data cells) — placeholder QWidget for now
+  - Left panel: CellListWidget (equation cells, live evaluation)
   - Right panel: QRenderWidget embedding the pygfx canvas
   - Horizontal QSplitter between left and right
-
-This is Phase 3: proves that the Qt event loop and the wgpu rendering
-loop coexist correctly, and that mouse orbit works inside the Qt widget.
 """
 
 from __future__ import annotations
@@ -24,9 +21,11 @@ from PyQt6.QtCore import Qt, QTimer
 from rendercanvas.qt import QRenderWidget
 
 import pygfx as gfx
-from pringle.renderer import PringleRenderer, make_surface_mesh
-from pringle.grid import GridConfig, make_grid
-from pringle.evaluator import run_cell
+from pringle.renderer import PringleRenderer, make_surface_mesh, make_line_mesh, make_scatter_mesh
+from pringle.grid import GridConfig, Grid, make_grid
+from pringle.evaluator import run_cell, CellResult
+from pringle.style import CellStyle
+from pringle.cell_list import CellListWidget
 
 
 class PringleViewport(QRenderWidget):
@@ -61,55 +60,40 @@ class PringleViewport(QRenderWidget):
         self._pr.set_visible(cell_id, visible)
 
 
-class LeftPanelPlaceholder(QFrame):
-    """
-    Temporary placeholder for the expression/data panel.
-    Replaced in Phase 4 with real cell widgets.
-    """
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setMinimumWidth(260)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-
-        label = QLabel("Expression Panel\n(Phase 4)")
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        label.setStyleSheet("color: #888; font-size: 14px;")
-        layout.addWidget(label)
-        layout.addStretch()
-
-
 class PringleWindow(QMainWindow):
     """
     Top-level application window.
 
     Layout:
         QSplitter (horizontal)
-          ├── LeftPanelPlaceholder   (expression + data cells)
-          └── PringleViewport        (3D GPU canvas)
+          ├── CellListWidget   (expression cells, live evaluation)
+          └── PringleViewport  (3D GPU canvas)
     """
 
     DEFAULT_SIZE = (1400, 900)
-    LEFT_PANEL_WIDTH = 320
+    LEFT_PANEL_WIDTH = 340
 
-    def __init__(self):
+    def __init__(self, grid: Grid | None = None):
         super().__init__()
         self.setWindowTitle("pringle")
         self.resize(*self.DEFAULT_SIZE)
+        self._grid = grid or make_grid()
 
         # Central splitter
         splitter = QSplitter(Qt.Orientation.Horizontal, self)
         self.setCentralWidget(splitter)
 
-        # Left panel
-        self._left_panel = LeftPanelPlaceholder(splitter)
-        splitter.addWidget(self._left_panel)
-
-        # 3D viewport
+        # 3D viewport (created first so on_cell_result can reference it)
         self._viewport = PringleViewport(splitter)
+
+        # Cell list — wired to viewport via on_cell_result callback
+        self._cell_list = CellListWidget(
+            on_cell_result=self._on_cell_result,
+            grid=self._grid,
+            parent=splitter,
+        )
+
+        splitter.insertWidget(0, self._cell_list)
         splitter.addWidget(self._viewport)
 
         # Initial split proportions
@@ -119,9 +103,49 @@ class PringleWindow(QMainWindow):
 
         self._splitter = splitter
 
+    # ------------------------------------------------------------------
+    # Viewport update callback
+    # ------------------------------------------------------------------
+
+    def _on_cell_result(self, cell_id: str, result: CellResult, style: CellStyle) -> None:
+        """
+        Called by CellListWidget after each cell evaluation.
+        Updates or removes the corresponding object in the 3D scene.
+        """
+        vp = self._viewport
+
+        if result.render_type == "surface":
+            mesh = make_surface_mesh(result.x, result.y, result.data, color=style.color)
+            vp.add_object(cell_id, mesh)
+
+        elif result.render_type == "curve":
+            pts = np.column_stack([
+                self._grid.x1d,
+                result.data,
+                np.zeros(len(result.data), dtype=np.float32),
+            ])
+            line = make_line_mesh(pts, color=style.color, thickness=style.line_width)
+            vp.add_object(cell_id, line)
+
+        elif result.render_type in ("scatter", "scatter_2d"):
+            scatter = make_scatter_mesh(result.data, color=style.color, size=style.point_size)
+            vp.add_object(cell_id, scatter)
+
+        else:
+            # No renderable output (comment, slider, error, or hidden) — clear
+            vp.remove_object(cell_id)
+
+    # ------------------------------------------------------------------
+    # Properties
+    # ------------------------------------------------------------------
+
     @property
     def viewport(self) -> PringleViewport:
         return self._viewport
+
+    @property
+    def cell_list(self) -> CellListWidget:
+        return self._cell_list
 
 
 def launch(argv=None) -> int:
@@ -129,15 +153,11 @@ def launch(argv=None) -> int:
     app = QApplication(argv or sys.argv)
     app.setApplicationName("pringle")
 
-    win = PringleWindow()
+    win = PringleWindow(grid=make_grid(GridConfig(n=64)))
     win.show()
 
-    # Demo: load a sin(x)*cos(y) surface via the evaluator
-    grid = make_grid(GridConfig(n=64))
-    result = run_cell("z = sin(x) * cos(y)", {}, grid)
-    if result.render_type == "surface":
-        mesh = make_surface_mesh(result.x, result.y, result.data)
-        win.viewport.add_object("demo-surface", mesh)
+    # Seed the session with a demo cell
+    win.cell_list.add_cell("z = sin(x) * cos(y)")
 
     return app.exec()
 
