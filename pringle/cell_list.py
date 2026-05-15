@@ -26,9 +26,11 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 
 from pringle.cell_widget import CellWidget
+from pringle.slider_widget import SliderWidget
 from pringle.style import CellStyle, palette_color
 from pringle.grid import Grid, make_grid, GridConfig
 from pringle.evaluator import run_cell, CellResult
+from pringle.preprocess import is_slider_cell
 
 
 class CellListWidget(QWidget):
@@ -98,24 +100,32 @@ class CellListWidget(QWidget):
         source: str = "",
         after_id: str | None = None,
         style: CellStyle | None = None,
-    ) -> CellWidget:
+    ) -> CellWidget | SliderWidget:
         """Add a new cell, optionally after a given cell_id."""
         if style is None:
             style = CellStyle(color=palette_color(self._cell_index))
         self._cell_index += 1
 
-        cell = CellWidget(style=style)
-        cell.content_changed.connect(self._on_cell_changed)
-        cell.delete_requested.connect(self._on_delete_requested)
-        cell.enter_pressed.connect(self._on_enter_pressed)
+        is_sl, sl_name, sl_val = is_slider_cell(source) if source else (False, "", 0.0)
+
+        if is_sl:
+            cell: CellWidget | SliderWidget = SliderWidget(
+                name=sl_name, value=sl_val, style=style
+            )
+            cell.value_changed.connect(self._on_slider_value_changed)
+            cell.delete_requested.connect(self._on_delete_requested)
+        else:
+            cell = CellWidget(style=style)
+            cell.content_changed.connect(self._on_cell_changed)
+            cell.delete_requested.connect(self._on_delete_requested)
+            cell.enter_pressed.connect(self._on_enter_pressed)
 
         if after_id is not None:
             idx = self._index_of(after_id)
             if idx >= 0:
                 self._cells.insert(idx + 1, cell)
-                # Insert before the stretch item (last item in layout)
                 self._layout.insertWidget(idx + 1, cell)
-                if source:
+                if source and not is_sl:
                     cell.set_source(source)
                 cell.focus()
                 if source:
@@ -127,7 +137,7 @@ class CellListWidget(QWidget):
         self._layout.insertWidget(stretch_pos, cell)
         self._cells.append(cell)
 
-        if source:
+        if source and not is_sl:
             cell.set_source(source)
         cell.focus()
         if source:
@@ -165,14 +175,14 @@ class CellListWidget(QWidget):
         """Re-evaluate all cells in order, accumulating the shared namespace."""
         shared: dict = {}
         for cell in self._cells:
+            if isinstance(cell, SliderWidget):
+                shared[cell.name] = cell.value
+                continue
             result = self._eval_cell(cell, shared)
-            # Accumulate exports into shared namespace for downstream cells
             shared.update(result.exports)
-            # Notify viewport (even if result has no render — signals removal)
             if cell.is_visible_cell():
                 self._on_cell_result(cell.cell_id, result, cell.style)
             else:
-                # Hidden cell: still evaluate (exports stay), but don't render
                 self._on_cell_result(cell.cell_id, CellResult(), cell.style)
         self._shared_ns = shared
 
@@ -194,6 +204,9 @@ class CellListWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _on_cell_changed(self, cell_id: str) -> None:
+        self._rebuild_namespace()
+
+    def _on_slider_value_changed(self, name: str, value: float) -> None:
         self._rebuild_namespace()
 
     def _on_delete_requested(self, cell_id: str) -> None:
