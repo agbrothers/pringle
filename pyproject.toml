@@ -22,6 +22,14 @@ dependencies = [
     "tqdm",
     "numpy",
     "matplotlib",
+    "pygfx>=0.9",
+    "wgpu>=0.20",
+    "PyQt6>=6.6",
+    "imageio>=2.34",
+    "pyyaml>=6.0",
+    "networkx>=3.3",
+    "pytest>=8.0",
+    "scipy>=1.13",
 ]
 
 [project.urls]
