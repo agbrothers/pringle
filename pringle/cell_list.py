@@ -197,7 +197,7 @@ class CellListWidget(QWidget):
             style = CellStyle(color=palette_color(self._cell_index))
         self._cell_index += 1
 
-        cell = DataCellWidget()
+        cell = DataCellWidget(style=style)
         cell.run_requested.connect(self._run_data_cell)
         cell.delete_requested.connect(self._on_delete_requested)
 

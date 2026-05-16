@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import pyqtSignal
 
 from pringle.cell_widget import CellTextEdit, ConstraintSubCell
+from pringle.style import CellStyle
 
 
 class DataCellWidget(QWidget):
@@ -36,9 +37,15 @@ class DataCellWidget(QWidget):
         "stale": "color: #cc7700;",
     }
 
-    def __init__(self, cell_id: str | None = None, parent=None):
+    def __init__(
+        self,
+        cell_id: str | None = None,
+        style: CellStyle | None = None,
+        parent=None,
+    ):
         super().__init__(parent)
         self.cell_id: str = cell_id or str(uuid.uuid4())
+        self.style: CellStyle = style or CellStyle()
         self._sub_cells: list[ConstraintSubCell] = []
         self._build_ui()
 
