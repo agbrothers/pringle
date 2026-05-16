@@ -315,6 +315,10 @@ class PringleRenderer:
         bsphere = self._scene.get_world_bounding_sphere()
         if bsphere is not None:
             self._camera.show_object(self._scene, up=(0, 0, 1))
+            # Always orbit around the coordinate origin, not the bounding sphere
+            # center.  A surface constrained to z>0 would otherwise pull the
+            # orbit target upward, making the origin appear off-screen.
+            self._controller.target = (0.0, 0.0, 0.0)
 
     def render(self) -> None:
         self._renderer.render(self._scene, self._camera)

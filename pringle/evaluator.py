@@ -79,6 +79,15 @@ def _detect_magic(local_ns: dict, grid: Grid, user_stores: set[str]) -> tuple[st
             return "curve_x", val
     if "points" in user_stores:
         return "scatter", local_ns.get("points")
+
+    # Fallback: any user-assigned variable whose shape looks plottable
+    for name in user_stores:
+        if name in MAGIC_NAMES or name in SPATIAL_NAMES:
+            continue
+        rt, data = _detect_shape(local_ns.get(name))
+        if rt is not None:
+            return rt, data
+
     return None, None
 
 
