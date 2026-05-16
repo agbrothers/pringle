@@ -31,6 +31,7 @@ class ViewSettingsWidget(QWidget):
     fit_all_requested = pyqtSignal()
     axes_visibility_changed = pyqtSignal(bool)
     bbox_visibility_changed = pyqtSignal(bool)
+    crosshair_visibility_changed = pyqtSignal(bool)
     equalize_requested = pyqtSignal()
 
     def __init__(self, config: GridConfig | None = None, parent=None):
@@ -99,6 +100,11 @@ class ViewSettingsWidget(QWidget):
         self._bbox_cb.setChecked(True)
         self._bbox_cb.toggled.connect(self.bbox_visibility_changed)
         toggle_row.addWidget(self._bbox_cb)
+
+        self._crosshair_cb = QCheckBox("Crosshair")
+        self._crosshair_cb.setChecked(True)
+        self._crosshair_cb.toggled.connect(self.crosshair_visibility_changed)
+        toggle_row.addWidget(self._crosshair_cb)
         toggle_row.addStretch(1)
         bl.addLayout(toggle_row)
 

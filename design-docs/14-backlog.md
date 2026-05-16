@@ -128,6 +128,18 @@ Desmos 3D draws 12 line segments forming the edges of the `[x_min, x_max] × [y_
 
 ---
 
+### FEAT-004 — WASD pans orbit target in world space
+**Status:** Closed (implemented 2026-05-15)  
+**Fix:** `_on_key` now calls `_pan_target(dx, dy, dz)` which moves both `controller.target` and `camera.local.position` by the same world-space delta. Step = 5% of current camera-to-target distance. W=+Y, S=−Y, A=−X, D=+X, Space=+Z, Shift=−Z. Focus gating is automatic (canvas only receives key events when it has Qt focus).
+
+---
+
+### FEAT-005 — Orbit target crosshair indicator
+**Status:** Closed (implemented 2026-05-15)  
+**Fix:** A `gfx.Group` with three short ±X/Y/Z line segments (muted R/G/B, 2.5% of axis range) is added to the scene and repositioned to `controller.target` every frame in `render()`. Toggled via "Crosshair" checkbox in ViewSettingsWidget.
+
+---
+
 ## Closed
 
 ### BUG-002 — Zero-size buffer crash when slider reaches zero

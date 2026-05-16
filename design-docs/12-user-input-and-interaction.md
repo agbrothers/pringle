@@ -13,20 +13,30 @@ All three are handled by pygfx's `OrbitController` with default bindings — no 
 
 ## 3D Viewport: Keyboard Controls (WASD)
 
-Keyboard navigation operates in the same orbit model as the mouse. Connected to `OrbitController` methods via the Qt key press event handler on the canvas widget.
+WASD pans the **orbit target** — the point the camera orbits around and zooms toward — in world-space coordinates. The camera translates by the same delta so its angle and distance to the target are preserved.
 
-| Key | Action |
+| Key | World-space movement |
 |---|---|
-| `W` | Zoom in (move camera toward orbit center) |
-| `S` | Zoom out |
-| `A` | Orbit left (rotate around vertical axis) |
-| `D` | Orbit right |
-| `Space` | Orbit up (rotate around horizontal axis) |
-| `Shift` | Orbit down |
+| `W` | +Y (pan target forward / away) |
+| `S` | −Y |
+| `A` | −X (pan target left) |
+| `D` | +X |
+| `Space` | +Z (pan target up) |
+| `Shift` | −Z (pan target down) |
 
-Step size is configurable (default: 5% zoom step, 3° rotation step). All six actions compose smoothly.
+**Step size** scales with the camera's current distance to the target (5% of that distance per keypress), so panning feels consistent whether zoomed in or out.
 
-**First-person mode (optional toggle):** a `FlyController` is available for exploring enclosed regions or vector fields from inside. Accessible via a button in the View Settings panel or a keyboard toggle (e.g., `F`). WASD becomes full first-person movement in this mode.
+**Focus gating:** key events are dispatched by the wgpu canvas widget. The canvas only receives events when it has Qt keyboard focus — i.e., only when the user has clicked into the 3D viewport, not the expression panel. No additional filtering is needed.
+
+**Known limitation:** pygfx's `OrbitController` mouse-pan (right-drag) moves the camera view but does not update `controller.target`. After a mouse pan, the WASD orbit target may differ from the visual center. WASD panning always operates relative to `controller.target` in world axes regardless of where the mouse panned to.
+
+### Orbit Target Crosshair
+
+A small three-axis crosshair is rendered at `controller.target` and updated every frame. It shows:
+- Short red/green/blue arms along ±X, ±Y, ±Z (colors match the main axis lines but muted)
+- Arm length = 2.5% of the maximum axis range
+
+The crosshair makes the orbit pivot visible during WASD panning and mouse orbiting. It can be toggled independently via the **Crosshair** checkbox in the View Settings overlay section.
 
 ## View Settings Panel (Axis Bounds and Viewport Config)
 

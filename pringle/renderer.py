@@ -278,29 +278,41 @@ class PringleRenderer:
         # WASD keys: added as an additional handler on top of OrbitController.
         self._renderer.add_event_handler(self._on_key, "key_down")
 
-        # Overlay: axis lines + wireframe bounding box
+        # Overlay: axis lines + wireframe bounding box + orbit crosshair
         self._axes_visible = True
         self._bbox_visible = True
+        self._crosshair_visible = True
         self._overlay: list[gfx.WorldObject] = []
         self._overlay_bounds = (-5.0, 5.0, -5.0, 5.0, -5.0, 5.0)  # xn,xx,yn,yx,zn,zx
+        self._crosshair_group: gfx.WorldObject | None = None
         self._rebuild_overlay()
+        self._rebuild_crosshair()
 
     def _on_key(self, event):
         key = getattr(event, "key", "") or ""
-        step = 0.05
-        zoom_in, zoom_out = 0.92, 1.08
-        if key == "w":
-            self._controller.zoom(zoom_in)
-        elif key == "s":
-            self._controller.zoom(zoom_out)
-        elif key == "a":
-            self._controller.rotate(-step, 0)
-        elif key == "d":
-            self._controller.rotate(step, 0)
-        elif key == " ":
-            self._controller.rotate(0, -step)
-        elif key == "Shift":
-            self._controller.rotate(0, step)
+        cam_pos = np.array(self._camera.local.position, dtype=np.float64)
+        target  = np.array(self._controller.target,     dtype=np.float64)
+        dist    = float(np.linalg.norm(cam_pos - target))
+        step    = max(dist * 0.05, 0.01)
+
+        _moves = {
+            "w": ( 0,    step,  0),
+            "s": ( 0,   -step,  0),
+            "a": (-step,  0,    0),
+            "d": ( step,  0,    0),
+            " ": ( 0,    0,    step),
+            "Shift": (0, 0,   -step),
+        }
+        if key in _moves:
+            self._pan_target(*_moves[key])
+
+    def _pan_target(self, dx: float, dy: float, dz: float) -> None:
+        """Translate the orbit target (and camera by the same delta) in world space."""
+        delta = np.array([dx, dy, dz], dtype=np.float64)
+        cam_pos = np.array(self._camera.local.position, dtype=np.float64)
+        new_target = np.array(self._controller.target, dtype=np.float64) + delta
+        self._controller.target = new_target
+        self._camera.local.position = cam_pos + delta
 
     # ------------------------------------------------------------------
     # Overlay: axes + wireframe bounding box
@@ -358,6 +370,7 @@ class PringleRenderer:
     ) -> None:
         self._overlay_bounds = (x_min, x_max, y_min, y_max, z_min, z_max)
         self._rebuild_overlay()
+        self._rebuild_crosshair()
 
     def set_axes_visible(self, visible: bool) -> None:
         self._axes_visible = visible
@@ -368,6 +381,33 @@ class PringleRenderer:
         self._bbox_visible = visible
         for obj in self._bbox_objects:
             obj.visible = visible
+
+    def set_crosshair_visible(self, visible: bool) -> None:
+        self._crosshair_visible = visible
+        if self._crosshair_group is not None:
+            self._crosshair_group.visible = visible
+
+    def _rebuild_crosshair(self) -> None:
+        if self._crosshair_group is not None:
+            self._scene.remove(self._crosshair_group)
+
+        xn, xx, yn, yx, zn, zx = self._overlay_bounds
+        arm = max(xx - xn, yx - yn, zx - zn) * 0.025
+
+        group = gfx.Group()
+        for p0, p1, color in [
+            ((-arm, 0, 0), (arm, 0, 0),  (0.85, 0.35, 0.35, 1.0)),
+            ((0, -arm, 0), (0, arm, 0),  (0.35, 0.75, 0.35, 1.0)),
+            ((0, 0, -arm), (0, 0, arm),  (0.35, 0.50, 0.90, 1.0)),
+        ]:
+            pts = np.array([p0, p1], dtype=np.float32)
+            geo = gfx.Geometry(positions=pts)
+            mat = gfx.LineMaterial(color=color, thickness=2.5)
+            group.add(gfx.Line(geo, mat))
+
+        group.visible = self._crosshair_visible
+        self._scene.add(group)
+        self._crosshair_group = group
 
     def get_scene_bsphere(self) -> tuple | None:
         """Return (cx, cy, cz, radius) of the scene bounding sphere, or None."""
@@ -402,6 +442,9 @@ class PringleRenderer:
             self._controller.target = (0.0, 0.0, 0.0)
 
     def render(self) -> None:
+        if self._crosshair_group is not None:
+            t = self._controller.target
+            self._crosshair_group.local.position = (float(t[0]), float(t[1]), float(t[2]))
         self._renderer.render(self._scene, self._camera)
 
     def snapshot(self) -> np.ndarray:

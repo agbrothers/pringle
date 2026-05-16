@@ -136,6 +136,9 @@ class PringleWindow(QMainWindow):
         self._view_settings.bbox_visibility_changed.connect(
             self._viewport.renderer.set_bbox_visible
         )
+        self._view_settings.crosshair_visibility_changed.connect(
+            self._viewport.renderer.set_crosshair_visible
+        )
         self._view_settings.equalize_requested.connect(self._on_equalize)
         left_layout.addWidget(self._view_settings)
 
