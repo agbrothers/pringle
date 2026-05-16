@@ -34,7 +34,9 @@ from pringle.grid import Grid, grid_vars
 class CellResult:
     """The outcome of evaluating one cell."""
     render_type: str | None = None   # "surface" | "curve" | "scatter" | "line" | None
-    data: Any = None                  # numpy array ready for renderer
+    data: Any = None                  # numpy array ready for renderer (NaN where masked)
+    data_unmasked: Any = None         # z array before constraint masking (all valid)
+    constraint_mask: Any = None       # bool array, True = inside constraint
     x: np.ndarray | None = None      # grid x (surface only)
     y: np.ndarray | None = None      # grid y (surface only)
     warning: str | None = None       # shape mismatch / undefined var
@@ -103,15 +105,25 @@ def _detect_shape(val: Any) -> tuple[str | None, Any]:
 # Constraint application
 # ---------------------------------------------------------------------------
 
-def apply_constraints(z: np.ndarray, constraint_exprs: list[str], ns: dict) -> np.ndarray:
+def apply_constraints(
+    z: np.ndarray,
+    constraint_exprs: list[str],
+    ns: dict,
+    return_mask: bool = False,
+) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
     """
     Apply boolean constraint expressions to a surface array.
 
     Each constraint is eval()ed with x, y, and z in scope.  The combined
     mask is the AND of all constraints.  Masked positions become NaN
     (degenerate triangles are skipped by the renderer).
+
+    If return_mask is True, returns (z_masked, inside_mask) where inside_mask
+    is the boolean array of vertices inside all constraints.
     """
     if not constraint_exprs:
+        if return_mask:
+            return z, np.ones(z.shape, dtype=bool)
         return z
 
     masks = []
@@ -124,10 +136,15 @@ def apply_constraints(z: np.ndarray, constraint_exprs: list[str], ns: dict) -> n
             pass  # bad constraint — ignore, don't crash
 
     if not masks:
+        if return_mask:
+            return z, np.ones(z.shape, dtype=bool)
         return z
 
     combined = np.logical_and.reduce(masks)
-    return np.where(combined, z, np.nan)
+    z_masked = np.where(combined, z, np.nan)
+    if return_mask:
+        return z_masked, combined
+    return z_masked
 
 
 # ---------------------------------------------------------------------------
@@ -376,9 +393,12 @@ def run_cell(
     # --- Normalize surface data ---
     if render_type == "surface":
         data = np.asarray(data, dtype=np.float32)
-        # Apply constraints
+        # Apply constraints — keep raw z for smooth boundary clipping in renderer
         if constraint_exprs:
-            data = apply_constraints(data, constraint_exprs, local_ns)
+            z_raw = data.copy()
+            data, inside_mask = apply_constraints(data, constraint_exprs, local_ns, return_mask=True)
+            result.data_unmasked = z_raw
+            result.constraint_mask = inside_mask
         result.x = grid.x
         result.y = grid.y
 

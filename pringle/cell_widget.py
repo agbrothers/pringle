@@ -79,8 +79,8 @@ class ConstraintSubCell(QWidget):
             self._PLACEHOLDERS.get(self._sub_type, "expression")
         )
         self._edit.setStyleSheet(
-            "QLineEdit { border: 1px dashed #bbb; border-radius: 3px; "
-            "padding: 1px 4px; font-size: 12px; background: #fafafa; }"
+            "QLineEdit { border: 1px dashed #666; border-radius: 3px; "
+            "padding: 1px 4px; font-size: 12px; background: #2a2a2a; color: #ddd; }"
         )
         self._edit.textChanged.connect(self.content_changed)
         row.addWidget(self._edit, 1)

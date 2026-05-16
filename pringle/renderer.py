@@ -59,11 +59,90 @@ def _grid_indices(rows: int, cols: int) -> np.ndarray:
     return np.array(triangles, dtype=np.int32)
 
 
+def _clip_mesh_to_mask(
+    positions: np.ndarray,
+    indices: np.ndarray,
+    normals: np.ndarray,
+    inside: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Clip a triangle mesh to a boolean vertex mask.
+
+    Triangles entirely outside are removed.  Triangles that cross the
+    constraint boundary get a new vertex added at the midpoint of each
+    boundary edge, turning the staircase pixel-steps into smooth diagonal
+    cuts.  Works in O(n_triangles) with a dict cache for shared edges.
+
+    Returns (positions, indices, normals) for the clipped mesh.
+    """
+    new_pos = list(positions)
+    new_nor = list(normals)
+    new_idx: list[list[int]] = []
+    edge_cache: dict[tuple[int, int], int] = {}
+
+    def _bv(ia: int, ib: int) -> int:
+        """Return (or create) the midpoint boundary vertex on edge ia→ib."""
+        key = (min(ia, ib), max(ia, ib))
+        if key in edge_cache:
+            return edge_cache[key]
+        p = (positions[ia] + positions[ib]) * 0.5
+        n = (normals[ia] + normals[ib]) * 0.5
+        length = float(np.linalg.norm(n))
+        if length > 1e-8:
+            n = n / length
+        idx = len(new_pos)
+        new_pos.append(p)
+        new_nor.append(n)
+        edge_cache[key] = idx
+        return idx
+
+    for tri in indices:
+        a, b, c = int(tri[0]), int(tri[1]), int(tri[2])
+        ia, ib, ic = bool(inside[a]), bool(inside[b]), bool(inside[c])
+        n_in = int(ia) + int(ib) + int(ic)
+
+        if n_in == 3:
+            new_idx.append([a, b, c])
+        elif n_in == 0:
+            pass  # entirely outside — discard
+        elif n_in == 1:
+            # One inside vertex — one output triangle
+            if ia:
+                vi, o1, o2 = a, b, c
+            elif ib:
+                vi, o1, o2 = b, a, c
+            else:
+                vi, o1, o2 = c, a, b
+            p1, p2 = _bv(vi, o1), _bv(vi, o2)
+            new_idx.append([vi, p1, p2])
+        else:
+            # Two inside vertices — quad split into two triangles
+            if not ia:
+                vo, v1, v2 = a, b, c
+            elif not ib:
+                vo, v1, v2 = b, c, a
+            else:
+                vo, v1, v2 = c, a, b
+            p1, p2 = _bv(v1, vo), _bv(v2, vo)
+            new_idx.append([v1, v2, p1])
+            new_idx.append([v2, p2, p1])
+
+    out_pos = np.array(new_pos, dtype=np.float32)
+    out_nor = np.array(new_nor, dtype=np.float32)
+    if new_idx:
+        out_idx = np.array(new_idx, dtype=np.int32)
+    else:
+        out_idx = np.zeros((0, 3), dtype=np.int32)
+    return out_pos, out_idx, out_nor
+
+
 def make_surface_mesh(
     x: np.ndarray,
     y: np.ndarray,
     z: np.ndarray,
     color: tuple = (0.2, 0.4, 0.9, 1.0),
+    constraint_mask: np.ndarray | None = None,
+    z_raw: np.ndarray | None = None,
 ) -> gfx.Mesh:
     """
     Build a pygfx Mesh from a height-field surface.
@@ -75,11 +154,22 @@ def make_surface_mesh(
     color: RGBA tuple in [0, 1]
 
     Returns a gfx.Mesh ready to be added to a scene.
+
+    If constraint_mask is provided (bool array, True = inside), boundary
+    triangles are clipped using z_raw (z before NaN masking) so that edges
+    are smooth diagonal cuts rather than pixel-stepped staircases.
     """
     rows, cols = z.shape
-    positions = np.stack([x.ravel(), y.ravel(), z.ravel()], axis=1).astype(np.float32)
+    # Use raw (pre-mask) z for vertex positions when clipping, so boundary
+    # vertices on both sides of the mask have valid (non-NaN) z values.
+    z_pos = z_raw if (z_raw is not None and constraint_mask is not None) else z
+    positions = np.stack([x.ravel(), y.ravel(), z_pos.ravel()], axis=1).astype(np.float32)
     indices   = _grid_indices(rows, cols)
-    normals   = _grid_normals(x, y, z)
+    normals   = _grid_normals(x, y, z_pos)
+
+    if constraint_mask is not None:
+        inside = constraint_mask.ravel().astype(bool)
+        positions, indices, normals = _clip_mesh_to_mask(positions, indices, normals, inside)
 
     geo = gfx.Geometry(positions=positions, indices=indices, normals=normals)
     mat = gfx.MeshPhongMaterial(color=color, side="both")

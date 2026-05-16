@@ -34,7 +34,13 @@ class StylePopoverWidget(QFrame):
         self.setFrameShape(QFrame.Shape.Box)
         self.setLineWidth(1)
         self.setStyleSheet(
-            "StylePopoverWidget { background: #fff; border: 1px solid #ccc; border-radius: 4px; }"
+            "StylePopoverWidget { background: #1e1e1e; border: 1px solid #555; border-radius: 4px; }"
+            "QLabel { color: #ccc; font-size: 12px; }"
+            "QLineEdit { background: #2d2d2d; color: #e0e0e0; border: 1px solid #555;"
+            "            border-radius: 3px; padding: 2px 4px; }"
+            "QDoubleSpinBox { background: #2d2d2d; color: #e0e0e0; border: 1px solid #555;"
+            "                 border-radius: 3px; padding: 1px 4px; }"
+            "QDoubleSpinBox::up-button, QDoubleSpinBox::down-button { width: 14px; }"
         )
         self._build_ui()
 

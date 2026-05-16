@@ -285,7 +285,11 @@ class PringleWindow(QMainWindow):
         vp = self._viewport
 
         if result.render_type == "surface":
-            mesh = make_surface_mesh(result.x, result.y, result.data, color=style.color)
+            mesh = make_surface_mesh(
+                result.x, result.y, result.data, color=style.color,
+                constraint_mask=result.constraint_mask,
+                z_raw=result.data_unmasked,
+            )
             vp.add_object(cell_id, mesh)
 
         elif result.render_type == "surface_y":

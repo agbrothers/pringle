@@ -259,3 +259,107 @@ class TestEvaluatorToRendererPipeline:
         assert half < full * 0.90, (
             f"Constraint 'x > 0' should reduce visible area: full={full}, half={half}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Smooth constraint boundary clipping
+# ---------------------------------------------------------------------------
+
+class TestConstraintBoundaryClipping:
+    def test_clip_mesh_produces_non_nan_positions(self):
+        """All vertex positions in a clipped mesh must be finite."""
+        from pringle.renderer import make_surface_mesh
+        from pringle.evaluator import run_cell
+        from pringle.grid import GridConfig, make_grid
+
+        grid = make_grid(GridConfig(n=32))
+        result = run_cell("z = x**2 - y**2", {}, grid,
+                          constraint_exprs=["x**2 + y**2 < 1"])
+        assert result.constraint_mask is not None
+        assert result.data_unmasked is not None
+
+        mesh = make_surface_mesh(
+            result.x, result.y, result.data,
+            constraint_mask=result.constraint_mask,
+            z_raw=result.data_unmasked,
+        )
+        pos = mesh.geometry.positions.data
+        assert np.all(np.isfinite(pos)), "Clipped mesh has NaN/Inf vertex positions"
+
+    def test_clip_mesh_fewer_triangles_than_full(self):
+        """A constrained mesh should have fewer triangles than an unconstrained one."""
+        from pringle.renderer import make_surface_mesh, _grid_indices
+        from pringle.evaluator import run_cell
+        from pringle.grid import GridConfig, make_grid
+
+        grid = make_grid(GridConfig(n=32))
+        result = run_cell("z = x**2 - y**2", {}, grid,
+                          constraint_exprs=["x**2 + y**2 < 1"])
+        mesh = make_surface_mesh(
+            result.x, result.y, result.data,
+            constraint_mask=result.constraint_mask,
+            z_raw=result.data_unmasked,
+        )
+        n = grid.x.shape[0]
+        full_tris = (n - 1) * (n - 1) * 2
+        clipped_tris = mesh.geometry.indices.data.shape[0]
+        assert clipped_tris < full_tris, \
+            f"Clipped mesh has {clipped_tris} triangles, expected < {full_tris}"
+
+    def test_clip_produces_smoother_edges_than_nan_masking(self):
+        """
+        The clipped mesh should render with a smoother boundary pixel profile
+        than the NaN-masked mesh at the same resolution.
+
+        Measure: count boundary pixels (pixels adjacent to a background pixel)
+        — smooth edges have fewer boundary pixels than staircase edges.
+        """
+        from rendercanvas.offscreen import OffscreenRenderCanvas
+        from pringle.renderer import PringleRenderer, make_surface_mesh
+        from pringle.evaluator import run_cell
+        from pringle.grid import GridConfig, make_grid
+        import numpy as np
+
+        grid = make_grid(GridConfig(n=32))
+        result = run_cell("z = x**2 - y**2", {}, grid,
+                          constraint_exprs=["x**2 + y**2 < 1"])
+
+        def render_mesh(mesh):
+            canvas = OffscreenRenderCanvas(size=(400, 300))
+            pr = PringleRenderer(canvas)
+            pr.add_object("surf", mesh)
+            pr.fit_camera()
+            return pr.snapshot()
+
+        # NaN-masked mesh (legacy approach)
+        nan_mesh = make_surface_mesh(result.x, result.y, result.data)
+        nan_frame = render_mesh(nan_mesh)
+
+        # Clipped mesh (smooth boundary)
+        clip_mesh = make_surface_mesh(
+            result.x, result.y, result.data,
+            constraint_mask=result.constraint_mask,
+            z_raw=result.data_unmasked,
+        )
+        clip_frame = render_mesh(clip_mesh)
+
+        def boundary_pixels(frame, threshold=10):
+            """Count pixels that neighbor a background pixel."""
+            rgb = frame[:, :, :3].astype(np.int32)
+            bg = np.array([int(0.95 * 255)] * 3)
+            is_bg = (np.abs(rgb - bg).max(axis=2) <= threshold)
+            is_surface = ~is_bg
+            # erode surface: find surface pixels with any bg neighbor
+            from numpy.lib.stride_tricks import sliding_window_view
+            padded = np.pad(is_bg.astype(np.uint8), 1, mode='edge')
+            kernel = sliding_window_view(padded, (3, 3))
+            has_bg_neighbor = kernel.reshape(*is_surface.shape, -1).max(axis=2).astype(bool)
+            return int((is_surface & has_bg_neighbor).sum())
+
+        nan_boundary = boundary_pixels(nan_frame)
+        clip_boundary = boundary_pixels(clip_frame)
+
+        assert clip_boundary <= nan_boundary, (
+            f"Clipped mesh boundary ({clip_boundary} px) should be ≤ "
+            f"NaN-masked boundary ({nan_boundary} px) — clipping should smooth edges"
+        )
