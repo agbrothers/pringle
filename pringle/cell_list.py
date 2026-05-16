@@ -17,12 +17,14 @@ Slider changes trigger incremental re-evaluation of only their downstream cells.
 
 from __future__ import annotations
 
+import time
+from collections import deque
 from typing import Callable
 import numpy as np
 
 from PyQt6.QtWidgets import (
     QWidget, QScrollArea, QVBoxLayout, QPushButton,
-    QFrame, QSizePolicy,
+    QFrame, QSizePolicy, QLabel, QApplication,
 )
 from PyQt6.QtCore import Qt
 
@@ -32,6 +34,9 @@ from pringle.style import CellStyle, palette_color
 from pringle.grid import Grid, make_grid, GridConfig
 from pringle.evaluator import run_cell, CellResult
 from pringle.preprocess import is_slider_cell
+
+_MAX_UNDO = 50
+_SLOW_EVAL_MS = 100
 
 
 class CellListWidget(QWidget):
@@ -57,6 +62,10 @@ class CellListWidget(QWidget):
         self._cells: list[CellWidget] = []
         self._shared_ns: dict = {}
         self._cell_index: int = 0  # for palette cycling
+        self._undo_history: deque[list[dict]] = deque(maxlen=_MAX_UNDO)
+        self._redo_history: deque[list[dict]] = deque(maxlen=_MAX_UNDO)
+        self._in_undo_restore: bool = False
+        self.last_eval_ms: float = 0.0
 
         self._build_ui()
 
@@ -79,6 +88,14 @@ class CellListWidget(QWidget):
         self._layout = QVBoxLayout(self._container)
         self._layout.setContentsMargins(0, 4, 0, 4)
         self._layout.setSpacing(0)
+
+        # Empty-state placeholder
+        self._placeholder = QLabel("Press + to add an expression")
+        self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._placeholder.setStyleSheet(
+            "color: #aaa; font-size: 13px; padding: 24px;"
+        )
+        self._layout.addWidget(self._placeholder)
         self._layout.addStretch(1)  # push cells to top
         scroll.setWidget(self._container)
 
@@ -103,6 +120,7 @@ class CellListWidget(QWidget):
         style: CellStyle | None = None,
     ) -> CellWidget | SliderWidget:
         """Add a new cell, optionally after a given cell_id."""
+        self._push_undo()
         if style is None:
             style = CellStyle(color=palette_color(self._cell_index))
         self._cell_index += 1
@@ -131,6 +149,7 @@ class CellListWidget(QWidget):
                 cell.focus()
                 if source:
                     self._rebuild_namespace()
+                self._update_placeholder()
                 return cell
 
         # Append before the stretch
@@ -143,12 +162,43 @@ class CellListWidget(QWidget):
         cell.focus()
         if source:
             self._rebuild_namespace()
+        self._update_placeholder()
         return cell
+
+    def add_folder(
+        self,
+        name: str = "Group",
+        after_id: str | None = None,
+        style: CellStyle | None = None,
+    ):
+        """Add a collapsible folder/group header cell."""
+        from pringle.folder_cell_widget import FolderCellWidget
+        self._push_undo()
+        if style is None:
+            style = CellStyle(color=(0.55, 0.55, 0.55, 1.0))
+        folder = FolderCellWidget(name=name, style=style)
+        folder.delete_requested.connect(self._on_delete_requested)
+        folder.content_changed.connect(self._on_cell_changed)
+
+        if after_id is not None:
+            idx = self._index_of(after_id)
+            if idx >= 0:
+                self._cells.insert(idx + 1, folder)
+                self._layout.insertWidget(idx + 1, folder)
+                self._update_placeholder()
+                return folder
+
+        stretch_pos = self._layout.count() - 1
+        self._layout.insertWidget(stretch_pos, folder)
+        self._cells.append(folder)
+        self._update_placeholder()
+        return folder
 
     def remove_cell(self, cell_id: str) -> None:
         idx = self._index_of(cell_id)
         if idx < 0:
             return
+        self._push_undo()
         cell = self._cells.pop(idx)
         self._layout.removeWidget(cell)
         cell.deleteLater()
@@ -159,6 +209,7 @@ class CellListWidget(QWidget):
         # Remove from viewport
         self._on_cell_result(cell_id, CellResult(), cell.style)
         self._rebuild_namespace()
+        self._update_placeholder()
 
     def cell_sources(self) -> list[tuple[str, str]]:
         """Return (cell_id, source) pairs in visual order."""
@@ -167,6 +218,69 @@ class CellListWidget(QWidget):
     def update_grid(self, grid: Grid) -> None:
         self._grid = grid
         self._rebuild_namespace()
+
+    # ------------------------------------------------------------------
+    # Undo / redo (structural: add / remove cell)
+    # ------------------------------------------------------------------
+
+    def _push_undo(self) -> None:
+        if self._in_undo_restore:
+            return
+        from pringle.session import cell_to_dict
+        snapshot = [cell_to_dict(c) for c in self._cells]
+        self._undo_history.append(snapshot)
+        self._redo_history.clear()
+
+    def undo(self) -> None:
+        if not self._undo_history:
+            return
+        from pringle.session import cell_to_dict, restore_cell_list
+        self._redo_history.append([cell_to_dict(c) for c in self._cells])
+        state = self._undo_history.pop()
+        self._in_undo_restore = True
+        restore_cell_list(self, state)
+        self._in_undo_restore = False
+
+    def redo(self) -> None:
+        if not self._redo_history:
+            return
+        from pringle.session import cell_to_dict, restore_cell_list
+        self._undo_history.append([cell_to_dict(c) for c in self._cells])
+        state = self._redo_history.pop()
+        self._in_undo_restore = True
+        restore_cell_list(self, state)
+        self._in_undo_restore = False
+
+    # ------------------------------------------------------------------
+    # Copy / paste
+    # ------------------------------------------------------------------
+
+    def copy_focused_cell(self) -> bool:
+        """Copy the source of the currently focused cell to the clipboard.
+        Returns True if a cell was found and copied."""
+        from PyQt6.QtWidgets import QPlainTextEdit
+        fw = QApplication.focusWidget()
+        # Walk up to find a CellWidget
+        w = fw
+        while w is not None:
+            if isinstance(w, CellWidget):
+                QApplication.clipboard().setText(w.source())
+                return True
+            w = w.parent() if hasattr(w, "parent") else None
+        return False
+
+    def paste_cell(self) -> None:
+        """Add a new cell with the clipboard text as source."""
+        text = QApplication.clipboard().text().strip()
+        if text:
+            self.add_cell(text)
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _update_placeholder(self) -> None:
+        self._placeholder.setVisible(len(self._cells) == 0)
 
     # ------------------------------------------------------------------
     # Evaluation
@@ -181,10 +295,14 @@ class CellListWidget(QWidget):
         receive an inline warning.
         """
         from pringle.dag import build_dag, topo_order, undefined_names
+        from pringle.folder_cell_widget import FolderCellWidget
 
-        dag = build_dag(self._cells)
-        ordered_cells, cyclic_ids = topo_order(dag, self._cells)
-        undef = undefined_names(self._cells)
+        t0 = time.monotonic()
+        evaluable = [c for c in self._cells if not isinstance(c, FolderCellWidget)]
+
+        dag = build_dag(evaluable)
+        ordered_cells, cyclic_ids = topo_order(dag, evaluable)
+        undef = undefined_names(evaluable)
 
         shared: dict = {}
         for cell in ordered_cells:
@@ -214,6 +332,7 @@ class CellListWidget(QWidget):
                 self._on_cell_result(cell.cell_id, CellResult(), cell.style)
 
         self._shared_ns = shared
+        self.last_eval_ms = (time.monotonic() - t0) * 1000
 
     def _eval_cell(self, cell: CellWidget, shared: dict) -> CellResult:
         """Evaluate one cell against the current shared namespace + grid."""
@@ -247,21 +366,24 @@ class CellListWidget(QWidget):
         Falls back to full rebuild if the namespace is not yet initialised.
         """
         from pringle.dag import build_dag, downstream_of
+        from pringle.folder_cell_widget import FolderCellWidget
 
-        if not self._shared_ns and self._cells:
+        evaluable = [c for c in self._cells if not isinstance(c, FolderCellWidget)]
+
+        if not self._shared_ns and evaluable:
             self._rebuild_namespace()
             return
 
         slider_cell = next(
-            (c for c in self._cells if isinstance(c, SliderWidget) and c.name == name),
+            (c for c in evaluable if isinstance(c, SliderWidget) and c.name == name),
             None,
         )
         if slider_cell is None:
             self._rebuild_namespace()
             return
 
-        dag = build_dag(self._cells)
-        descendants = downstream_of(dag, slider_cell.cell_id, self._cells)
+        dag = build_dag(evaluable)
+        descendants = downstream_of(dag, slider_cell.cell_id, evaluable)
 
         # Start from the last full namespace snapshot, updated with the new value
         shared = dict(self._shared_ns)

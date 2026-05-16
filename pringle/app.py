@@ -144,10 +144,14 @@ class PringleWindow(QMainWindow):
 
     def _setup_shortcuts(self) -> None:
         for keys, slot in [
-            (QKeySequence.StandardKey.New,   self._on_new),
-            (QKeySequence.StandardKey.Open,  self._on_open),
-            (QKeySequence.StandardKey.Save,  self._on_save),
-            (QKeySequence("Ctrl+Shift+S"),   self._on_save_as),
+            (QKeySequence.StandardKey.New,    self._on_new),
+            (QKeySequence.StandardKey.Open,   self._on_open),
+            (QKeySequence.StandardKey.Save,   self._on_save),
+            (QKeySequence("Ctrl+Shift+S"),    self._on_save_as),
+            (QKeySequence.StandardKey.Undo,   self._on_undo),
+            (QKeySequence.StandardKey.Redo,   self._on_redo),
+            (QKeySequence.StandardKey.Copy,   self._on_copy),
+            (QKeySequence.StandardKey.Paste,  self._on_paste),
         ]:
             sc = QShortcut(keys, self)
             sc.activated.connect(slot)
@@ -221,6 +225,38 @@ class PringleWindow(QMainWindow):
         )
         if path:
             self._write_session(path)
+
+    def _on_undo(self) -> None:
+        from PyQt6.QtWidgets import QPlainTextEdit, QLineEdit
+        fw = QApplication.focusWidget()
+        if isinstance(fw, (QPlainTextEdit, QLineEdit)):
+            fw.undo()
+        else:
+            self._cell_list.undo()
+
+    def _on_redo(self) -> None:
+        from PyQt6.QtWidgets import QPlainTextEdit, QLineEdit
+        fw = QApplication.focusWidget()
+        if isinstance(fw, (QPlainTextEdit, QLineEdit)):
+            fw.redo()
+        else:
+            self._cell_list.redo()
+
+    def _on_copy(self) -> None:
+        from PyQt6.QtWidgets import QPlainTextEdit, QLineEdit
+        fw = QApplication.focusWidget()
+        if isinstance(fw, (QPlainTextEdit, QLineEdit)):
+            fw.copy()
+        else:
+            self._cell_list.copy_focused_cell()
+
+    def _on_paste(self) -> None:
+        from PyQt6.QtWidgets import QPlainTextEdit, QLineEdit
+        fw = QApplication.focusWidget()
+        if isinstance(fw, (QPlainTextEdit, QLineEdit)):
+            fw.paste()
+        else:
+            self._cell_list.paste_cell()
 
     def _write_session(self, path: str) -> None:
         from pringle.session import save_session

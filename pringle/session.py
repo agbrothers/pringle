@@ -50,13 +50,20 @@ def cell_to_dict(cell) -> dict:
     """Serialize any cell widget to a JSON-safe dict."""
     from pringle.slider_widget import SliderWidget
     from pringle.data_cell_widget import DataCellWidget
+    from pringle.folder_cell_widget import FolderCellWidget
 
     base = {
         "id": cell.cell_id,
         "style": {"color": list(cell.style.color)},
     }
 
-    if isinstance(cell, SliderWidget):
+    if isinstance(cell, FolderCellWidget):
+        base["type"] = "folder"
+        base["name"] = cell.name
+        base["collapsed"] = cell.is_collapsed
+        base["sub_cells"] = []
+
+    elif isinstance(cell, SliderWidget):
         base["type"] = "slider"
         base["source"] = cell.source()
         base["name"] = cell.name
@@ -169,6 +176,16 @@ def restore_cell_list(
         raw_color = data.get("style", {}).get("color", [0.22, 0.40, 0.88, 1.0])
         color = tuple(float(v) for v in raw_color)
         style = CellStyle(color=color)
+
+        if cell_type == "folder":
+            from pringle.folder_cell_widget import FolderCellWidget
+            folder = cell_list.add_folder(
+                name=data.get("name", "Group"),
+                style=style,
+            )
+            if data.get("collapsed", False):
+                folder.set_collapsed(True)
+            continue
 
         cell = cell_list.add_cell(source=source, style=style)
 

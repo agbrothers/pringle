@@ -359,16 +359,15 @@ class CellWidget(QWidget):
         self.content_changed.emit(self.cell_id)  # re-render with new visibility
 
     def _on_color_dot_clicked(self):
-        from PyQt6.QtWidgets import QColorDialog
-        r, g, b, a = self.style.color
-        initial = QColor(int(r*255), int(g*255), int(b*255))
-        color = QColorDialog.getColor(initial, self, "Choose color")
-        if color.isValid():
-            self.style.color = (
-                color.red() / 255,
-                color.green() / 255,
-                color.blue() / 255,
-                1.0,
-            )
-            self._update_color_dot()
-            self.content_changed.emit(self.cell_id)  # update material color
+        from pringle.style_popover import StylePopoverWidget
+        popover = StylePopoverWidget(self.style, parent=self)
+        popover.style_changed.connect(self._on_style_changed)
+        pos = self._color_dot.mapToGlobal(self._color_dot.rect().bottomLeft())
+        popover.move(pos)
+        popover.show()
+
+    def _on_style_changed(self, new_style):
+        from dataclasses import replace
+        self.style = replace(new_style)
+        self._update_color_dot()
+        self.content_changed.emit(self.cell_id)
