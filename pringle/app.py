@@ -198,7 +198,7 @@ class PringleWindow(QMainWindow):
         if not self._confirm_discard():
             return
         path, _ = QFileDialog.getOpenFileName(
-            self, "Open session", "", "Pringle session (*.pringle);;YAML (*.yaml *.yml)"
+            self, "Open session", "", "YAML (*.yaml *.yml);;Pringle session (*.pringle)"
         )
         if not path:
             return
@@ -226,7 +226,7 @@ class PringleWindow(QMainWindow):
 
     def _on_save_as(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
-            self, "Save session", "", "Pringle session (*.pringle);;YAML (*.yaml *.yml)"
+            self, "Save session", "", "YAML (*.yaml *.yml);;Pringle session (*.pringle)"
         )
         if path:
             self._write_session(path)
