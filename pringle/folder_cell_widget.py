@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import pyqtSignal, Qt
 
 from pringle.style import CellStyle
+from pringle.cell_widget import DragHandle
 
 
 class FolderCellWidget(QWidget):
@@ -30,6 +31,9 @@ class FolderCellWidget(QWidget):
 
     delete_requested = pyqtSignal(str)   # cell_id
     content_changed = pyqtSignal(str)    # cell_id (name change)
+    drag_started = pyqtSignal(str)       # cell_id
+    drag_moved = pyqtSignal(str, int)    # cell_id, global_y
+    drag_ended = pyqtSignal(str)         # cell_id
 
     def __init__(
         self,
@@ -50,9 +54,22 @@ class FolderCellWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _build_ui(self):
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 2, 0, 0)
+        # Outer: drag handle strip (left) + content area (right)
+        outer_h = QHBoxLayout(self)
+        outer_h.setContentsMargins(0, 2, 0, 0)
+        outer_h.setSpacing(0)
+
+        self._drag_handle = DragHandle(self)
+        self._drag_handle.drag_started.connect(lambda: self.drag_started.emit(self.cell_id))
+        self._drag_handle.drag_moved.connect(lambda y: self.drag_moved.emit(self.cell_id, y))
+        self._drag_handle.drag_ended.connect(lambda: self.drag_ended.emit(self.cell_id))
+        outer_h.addWidget(self._drag_handle)
+
+        content = QWidget()
+        outer = QVBoxLayout(content)
+        outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
+        outer_h.addWidget(content, 1)
 
         # Header row
         header = QWidget()

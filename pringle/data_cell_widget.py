@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import pyqtSignal
 
-from pringle.cell_widget import CellTextEdit, ConstraintSubCell
+from pringle.cell_widget import CellTextEdit, ConstraintSubCell, DragHandle
 from pringle.style import CellStyle
 
 
@@ -29,6 +29,9 @@ class DataCellWidget(QWidget):
 
     run_requested = pyqtSignal(str)     # cell_id
     delete_requested = pyqtSignal(str)  # cell_id
+    drag_started = pyqtSignal(str)      # cell_id
+    drag_moved = pyqtSignal(str, int)   # cell_id, global_y
+    drag_ended = pyqtSignal(str)        # cell_id
 
     _STATUS_STYLES = {
         "idle":  "color: #bbb;",
@@ -50,12 +53,25 @@ class DataCellWidget(QWidget):
         self._build_ui()
 
     def _build_ui(self):
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 2, 0, 2)
+        # Outer: drag handle strip (left) + content area (right)
+        outer_h = QHBoxLayout(self)
+        outer_h.setContentsMargins(0, 2, 0, 2)
+        outer_h.setSpacing(0)
+
+        self._drag_handle = DragHandle(self)
+        self._drag_handle.drag_started.connect(lambda: self.drag_started.emit(self.cell_id))
+        self._drag_handle.drag_moved.connect(lambda y: self.drag_moved.emit(self.cell_id, y))
+        self._drag_handle.drag_ended.connect(lambda: self.drag_ended.emit(self.cell_id))
+        outer_h.addWidget(self._drag_handle)
+
+        content = QWidget()
+        outer = QVBoxLayout(content)
+        outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(2)
+        outer_h.addWidget(content, 1)
 
         row = QHBoxLayout()
-        row.setContentsMargins(6, 0, 6, 0)
+        row.setContentsMargins(4, 0, 6, 0)
         row.setSpacing(4)
 
         self._text_edit = CellTextEdit(self)

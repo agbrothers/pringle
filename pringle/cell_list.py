@@ -72,6 +72,8 @@ class CellListWidget(QWidget):
         self._redo_history: deque[list[dict]] = deque(maxlen=_MAX_UNDO)
         self._in_undo_restore: bool = False
         self.last_eval_ms: float = 0.0
+        self._drag_cell_id: str | None = None
+        self._drag_target_idx: int = 0
 
         self._build_ui()
 
@@ -104,6 +106,13 @@ class CellListWidget(QWidget):
         self._layout.addWidget(self._placeholder)
         self._layout.addStretch(1)  # push cells to top
         scroll.setWidget(self._container)
+
+        # Drop indicator: absolutely positioned 2-px accent line (not in layout)
+        from PyQt6.QtWidgets import QFrame as _QFrame
+        self._drop_indicator = _QFrame(self._container)
+        self._drop_indicator.setFixedHeight(2)
+        self._drop_indicator.setStyleSheet("background-color: #4a9eff; border: none;")
+        self._drop_indicator.hide()
 
         # Add buttons: equation cell (left) and data cell (right)
         _btn_style = (
@@ -158,6 +167,10 @@ class CellListWidget(QWidget):
             cell.delete_requested.connect(self._on_delete_requested)
             cell.enter_pressed.connect(self._on_enter_pressed)
 
+        cell.drag_started.connect(self._on_drag_started)
+        cell.drag_moved.connect(self._on_drag_moved)
+        cell.drag_ended.connect(self._on_drag_ended)
+
         if after_id is not None:
             idx = self._index_of(after_id)
             if idx >= 0:
@@ -200,6 +213,9 @@ class CellListWidget(QWidget):
         cell = DataCellWidget(style=style)
         cell.run_requested.connect(self._run_data_cell)
         cell.delete_requested.connect(self._on_delete_requested)
+        cell.drag_started.connect(self._on_drag_started)
+        cell.drag_moved.connect(self._on_drag_moved)
+        cell.drag_ended.connect(self._on_drag_ended)
 
         if after_id is not None:
             idx = self._index_of(after_id)
@@ -235,6 +251,9 @@ class CellListWidget(QWidget):
         folder = FolderCellWidget(name=name, style=style)
         folder.delete_requested.connect(self._on_delete_requested)
         folder.content_changed.connect(self._on_cell_changed)
+        folder.drag_started.connect(self._on_drag_started)
+        folder.drag_moved.connect(self._on_drag_moved)
+        folder.drag_ended.connect(self._on_drag_ended)
 
         if after_id is not None:
             idx = self._index_of(after_id)
@@ -513,6 +532,9 @@ class CellListWidget(QWidget):
         )
         slider.value_changed.connect(self._on_slider_value_changed)
         slider.delete_requested.connect(self._on_delete_requested)
+        slider.drag_started.connect(self._on_drag_started)
+        slider.drag_moved.connect(self._on_drag_moved)
+        slider.drag_ended.connect(self._on_drag_ended)
 
         # Swap in the layout and the cells list
         self._layout.replaceWidget(cell, slider)
@@ -572,6 +594,87 @@ class CellListWidget(QWidget):
 
     def _on_enter_pressed(self, cell_id: str) -> None:
         self.add_cell(after_id=cell_id)
+
+    # ------------------------------------------------------------------
+    # Drag-to-reorder
+    # ------------------------------------------------------------------
+
+    def _on_drag_started(self, cell_id: str) -> None:
+        from PyQt6.QtWidgets import QGraphicsOpacityEffect
+        self._drag_cell_id = cell_id
+        idx = self._index_of(cell_id)
+        if idx < 0:
+            return
+        self._drag_target_idx = idx
+        effect = QGraphicsOpacityEffect()
+        effect.setOpacity(0.4)
+        self._cells[idx].setGraphicsEffect(effect)
+        self._position_drop_indicator(idx)
+        self._drop_indicator.show()
+        self._drop_indicator.raise_()
+
+    def _on_drag_moved(self, cell_id: str, global_y: int) -> None:
+        if self._drag_cell_id != cell_id:
+            return
+        from PyQt6.QtCore import QPoint
+        local_y = self._container.mapFromGlobal(QPoint(0, global_y)).y()
+        drop_idx = self._compute_drop_idx(local_y)
+        self._drag_target_idx = drop_idx
+        self._position_drop_indicator(drop_idx)
+
+    def _on_drag_ended(self, cell_id: str) -> None:
+        if self._drag_cell_id != cell_id:
+            return
+        from_idx = self._index_of(cell_id)
+        to_idx = self._drag_target_idx
+        self._drag_cell_id = None
+        if from_idx >= 0:
+            self._cells[from_idx].setGraphicsEffect(None)
+        self._drop_indicator.hide()
+        if from_idx >= 0:
+            self._move_cell(from_idx, to_idx)
+
+    def _compute_drop_idx(self, local_y: int) -> int:
+        for i, cell in enumerate(self._cells):
+            geo = cell.geometry()
+            if local_y < geo.top() + geo.height() // 2:
+                return i
+        return len(self._cells)
+
+    def _position_drop_indicator(self, drop_idx: int) -> None:
+        if not self._cells:
+            self._drop_indicator.hide()
+            return
+        n = len(self._cells)
+        if drop_idx <= 0:
+            y = self._cells[0].geometry().top()
+        elif drop_idx >= n:
+            y = self._cells[-1].geometry().bottom()
+        else:
+            prev_bottom = self._cells[drop_idx - 1].geometry().bottom()
+            next_top = self._cells[drop_idx].geometry().top()
+            y = (prev_bottom + next_top) // 2
+        w = self._container.width()
+        self._drop_indicator.setGeometry(8, y - 1, w - 16, 2)
+        self._drop_indicator.raise_()
+
+    def _move_cell(self, from_idx: int, to_idx: int) -> None:
+        # to_idx is the drop slot (0 = before first cell, N = after last)
+        # Dropping immediately above or below the source is a no-op
+        if to_idx == from_idx or to_idx == from_idx + 1:
+            return
+        self._push_undo()
+        cell = self._cells.pop(from_idx)
+        insert_idx = (to_idx - 1) if to_idx > from_idx else to_idx
+        self._cells.insert(insert_idx, cell)
+        # Rebuild layout order without flickering
+        self._container.setUpdatesEnabled(False)
+        for c in self._cells:
+            self._layout.removeWidget(c)
+        for i, c in enumerate(self._cells):
+            self._layout.insertWidget(i + 1, c)  # +1 skips placeholder at index 0
+        self._container.setUpdatesEnabled(True)
+        self._rebuild_namespace()
 
     # ------------------------------------------------------------------
     # Helpers

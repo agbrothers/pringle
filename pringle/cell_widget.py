@@ -31,6 +31,60 @@ from pringle.style import CellStyle, palette_color
 
 
 # ---------------------------------------------------------------------------
+# Drag handle — left-edge strip for reordering cells
+# ---------------------------------------------------------------------------
+
+class DragHandle(QLabel):
+    """14-px strip on the left of every cell. Shows ⠿ grip icon on hover;
+    click-drag emits position signals for CellListWidget to reorder cells."""
+
+    drag_started = pyqtSignal()
+    drag_moved = pyqtSignal(int)   # global Y coordinate
+    drag_ended = pyqtSignal()
+
+    _IDLE   = "color: transparent; font-size: 14px; padding: 0;"
+    _HOVER  = "color: #aaa; font-size: 14px; padding: 0;"
+    _ACTIVE = "color: #666; font-size: 14px; padding: 0;"
+
+    def __init__(self, parent=None):
+        super().__init__("⠿", parent)
+        self.setFixedWidth(14)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setCursor(Qt.CursorShape.SizeVerCursor)
+        self.setStyleSheet(self._IDLE)
+        self._dragging = False
+
+    def enterEvent(self, event):
+        if not self._dragging:
+            self.setStyleSheet(self._HOVER)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        if not self._dragging:
+            self.setStyleSheet(self._IDLE)
+        super().leaveEvent(event)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._dragging = True
+            self.setStyleSheet(self._ACTIVE)
+            self.drag_started.emit()
+        event.accept()
+
+    def mouseMoveEvent(self, event):
+        if self._dragging:
+            self.drag_moved.emit(event.globalPosition().toPoint().y())
+        event.accept()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self._dragging:
+            self._dragging = False
+            self.setStyleSheet(self._IDLE)
+            self.drag_ended.emit()
+        event.accept()
+
+
+# ---------------------------------------------------------------------------
 # Constraint / condition sub-cell
 # ---------------------------------------------------------------------------
 
@@ -159,6 +213,9 @@ class CellWidget(QWidget):
     content_changed = pyqtSignal(str)      # cell_id
     delete_requested = pyqtSignal(str)     # cell_id
     enter_pressed = pyqtSignal(str)        # cell_id
+    drag_started = pyqtSignal(str)         # cell_id
+    drag_moved = pyqtSignal(str, int)      # cell_id, global_y
+    drag_ended = pyqtSignal(str)           # cell_id
 
     _DEBOUNCE_MS = 300
 
@@ -183,13 +240,26 @@ class CellWidget(QWidget):
     def _build_ui(self):
         self.setContentsMargins(0, 2, 0, 2)
 
-        outer = QVBoxLayout(self)
+        # Outer: drag handle strip (left) + content area (right)
+        outer_h = QHBoxLayout(self)
+        outer_h.setContentsMargins(0, 0, 0, 0)
+        outer_h.setSpacing(0)
+
+        self._drag_handle = DragHandle(self)
+        self._drag_handle.drag_started.connect(lambda: self.drag_started.emit(self.cell_id))
+        self._drag_handle.drag_moved.connect(lambda y: self.drag_moved.emit(self.cell_id, y))
+        self._drag_handle.drag_ended.connect(lambda: self.drag_ended.emit(self.cell_id))
+        outer_h.addWidget(self._drag_handle)
+
+        content = QWidget()
+        outer = QVBoxLayout(content)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(2)
+        outer_h.addWidget(content, 1)
 
-        # Top row: [dot] [text] [eye] [x]
+        # Top row: [dot] [text] [eye] [+sub] [delete ✕]
         row = QHBoxLayout()
-        row.setContentsMargins(6, 0, 6, 0)
+        row.setContentsMargins(4, 0, 6, 0)
         row.setSpacing(4)
 
         self._color_dot = QPushButton()

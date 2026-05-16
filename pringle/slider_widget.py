@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
 from pringle.style import CellStyle, palette_color
+from pringle.cell_widget import DragHandle
 
 
 class _SpinBox(QDoubleSpinBox):
@@ -47,6 +48,9 @@ class SliderWidget(QWidget):
 
     value_changed = pyqtSignal(str, float)     # (name, value)
     delete_requested = pyqtSignal(str)          # cell_id
+    drag_started = pyqtSignal(str)              # cell_id
+    drag_moved = pyqtSignal(str, int)           # cell_id, global_y
+    drag_ended = pyqtSignal(str)                # cell_id
 
     _ANIM_INTERVAL_MS = 16   # ~60fps animation step
 
@@ -91,13 +95,27 @@ class SliderWidget(QWidget):
 
     def _build_ui(self):
         self.setContentsMargins(0, 2, 0, 2)
-        outer = QVBoxLayout(self)
+
+        # Outer: drag handle strip (left) + content area (right)
+        outer_h = QHBoxLayout(self)
+        outer_h.setContentsMargins(0, 0, 0, 0)
+        outer_h.setSpacing(0)
+
+        self._drag_handle = DragHandle(self)
+        self._drag_handle.drag_started.connect(lambda: self.drag_started.emit(self.cell_id))
+        self._drag_handle.drag_moved.connect(lambda y: self.drag_moved.emit(self.cell_id, y))
+        self._drag_handle.drag_ended.connect(lambda: self.drag_ended.emit(self.cell_id))
+        outer_h.addWidget(self._drag_handle)
+
+        content = QWidget()
+        outer = QVBoxLayout(content)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(2)
+        outer_h.addWidget(content, 1)
 
         # --- Row 1: dot + name + value spinbox (stretch) + delete ---
         row1 = QHBoxLayout()
-        row1.setContentsMargins(6, 0, 6, 0)
+        row1.setContentsMargins(4, 0, 6, 0)
         row1.setSpacing(6)
 
         self._color_dot = QPushButton()
@@ -127,7 +145,7 @@ class SliderWidget(QWidget):
 
         # --- Row 2: play + min + slider (stretch) + max + · + step label + step ---
         row2 = QHBoxLayout()
-        row2.setContentsMargins(6, 0, 6, 0)
+        row2.setContentsMargins(4, 0, 6, 0)
         row2.setSpacing(6)
 
         self._play_btn = QPushButton("▷")
