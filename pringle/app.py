@@ -274,6 +274,12 @@ class PringleWindow(QMainWindow):
             cfg = grid_config_from_dict(data["grid"])
             self._grid = make_grid(cfg)
             self._cell_list.update_grid(self._grid)
+            self._view_settings.set_bounds(
+                cfg.x_min, cfg.x_max, cfg.y_min, cfg.y_max, cfg.z_min, cfg.z_max
+            )
+            self._viewport.renderer.set_overlay_bounds(
+                cfg.x_min, cfg.x_max, cfg.y_min, cfg.y_max, cfg.z_min, cfg.z_max
+            )
         self._session_path = path
         self._modified = False
         self._update_title()
@@ -398,19 +404,21 @@ class PringleWindow(QMainWindow):
     # View settings handlers
     # ------------------------------------------------------------------
 
-    def _on_bounds_changed(self, x_min: float, x_max: float, y_min: float, y_max: float) -> None:
+    def _on_bounds_changed(
+        self,
+        x_min: float, x_max: float,
+        y_min: float, y_max: float,
+        z_min: float, z_max: float,
+    ) -> None:
         config = GridConfig(
             x_min=x_min, x_max=x_max,
             y_min=y_min, y_max=y_max,
+            z_min=z_min, z_max=z_max,
             n=self._grid.config.n,
         )
         self._grid = make_grid(config)
         self._cell_list.update_grid(self._grid)
-        # Keep wireframe z range equal to the larger of the x/y half-ranges
-        z_half = max(abs(x_min), abs(x_max), abs(y_min), abs(y_max))
-        self._viewport.renderer.set_overlay_bounds(
-            x_min, x_max, y_min, y_max, -z_half, z_half
-        )
+        self._viewport.renderer.set_overlay_bounds(x_min, x_max, y_min, y_max, z_min, z_max)
 
     def _on_equalize(self) -> None:
         """Set x/y bounds to match the current z data range (equal-aspect axes)."""
@@ -419,13 +427,17 @@ class PringleWindow(QMainWindow):
             return
         r = max(float(bs[3]), 1.0)
         r = round(r, 1)
+        z_min = self._view_settings._z_min.value()
+        z_max = self._view_settings._z_max.value()
         self._view_settings.set_bounds(-r, r, -r, r)
-        self._on_bounds_changed(-r, r, -r, r)
+        self._on_bounds_changed(-r, r, -r, r, z_min, z_max)
 
     def _on_resolution_changed(self, n: int) -> None:
+        cfg = self._grid.config
         config = GridConfig(
-            x_min=self._grid.config.x_min, x_max=self._grid.config.x_max,
-            y_min=self._grid.config.y_min, y_max=self._grid.config.y_max,
+            x_min=cfg.x_min, x_max=cfg.x_max,
+            y_min=cfg.y_min, y_max=cfg.y_max,
+            z_min=cfg.z_min, z_max=cfg.z_max,
             n=n,
         )
         self._grid = make_grid(config)

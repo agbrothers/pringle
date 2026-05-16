@@ -97,6 +97,7 @@ def grid_config_to_dict(config: GridConfig) -> dict:
     return {
         "x_min": config.x_min, "x_max": config.x_max,
         "y_min": config.y_min, "y_max": config.y_max,
+        "z_min": config.z_min, "z_max": config.z_max,
         "n": config.n,
     }
 
@@ -105,6 +106,7 @@ def grid_config_from_dict(d: dict) -> GridConfig:
     return GridConfig(
         x_min=d.get("x_min", -5.0), x_max=d.get("x_max", 5.0),
         y_min=d.get("y_min", -5.0), y_max=d.get("y_max", 5.0),
+        z_min=d.get("z_min", -5.0), z_max=d.get("z_max", 5.0),
         n=int(d.get("n", 64)),
     )
 

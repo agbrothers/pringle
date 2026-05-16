@@ -25,7 +25,7 @@ from pringle.grid import GridConfig
 
 
 class ViewSettingsWidget(QWidget):
-    bounds_changed = pyqtSignal(float, float, float, float)
+    bounds_changed = pyqtSignal(float, float, float, float, float, float)
     resolution_changed = pyqtSignal(int)
     camera_preset_requested = pyqtSignal(str)
     fit_all_requested = pyqtSignal()
@@ -53,6 +53,7 @@ class ViewSettingsWidget(QWidget):
         for axis, attr_min, attr_max in (
             ("X", "_x_min", "_x_max"),
             ("Y", "_y_min", "_y_max"),
+            ("Z", "_z_min", "_z_max"),
         ):
             row = QHBoxLayout()
             row.addWidget(QLabel(f"{axis}:"))
@@ -142,12 +143,20 @@ class ViewSettingsWidget(QWidget):
         cl.addWidget(fit_btn)
         outer.addWidget(cam_box)
 
-    def set_bounds(self, x_min: float, x_max: float, y_min: float, y_max: float) -> None:
-        """Push new bounds into the spinboxes (used by equalize)."""
-        for spin, val in (
+    def set_bounds(
+        self,
+        x_min: float, x_max: float,
+        y_min: float, y_max: float,
+        z_min: float | None = None, z_max: float | None = None,
+    ) -> None:
+        """Push new bounds into the spinboxes (used by equalize and session restore)."""
+        pairs = [
             (self._x_min, x_min), (self._x_max, x_max),
             (self._y_min, y_min), (self._y_max, y_max),
-        ):
+        ]
+        if z_min is not None and z_max is not None:
+            pairs += [(self._z_min, z_min), (self._z_max, z_max)]
+        for spin, val in pairs:
             spin.blockSignals(True)
             spin.setValue(val)
             spin.blockSignals(False)
@@ -156,14 +165,14 @@ class ViewSettingsWidget(QWidget):
         self.bounds_changed.emit(
             self._x_min.value(), self._x_max.value(),
             self._y_min.value(), self._y_max.value(),
+            self._z_min.value(), self._z_max.value(),
         )
 
     def current_config(self) -> GridConfig:
         """Return a GridConfig reflecting the current widget state."""
         return GridConfig(
-            x_min=self._x_min.value(),
-            x_max=self._x_max.value(),
-            y_min=self._y_min.value(),
-            y_max=self._y_max.value(),
+            x_min=self._x_min.value(), x_max=self._x_max.value(),
+            y_min=self._y_min.value(), y_max=self._y_max.value(),
+            z_min=self._z_min.value(), z_max=self._z_max.value(),
             n=self._res_spin.value(),
         )
