@@ -57,8 +57,9 @@ class PringleViewport(QRenderWidget):
         return self._pr
 
     def add_object(self, cell_id: str, obj: gfx.WorldObject) -> None:
-        self._pr.add_object(cell_id, obj)
-        self._pr.fit_camera()
+        is_new = self._pr.add_object(cell_id, obj)
+        if is_new:
+            self._pr.fit_camera()
 
     def remove_object(self, cell_id: str) -> None:
         self._pr.remove_object(cell_id)

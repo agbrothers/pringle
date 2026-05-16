@@ -295,10 +295,13 @@ class PringleRenderer:
         elif key == "Shift":
             self._controller.rotate(0, step)
 
-    def add_object(self, cell_id: str, obj: gfx.WorldObject) -> None:
+    def add_object(self, cell_id: str, obj: gfx.WorldObject) -> bool:
+        """Add or replace an object. Returns True if cell_id is new to the scene."""
+        is_new = cell_id not in self._objects
         self.remove_object(cell_id)
         self._objects[cell_id] = obj
         self._scene.add(obj)
+        return is_new
 
     def remove_object(self, cell_id: str) -> None:
         if cell_id in self._objects:
