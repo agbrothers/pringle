@@ -47,6 +47,8 @@ class CellResult:
     slider_value: float = 0.0
     is_comment: bool = False
     free_names: set = field(default_factory=set)  # names this cell reads
+    preview: str | None = None        # value preview: scalar value or 1D array elements
+    shape_preview: str | None = None  # shape string shown in bottom-right for array outputs
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +110,33 @@ def _detect_shape(val: Any) -> tuple[str | None, Any]:
     if val.shape == (2,):
         return "scatter_2d", val.reshape(1, 2)
     return None, None
+
+
+def _fmt_scalar(x) -> str:
+    f = float(x)
+    return str(int(f)) if f == int(f) and abs(f) < 1e15 else f"{f:g}"
+
+
+def _make_preview(val, max_chars: int = 60) -> str | None:
+    """Format a scalar or short 1D array for the cell preview label."""
+    if isinstance(val, (bool, np.bool_)):
+        return str(bool(val))
+    if isinstance(val, (int, np.integer)):
+        return str(int(val))
+    if isinstance(val, (float, np.floating)):
+        return _fmt_scalar(val)
+    if isinstance(val, np.ndarray) and val.ndim == 1:
+        parts = [_fmt_scalar(x) for x in val]
+        full = "[" + ", ".join(parts) + "]"
+        if len(full) <= max_chars:
+            return full
+        shown: list[str] = []
+        for p in parts:
+            if shown and len("[" + ", ".join(shown + [p]) + ", ...]") > max_chars:
+                break
+            shown.append(p)
+        return "[" + ", ".join(shown) + ", ...]"
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -388,8 +417,17 @@ def run_cell(
                     )
                 break
 
+    # Value preview: first previewable (scalar or 1D) user-defined variable
+    for name in user_stores:
+        if name in MAGIC_NAMES or name in SPATIAL_NAMES:
+            continue
+        preview = _make_preview(local_ns.get(name))
+        if preview is not None:
+            result.preview = preview
+            break
+
     if render_type is None:
-        return result  # nothing to render
+        return result
 
     # --- Piecewise evaluation (if z is already a list and conditions given) ---
     if render_type == "surface" and isinstance(data, list):
@@ -428,4 +466,6 @@ def run_cell(
 
     result.render_type = render_type
     result.data = data
+    if isinstance(data, np.ndarray):
+        result.shape_preview = str(data.shape)
     return result

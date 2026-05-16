@@ -479,6 +479,8 @@ class CellListWidget(QWidget):
             cell.set_error(result.error)
         elif result.warning:
             cell.set_warning(result.warning)
+        if hasattr(cell, "set_preview"):
+            cell.set_preview(result.preview, result.shape_preview)
         return result
 
     # ------------------------------------------------------------------

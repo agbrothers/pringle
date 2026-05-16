@@ -255,6 +255,25 @@ class CellWidget(QWidget):
         self._warning_label.setVisible(False)
         outer.addWidget(self._warning_label)
 
+        # Preview row: value preview (left) + shape (right)
+        preview_row = QHBoxLayout()
+        preview_row.setContentsMargins(28, 0, 6, 0)
+        preview_row.setSpacing(0)
+
+        self._preview_label = QLabel()
+        self._preview_label.setWordWrap(False)
+        self._preview_label.setStyleSheet("color: #888; font-size: 11px;")
+        self._preview_label.setVisible(False)
+        preview_row.addWidget(self._preview_label, 1)
+
+        self._shape_label = QLabel()
+        self._shape_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._shape_label.setStyleSheet("color: #888; font-size: 11px;")
+        self._shape_label.setVisible(False)
+        preview_row.addWidget(self._shape_label)
+
+        outer.addLayout(preview_row)
+
         # Thin separator line below
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
@@ -285,9 +304,23 @@ class CellWidget(QWidget):
         else:
             self._warning_label.setVisible(False)
 
+    def set_preview(self, value: str | None, shape: str | None = None) -> None:
+        """Show value preview (left) and/or shape (right) in gray below the cell."""
+        if value:
+            self._preview_label.setText(value)
+            self._preview_label.setVisible(True)
+        else:
+            self._preview_label.setVisible(False)
+        if shape:
+            self._shape_label.setText(shape)
+            self._shape_label.setVisible(True)
+        else:
+            self._shape_label.setVisible(False)
+
     def clear_diagnostics(self) -> None:
         self.set_error(None)
         self.set_warning(None)
+        self.set_preview(None, None)
 
     def add_sub_cell(self, sub_type: str = "constraint") -> ConstraintSubCell:
         """Append a constraint or condition sub-cell below this cell."""
