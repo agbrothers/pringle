@@ -357,7 +357,36 @@ class CellListWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _on_cell_changed(self, cell_id: str) -> None:
+        self._maybe_morph_to_slider(cell_id)
         self._rebuild_namespace()
+
+    def _maybe_morph_to_slider(self, cell_id: str) -> None:
+        """
+        If a plain CellWidget now contains a bare scalar assignment (e.g. `a = 1`),
+        swap it for a SliderWidget in-place, preserving cell_id and style.
+        """
+        idx = self._index_of(cell_id)
+        if idx < 0:
+            return
+        cell = self._cells[idx]
+        if not isinstance(cell, CellWidget) or isinstance(cell, SliderWidget):
+            return
+
+        is_sl, sl_name, sl_val = is_slider_cell(cell.source())
+        if not is_sl:
+            return
+
+        style = cell.style
+        slider = SliderWidget(
+            name=sl_name, value=sl_val, style=style, cell_id=cell_id,
+        )
+        slider.value_changed.connect(self._on_slider_value_changed)
+        slider.delete_requested.connect(self._on_delete_requested)
+
+        # Swap in the layout and the cells list
+        self._layout.replaceWidget(cell, slider)
+        self._cells[idx] = slider
+        cell.deleteLater()
 
     def _on_slider_value_changed(self, name: str, value: float) -> None:
         """
