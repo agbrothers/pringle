@@ -70,6 +70,7 @@ def cell_to_dict(cell) -> dict:
         base["value"] = float(cell.value)
         base["min_val"] = float(cell._min)
         base["max_val"] = float(cell._max)
+        base["step"] = float(cell._step_box.value())
         base["sub_cells"] = []
 
     elif isinstance(cell, DataCellWidget):
@@ -194,6 +195,8 @@ def restore_cell_list(
             # Set box values first so _on_range_changed reads correct pair
             cell._min_box.setValue(float(data.get("min_val", 0.0)))
             cell._max_box.setValue(float(data.get("max_val", 10.0)))
+            if "step" in data:
+                cell._step_box.setValue(float(data["step"]))
             cell._spinbox.setRange(cell._min, cell._max)
             cell.set_value(float(data.get("value", cell.value)), emit=False)
 

@@ -6,6 +6,24 @@ Items are logged here as they are identified. Each entry includes a description,
 
 ## Bugs
 
+### BUG-006 — Camera moves when toggling cell visibility
+**Status:** Open  
+**Logged:** 2026-05-15
+
+**Description:**  
+Toggling a cell's visibility (eye icon / checkbox) back on causes the camera to rotate or shift slightly. Also observed when adding/removing expressions. The camera should be completely unaffected by visibility changes; only explicit user navigation (orbit, pan, zoom, WASD) should move it.
+
+**Reproduction:**  
+Add `p = array([[0, 0, 0], [1, 1, 1]])`. Toggle visibility off, then back on. Camera rotates.
+
+**Root cause hypothesis:**  
+`fit_camera()` or `show_object()` is likely being called somewhere on the re-add code path for visibility toggle, which repositions the camera even though the cell already exists in the scene.
+
+**Fix:**  
+Visibility toggle should only swap material opacity or `world.visible` on the existing object — never call `fit_camera()` or `show_object()` from the visibility path.
+
+---
+
 ### BUG-001 — Constraint edge clipping still jagged
 **Status:** Open  
 **Logged:** 2026-05-15
@@ -28,29 +46,6 @@ Add a constrained surface, e.g. `z = x**2 - y**2` with constraint `x**2 + y**2 <
 
 ---
 
-### BUG-002 — Zero-size buffer crash when slider reaches zero
-**Status:** Open  
-**Logged:** 2026-05-15
-
-**Description:**  
-When a slider constant reaches zero and the surface becomes a flat plane (or all-NaN), `gfx.Geometry` raises `ValueError: Buffer size cannot be zero`, then aborts.
-
-**Reproduction:**  
-Add cell `z = a*x + y`. Add slider `a = 1`. Drag slider to 0. App crashes with:
-```
-File "pringle/renderer.py", line 174, in make_surface_mesh
-    geo = gfx.Geometry(positions=positions, indices=indices, normals=normals)
-ValueError: Buffer size cannot be zero.
-Abort trap: 6
-```
-
-**Root cause:**  
-After clipping, `indices` can be an empty `(0, 3)` array. `gfx.Geometry` rejects zero-size buffers.
-
-**Fix:**  
-In `make_surface_mesh`, guard before constructing `gfx.Geometry`: if `indices` is empty (0 triangles), return a minimal invisible placeholder mesh instead of crashing.
-
----
 
 ### BUG-003 — `KeyboardEvent` has no `.get()` attribute
 **Status:** Closed (fixed 2026-05-15, commit `41a40fe`)  
@@ -95,7 +90,11 @@ Bottom row (below bar, flush left/right): min on the left, max on the right.
 
 ## Closed
 
-### BUG-002 — Zero-size buffer crash when slider reaches zero
+### BUG-007 — Zero-size buffer crash in scatter/line when slider reaches zero
+**Status:** Closed (fixed 2026-05-16)  
+**Fix:** `make_scatter_mesh` and `make_line_mesh` now return an invisible 1-point placeholder when the input array is empty, matching the existing guard in `make_surface_mesh`. All three render-path functions are now protected.
+
+### BUG-002 — Zero-size buffer crash in surface when slider reaches zero
 **Status:** Closed (fixed 2026-05-15, commit `ff20120`)  
 **Fix:** `make_surface_mesh` returns an invisible placeholder mesh when the clipped index array is empty.
 

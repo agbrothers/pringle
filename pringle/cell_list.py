@@ -39,6 +39,11 @@ _MAX_UNDO = 50
 _SLOW_EVAL_MS = 100
 
 
+def _ns_value(v: float) -> int | float:
+    """Return v as int when it is a whole number, so e.g. zeros(k) works."""
+    return int(v) if v == int(v) else v
+
+
 class CellListWidget(QWidget):
     """
     Scrollable ordered list of CellWidget objects.
@@ -307,7 +312,7 @@ class CellListWidget(QWidget):
         shared: dict = {}
         for cell in ordered_cells:
             if isinstance(cell, SliderWidget):
-                shared[cell.name] = cell.value
+                shared[cell.name] = _ns_value(cell.value)
                 continue
 
             if cell.cell_id in cyclic_ids:
@@ -416,11 +421,11 @@ class CellListWidget(QWidget):
 
         # Start from the last full namespace snapshot, updated with the new value
         shared = dict(self._shared_ns)
-        shared[name] = value
+        shared[name] = _ns_value(value)
 
         for cell in descendants:
             if isinstance(cell, SliderWidget):
-                shared[cell.name] = cell.value
+                shared[cell.name] = _ns_value(cell.value)
                 continue
             result = self._eval_cell(cell, shared)
             shared.update(result.exports)

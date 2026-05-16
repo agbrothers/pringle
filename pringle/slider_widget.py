@@ -1,27 +1,45 @@
 """
 SliderWidget — a parameter slider cell for the equation panel.
 
-Renders a named parameter with:
-  [color dot] [name]  ──●────────────  [value]  [min]..[max]  [▷/‖]
+Layout:
+  Row 1: [color dot] [name]  [value ────────────────────────]  [✕]
+  Row 2: [▷]  [min] [──●──────────────────────] [max]  · step [step]
 
 Signals:
   value_changed(name, float)  — emitted whenever the slider moves
   delete_requested(cell_id)   — ✕ button clicked
 
-Animation modes: static (no auto-play), loop, bounce, once.
-The animation is driven by a QTimer internal to this widget.
+Animation: play button bounces the value between min and max using the
+step size set in the step box. ~60fps via QTimer.
 """
 
 from __future__ import annotations
 
 import uuid
 from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QLabel, QSlider, QDoubleSpinBox,
+    QAbstractSpinBox, QWidget, QHBoxLayout, QLabel, QSlider, QDoubleSpinBox,
     QPushButton, QFrame, QVBoxLayout, QSizePolicy,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
 from pringle.style import CellStyle, palette_color
+
+
+class _SpinBox(QDoubleSpinBox):
+    """QDoubleSpinBox with no step buttons and clean decimal display.
+
+    Shows integers without a decimal point; strips trailing zeros from floats.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self.setDecimals(6)
+
+    def textFromValue(self, v: float) -> str:
+        if v == int(v) and abs(v) < 1e15:
+            return str(int(v))
+        return f"{v:g}"
 
 
 class SliderWidget(QWidget):
@@ -38,6 +56,7 @@ class SliderWidget(QWidget):
         value: float = 1.0,
         min_val: float = 0.0,
         max_val: float = 10.0,
+        step: float | None = None,
         cell_id: str | None = None,
         style: CellStyle | None = None,
         parent=None,
@@ -47,10 +66,17 @@ class SliderWidget(QWidget):
         self.name: str = name
         self.style: CellStyle = style or CellStyle()
 
+        # Expand the default range to accommodate the initial value so it
+        # is never silently clipped on creation (e.g. typing `k = 15`).
+        if value > max_val:
+            max_val = value * 2 if value > 0 else 1.0
+        elif value < min_val:
+            min_val = value * 2 if value < 0 else -1.0
+
         self._value: float = value
         self._min: float = min_val
         self._max: float = max_val
-        self._anim_mode: str = "static"   # "static" | "loop" | "bounce"
+        self._step: float = step if step is not None else max(0.001, (max_val - min_val) / 100.0)
         self._anim_dir: int = 1           # +1 or -1 for bounce
 
         self._build_ui()
@@ -69,75 +95,83 @@ class SliderWidget(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(2)
 
-        row = QHBoxLayout()
-        row.setContentsMargins(6, 0, 6, 0)
-        row.setSpacing(6)
+        # --- Row 1: dot + name + value spinbox (stretch) + delete ---
+        row1 = QHBoxLayout()
+        row1.setContentsMargins(6, 0, 6, 0)
+        row1.setSpacing(6)
 
-        # Color dot
         self._color_dot = QPushButton()
         self._color_dot.setFixedSize(18, 18)
         self._color_dot.setFlat(True)
         self._update_color_dot()
-        row.addWidget(self._color_dot)
+        row1.addWidget(self._color_dot)
 
-        # Name label
         self._name_label = QLabel(f"<b>{self.name}</b>")
         self._name_label.setFixedWidth(50)
-        row.addWidget(self._name_label)
+        row1.addWidget(self._name_label)
 
-        # Slider (integer-quantized; mapped to float range)
-        self._slider = QSlider(Qt.Orientation.Horizontal)
-        self._slider.setRange(0, 1000)
-        self._slider.setValue(self._float_to_int(self._value))
-        self._slider.valueChanged.connect(self._on_slider_moved)
-        row.addWidget(self._slider, 1)
-
-        # Value spinbox
-        self._spinbox = QDoubleSpinBox()
-        self._spinbox.setDecimals(3)
+        self._spinbox = _SpinBox()
         self._spinbox.setRange(self._min, self._max)
         self._spinbox.setValue(self._value)
-        self._spinbox.setFixedWidth(80)
+        self._spinbox.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._spinbox.valueChanged.connect(self._on_spinbox_changed)
-        row.addWidget(self._spinbox)
+        row1.addWidget(self._spinbox, 1)
 
-        # Min/max bounds
-        self._min_box = QDoubleSpinBox()
-        self._min_box.setDecimals(1)
-        self._min_box.setRange(-1e6, 1e6)
-        self._min_box.setValue(self._min)
-        self._min_box.setFixedWidth(56)
-        self._min_box.setPrefix("")
-        self._min_box.valueChanged.connect(self._on_range_changed)
-        row.addWidget(self._min_box)
-
-        self._range_label = QLabel("–")
-        row.addWidget(self._range_label)
-
-        self._max_box = QDoubleSpinBox()
-        self._max_box.setDecimals(1)
-        self._max_box.setRange(-1e6, 1e6)
-        self._max_box.setValue(self._max)
-        self._max_box.setFixedWidth(56)
-        self._max_box.valueChanged.connect(self._on_range_changed)
-        row.addWidget(self._max_box)
-
-        # Play / pause button
-        self._play_btn = QPushButton("▷")
-        self._play_btn.setFixedSize(28, 24)
-        self._play_btn.setCheckable(True)
-        self._play_btn.setToolTip("Animate (loop)")
-        self._play_btn.clicked.connect(self._on_play_toggled)
-        row.addWidget(self._play_btn)
-
-        # Delete button
         self._delete_btn = QPushButton("✕")
         self._delete_btn.setFixedSize(24, 24)
         self._delete_btn.setFlat(True)
         self._delete_btn.clicked.connect(lambda: self.delete_requested.emit(self.cell_id))
-        row.addWidget(self._delete_btn)
+        row1.addWidget(self._delete_btn)
 
-        outer.addLayout(row)
+        outer.addLayout(row1)
+
+        # --- Row 2: play + min + slider (stretch) + max + · + step label + step ---
+        row2 = QHBoxLayout()
+        row2.setContentsMargins(6, 0, 6, 0)
+        row2.setSpacing(6)
+
+        self._play_btn = QPushButton("▷")
+        self._play_btn.setFixedSize(28, 24)
+        self._play_btn.setCheckable(True)
+        self._play_btn.setToolTip("Animate (bounce)")
+        self._play_btn.clicked.connect(self._on_play_toggled)
+        row2.addWidget(self._play_btn)
+
+        self._min_box = _SpinBox()
+        self._min_box.setRange(-1e6, 1e6)
+        self._min_box.setValue(self._min)
+        self._min_box.setFixedWidth(60)
+        self._min_box.valueChanged.connect(self._on_range_changed)
+        row2.addWidget(self._min_box)
+
+        self._slider = QSlider(Qt.Orientation.Horizontal)
+        self._slider.setRange(0, 1000)
+        self._slider.setValue(self._float_to_int(self._value))
+        self._slider.valueChanged.connect(self._on_slider_moved)
+        row2.addWidget(self._slider, 1)
+
+        self._max_box = _SpinBox()
+        self._max_box.setRange(-1e6, 1e6)
+        self._max_box.setValue(self._max)
+        self._max_box.setFixedWidth(60)
+        self._max_box.valueChanged.connect(self._on_range_changed)
+        row2.addWidget(self._max_box)
+
+        sep = QLabel("·")
+        sep.setStyleSheet("color: #888; padding: 0 2px;")
+        row2.addWidget(sep)
+
+        step_lbl = QLabel("step")
+        step_lbl.setStyleSheet("color: #888; font-size: 10px;")
+        row2.addWidget(step_lbl)
+
+        self._step_box = _SpinBox()
+        self._step_box.setRange(1e-6, 1e6)
+        self._step_box.setValue(self._step)
+        self._step_box.setFixedWidth(60)
+        row2.addWidget(self._step_box)
+
+        outer.addLayout(row2)
 
         # Separator
         line = QFrame()
@@ -222,7 +256,6 @@ class SliderWidget(QWidget):
         self._min = self._min_box.value()
         self._max = self._max_box.value()
         self._spinbox.setRange(self._min, self._max)
-        # Reposition slider at current value
         self._slider.blockSignals(True)
         self._slider.setValue(self._float_to_int(self._value))
         self._slider.blockSignals(False)
@@ -237,7 +270,7 @@ class SliderWidget(QWidget):
             self._anim_timer.stop()
 
     def _anim_tick(self):
-        step = (self._max - self._min) / 200.0  # cross full range in ~3s at 60fps
+        step = self._step_box.value()
         new_val = self._value + self._anim_dir * step
         if new_val >= self._max:
             new_val = self._max

@@ -201,6 +201,13 @@ def make_line_mesh(
     if pts.shape[1] == 2:
         pts = np.column_stack([pts, np.zeros(len(pts), dtype=np.float32)])
 
+    if len(pts) == 0:
+        pts = np.zeros((1, 3), dtype=np.float32)
+        geo = gfx.Geometry(positions=pts)
+        mat = gfx.LineMaterial(color=color, thickness=thickness)
+        mat.opacity = 0.0
+        return gfx.Line(geo, mat)
+
     geo = gfx.Geometry(positions=pts)
     mat = gfx.LineMaterial(color=color, thickness=thickness)
     return gfx.Line(geo, mat)
@@ -219,6 +226,13 @@ def make_scatter_mesh(
         raise ValueError(f"points must be (N, 2) or (N, 3), got {pts.shape}")
     if pts.shape[1] == 2:
         pts = np.column_stack([pts, np.zeros(len(pts), dtype=np.float32)])
+
+    if len(pts) == 0:
+        pts = np.zeros((1, 3), dtype=np.float32)
+        geo = gfx.Geometry(positions=pts)
+        mat = gfx.PointsMaterial(color=color, size=size)
+        mat.opacity = 0.0
+        return gfx.Points(geo, mat)
 
     geo = gfx.Geometry(positions=pts)
     mat = gfx.PointsMaterial(color=color, size=size)
