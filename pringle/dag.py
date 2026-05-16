@@ -40,6 +40,16 @@ def _always_defined() -> set[str]:
 # Per-cell define / use sets
 # ---------------------------------------------------------------------------
 
+def _preprocess_src(src: str) -> str:
+    """Return preprocessed source, falling back to raw on error."""
+    from pringle.preprocess import preprocess
+    try:
+        preprocessed, _ = preprocess(src)
+        return preprocessed
+    except Exception:
+        return src
+
+
 def cell_defines(cell) -> set[str]:
     """Names this cell stores into the shared namespace."""
     from pringle.slider_widget import SliderWidget
@@ -49,7 +59,7 @@ def cell_defines(cell) -> set[str]:
     if not src:
         return set()
     try:
-        return get_store_names(src)
+        return get_store_names(_preprocess_src(src))
     except Exception:
         return set()
 
@@ -63,7 +73,7 @@ def cell_uses(cell) -> set[str]:
     if not src:
         return set()
     try:
-        return get_free_names(src) - _always_defined()
+        return get_free_names(_preprocess_src(src)) - _always_defined()
     except Exception:
         return set()
 
