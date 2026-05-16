@@ -39,7 +39,6 @@ from pringle.grid import GridConfig
 
 if TYPE_CHECKING:
     from pringle.cell_list import CellListWidget
-    from pringle.data_panel import DataPanelWidget
 
 
 # ---------------------------------------------------------------------------
@@ -118,17 +117,12 @@ def save_session(
     path: str | Path,
     cell_list: CellListWidget,
     grid_config: GridConfig,
-    data_panel: DataPanelWidget | None = None,
 ) -> None:
     """Serialize session to a YAML file at *path*."""
     session = {
         "version": 1,
         "grid": grid_config_to_dict(grid_config),
         "cells": [cell_to_dict(c) for c in cell_list._cells],
-        "data_cells": (
-            [cell_to_dict(c) for c in data_panel._cells]
-            if data_panel else []
-        ),
     }
     Path(path).write_text(yaml.dump(session, allow_unicode=True, sort_keys=False))
 
@@ -188,7 +182,10 @@ def restore_cell_list(
                 folder.set_collapsed(True)
             continue
 
-        cell = cell_list.add_cell(source=source, style=style)
+        if cell_type == "data":
+            cell = cell_list.add_data_cell(source=source, style=style)
+        else:
+            cell = cell_list.add_cell(source=source, style=style)
 
         # Restore slider-specific state
         if cell_type == "slider" and isinstance(cell, SliderWidget):
@@ -211,20 +208,12 @@ def restore_cell_list(
                     sub = cell.add_sub_cell(sub_data.get("type", "constraint"))
                     sub._edit.setText(sub_data.get("source", ""))
 
-        # Restore data cell sub-cells (not applicable here — handled via data_panel)
+        # Restore data cell sub-cells
+        elif cell_type == "data":
+            from pringle.data_cell_widget import DataCellWidget
+            if isinstance(cell, DataCellWidget):
+                for sub_data in data.get("sub_cells", []):
+                    sub = cell.add_sub_cell(sub_data.get("type", "initial_condition"))
+                    sub._edit.setText(sub_data.get("source", ""))
 
 
-def restore_data_panel(
-    data_panel: DataPanelWidget,
-    cells_data: list[dict],
-) -> None:
-    """Reconstruct a DataPanelWidget from loaded YAML data_cells data."""
-    for cell in list(data_panel._cells):
-        data_panel.remove_cell(cell.cell_id)
-
-    for data in cells_data:
-        source = data.get("source", "")
-        cell = data_panel.add_cell(source=source)
-        for sub_data in data.get("sub_cells", []):
-            sub = cell.add_sub_cell(sub_data.get("type", "initial_condition"))
-            sub._edit.setText(sub_data.get("source", ""))

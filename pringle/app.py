@@ -2,10 +2,8 @@
 Qt application shell for Pringle.
 
 Creates the top-level QMainWindow with:
-  - Left panel: vertical QSplitter
-      - top: CellListWidget (equation cells, live evaluation)
-      - bottom: DataPanelWidget (run-on-demand data cells)
-      - below splitter: ViewSettingsWidget (axis bounds, camera presets)
+  - Left panel: CellListWidget (equation + data cells in one unified list)
+               + ViewSettingsWidget (axis bounds, camera presets)
   - Right panel: QRenderWidget embedding the pygfx canvas
   - Horizontal QSplitter between left and right
 """
@@ -30,7 +28,6 @@ from pringle.grid import GridConfig, Grid, make_grid
 from pringle.evaluator import run_cell, CellResult
 from pringle.style import CellStyle
 from pringle.cell_list import CellListWidget
-from pringle.data_panel import DataPanelWidget
 from pringle.view_settings import ViewSettingsWidget
 
 
@@ -161,33 +158,17 @@ class PringleWindow(QMainWindow):
             cfg.x_min, cfg.x_max, cfg.y_min, cfg.y_max, -z_half, z_half
         )
 
-        # Left panel: vertical splitter (equation panel / data panel) + view settings
+        # Left panel: unified cell list + view settings
         left = QWidget()
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(0)
 
-        # Equation panel + data panel in a resizable vertical split
-        left_vsplit = QSplitter(Qt.Orientation.Vertical)
-
         self._cell_list = CellListWidget(
             on_cell_result=self._on_cell_result,
             grid=self._grid,
         )
-        left_vsplit.addWidget(self._cell_list)
-
-        self._data_panel = DataPanelWidget(
-            on_cell_result=self._on_cell_result,
-            grid=self._grid,
-        )
-        self._data_panel.namespace_changed.connect(self._on_data_namespace_changed)
-        left_vsplit.addWidget(self._data_panel)
-
-        left_vsplit.setSizes([500, 200])
-        left_vsplit.setStretchFactor(0, 1)
-        left_vsplit.setStretchFactor(1, 0)
-
-        left_layout.addWidget(left_vsplit, 1)
+        left_layout.addWidget(self._cell_list, 1)
 
         self._view_settings = ViewSettingsWidget(config=self._grid.config)
         self._view_settings.bounds_changed.connect(self._on_bounds_changed)
@@ -269,8 +250,6 @@ class PringleWindow(QMainWindow):
             return
         for cell in list(self._cell_list._cells):
             self._cell_list.remove_cell(cell.cell_id)
-        for cell in list(self._data_panel._cells):
-            self._data_panel.remove_cell(cell.cell_id)
         self._session_path = None
         self._modified = False
         self._update_title()
@@ -290,14 +269,11 @@ class PringleWindow(QMainWindow):
             QMessageBox.critical(self, "Load error", str(exc))
             return
         restore_cell_list(self._cell_list, data.get("cells", []))
-        from pringle.session import restore_data_panel
-        restore_data_panel(self._data_panel, data.get("data_cells", []))
         if data.get("grid"):
             from pringle.session import grid_config_from_dict
             cfg = grid_config_from_dict(data["grid"])
             self._grid = make_grid(cfg)
             self._cell_list.update_grid(self._grid)
-            self._data_panel._grid = self._grid
         self._session_path = path
         self._modified = False
         self._update_title()
@@ -347,13 +323,10 @@ class PringleWindow(QMainWindow):
         else:
             self._cell_list.paste_cell()
 
-    def _on_data_namespace_changed(self) -> None:
-        self._cell_list.set_data_namespace(self._data_panel.get_namespace())
-
     def _write_session(self, path: str) -> None:
         from pringle.session import save_session
         try:
-            save_session(path, self._cell_list, self._grid.config, self._data_panel)
+            save_session(path, self._cell_list, self._grid.config)
         except Exception as exc:
             QMessageBox.critical(self, "Save error", str(exc))
             return
@@ -433,7 +406,6 @@ class PringleWindow(QMainWindow):
         )
         self._grid = make_grid(config)
         self._cell_list.update_grid(self._grid)
-        self._data_panel._grid = self._grid
         # Keep wireframe z range equal to the larger of the x/y half-ranges
         z_half = max(abs(x_min), abs(x_max), abs(y_min), abs(y_max))
         self._viewport.renderer.set_overlay_bounds(
@@ -458,7 +430,6 @@ class PringleWindow(QMainWindow):
         )
         self._grid = make_grid(config)
         self._cell_list.update_grid(self._grid)
-        self._data_panel._grid = self._grid
 
     # ------------------------------------------------------------------
     # Properties

@@ -23,7 +23,7 @@ from typing import Callable
 import numpy as np
 
 from PyQt6.QtWidgets import (
-    QWidget, QScrollArea, QVBoxLayout, QPushButton,
+    QWidget, QScrollArea, QVBoxLayout, QHBoxLayout, QPushButton,
     QFrame, QSizePolicy, QLabel, QApplication,
 )
 from PyQt6.QtCore import Qt
@@ -66,7 +66,7 @@ class CellListWidget(QWidget):
         self._grid = grid or make_grid()
         self._cells: list[CellWidget] = []
         self._shared_ns: dict = {}
-        self._data_ns: dict = {}   # namespace contributed by the data panel
+        self._data_cell_ns: dict = {}  # exports from manually-run data cells
         self._cell_index: int = 0  # for palette cycling
         self._undo_history: deque[list[dict]] = deque(maxlen=_MAX_UNDO)
         self._redo_history: deque[list[dict]] = deque(maxlen=_MAX_UNDO)
@@ -105,15 +105,28 @@ class CellListWidget(QWidget):
         self._layout.addStretch(1)  # push cells to top
         scroll.setWidget(self._container)
 
-        # "+" button to add a new cell at the bottom
-        self._add_btn = QPushButton("+ Add expression")
-        self._add_btn.setFlat(True)
-        self._add_btn.setStyleSheet(
+        # Add buttons: equation cell (left) and data cell (right)
+        _btn_style = (
             "QPushButton { color: #555; padding: 8px; font-size: 13px; }"
             "QPushButton:hover { color: #222; }"
         )
-        self._add_btn.clicked.connect(lambda: self.add_cell())
-        outer.addWidget(self._add_btn)
+        add_row = QHBoxLayout()
+        add_row.setContentsMargins(0, 0, 0, 0)
+        add_row.setSpacing(0)
+
+        self._add_eq_btn = QPushButton("+ Equation")
+        self._add_eq_btn.setFlat(True)
+        self._add_eq_btn.setStyleSheet(_btn_style)
+        self._add_eq_btn.clicked.connect(lambda: self.add_cell())
+        add_row.addWidget(self._add_eq_btn)
+
+        self._add_data_btn = QPushButton("+ Data cell")
+        self._add_data_btn.setFlat(True)
+        self._add_data_btn.setStyleSheet(_btn_style)
+        self._add_data_btn.clicked.connect(lambda: self.add_data_cell())
+        add_row.addWidget(self._add_data_btn)
+
+        outer.addLayout(add_row)
 
     # ------------------------------------------------------------------
     # Cell management
@@ -171,6 +184,43 @@ class CellListWidget(QWidget):
         self._update_placeholder()
         return cell
 
+    def add_data_cell(
+        self,
+        source: str = "",
+        after_id: str | None = None,
+        style: CellStyle | None = None,
+    ):
+        """Add a run-on-demand data cell."""
+        from pringle.data_cell_widget import DataCellWidget
+        self._push_undo()
+        if style is None:
+            style = CellStyle(color=palette_color(self._cell_index))
+        self._cell_index += 1
+
+        cell = DataCellWidget()
+        cell.run_requested.connect(self._run_data_cell)
+        cell.delete_requested.connect(self._on_delete_requested)
+
+        if after_id is not None:
+            idx = self._index_of(after_id)
+            if idx >= 0:
+                self._cells.insert(idx + 1, cell)
+                self._layout.insertWidget(idx + 1, cell)
+                if source:
+                    cell.set_source(source)
+                cell.focus()
+                self._update_placeholder()
+                return cell
+
+        stretch_pos = self._layout.count() - 1
+        self._layout.insertWidget(stretch_pos, cell)
+        self._cells.append(cell)
+        if source:
+            cell.set_source(source)
+        cell.focus()
+        self._update_placeholder()
+        return cell
+
     def add_folder(
         self,
         name: str = "Group",
@@ -225,10 +275,70 @@ class CellListWidget(QWidget):
         self._grid = grid
         self._rebuild_namespace()
 
-    def set_data_namespace(self, ns: dict) -> None:
-        """Receive namespace exports from the data panel and re-evaluate."""
-        self._data_ns = dict(ns)
+    def _run_data_cell(self, cell_id: str) -> None:
+        """Run a data cell on demand, using the current equation namespace as input."""
+        from pringle.data_cell_widget import DataCellWidget
+        from pringle.namespace import build_data_namespace
+        from pringle.recurrence import parse_recurrence, execute_recurrence
+
+        idx = self._index_of(cell_id)
+        if idx < 0:
+            return
+        cell = self._cells[idx]
+        if not isinstance(cell, DataCellWidget):
+            return
+
+        source = cell.source().strip()
+        if not source:
+            cell.set_status("idle")
+            return
+
+        # Data namespace + full current shared namespace (sliders + equation exports
+        # + previous data cell outputs) so data cells see everything
+        ns = build_data_namespace()
+        ns.update(self._shared_ns)
+
+        result = run_cell(source, ns, self._grid, is_data_cell=True)
+
+        if result.error:
+            cell.set_status("error", result.error)
+            return
+
+        rule_expr = cell.recurrence_expr()
+        initial_exprs = cell.initial_condition_exprs()
+
+        if rule_expr:
+            is_valid, arr_name, _ = parse_recurrence(rule_expr)
+            if is_valid and arr_name in result.exports:
+                arr = result.exports[arr_name]
+                if isinstance(arr, np.ndarray):
+                    arr, warn = execute_recurrence(
+                        arr_name, arr, initial_exprs, rule_expr,
+                        {**ns, **result.exports},
+                    )
+                    result.exports[arr_name] = arr
+                    if warn:
+                        cell.set_status("stale", warn)
+                    else:
+                        cell.set_status("ok")
+                    if arr.ndim == 2 and arr.shape[1] in (2, 3):
+                        result.render_type = "scatter"
+                        result.data = arr.astype(np.float32)
+                else:
+                    cell.set_status("error", f"'{arr_name}' is not an array")
+                    return
+            else:
+                cell.set_status("error", f"Cannot parse rule or missing array: {rule_expr!r}")
+                return
+        else:
+            cell.set_status("ok", result.warning or "")
+
+        # Merge exports into the persistent data-cell namespace, then rebuild
+        self._data_cell_ns.update(result.exports)
         self._rebuild_namespace()
+
+        if result.render_type:
+            self._on_cell_result(cell.cell_id, result, CellStyle())
 
     # ------------------------------------------------------------------
     # Undo / redo (structural: add / remove cell)
@@ -315,10 +425,18 @@ class CellListWidget(QWidget):
         ordered_cells, cyclic_ids = topo_order(dag, evaluable)
         undef = undefined_names(evaluable)
 
-        shared: dict = dict(self._data_ns)   # seed with data panel outputs
+        from pringle.data_cell_widget import DataCellWidget
+
+        # Seed with previously-run data cell outputs so equation cells can reference them
+        shared: dict = dict(self._data_cell_ns)
         for cell in ordered_cells:
             if isinstance(cell, SliderWidget):
                 shared[cell.name] = _ns_value(cell.value)
+                continue
+
+            # Data cells run on demand only — skip during reactive rebuild
+            if isinstance(cell, DataCellWidget):
+                cell._mark_stale()
                 continue
 
             if cell.cell_id in cyclic_ids:
@@ -429,9 +547,14 @@ class CellListWidget(QWidget):
         shared = dict(self._shared_ns)
         shared[name] = _ns_value(value)
 
+        from pringle.data_cell_widget import DataCellWidget
+
         for cell in descendants:
             if isinstance(cell, SliderWidget):
                 shared[cell.name] = _ns_value(cell.value)
+                continue
+            if isinstance(cell, DataCellWidget):
+                cell._mark_stale()
                 continue
             result = self._eval_cell(cell, shared)
             shared.update(result.exports)
