@@ -107,6 +107,11 @@ class PringleWindow(QMainWindow):
 
         # 3D viewport
         self._viewport = PringleViewport(splitter)
+        cfg = self._grid.config
+        z_half = max(abs(cfg.x_min), abs(cfg.x_max), abs(cfg.y_min), abs(cfg.y_max))
+        self._viewport.renderer.set_overlay_bounds(
+            cfg.x_min, cfg.x_max, cfg.y_min, cfg.y_max, -z_half, z_half
+        )
 
         # Left panel: cell list + view settings stacked vertically
         left = QWidget()
@@ -125,6 +130,13 @@ class PringleWindow(QMainWindow):
         self._view_settings.resolution_changed.connect(self._on_resolution_changed)
         self._view_settings.camera_preset_requested.connect(self._viewport.set_camera_preset)
         self._view_settings.fit_all_requested.connect(self._viewport.renderer.fit_camera)
+        self._view_settings.axes_visibility_changed.connect(
+            self._viewport.renderer.set_axes_visible
+        )
+        self._view_settings.bbox_visibility_changed.connect(
+            self._viewport.renderer.set_bbox_visible
+        )
+        self._view_settings.equalize_requested.connect(self._on_equalize)
         left_layout.addWidget(self._view_settings)
 
         splitter.insertWidget(0, left)
@@ -346,6 +358,21 @@ class PringleWindow(QMainWindow):
         )
         self._grid = make_grid(config)
         self._cell_list.update_grid(self._grid)
+        # Keep wireframe z range equal to the larger of the x/y half-ranges
+        z_half = max(abs(x_min), abs(x_max), abs(y_min), abs(y_max))
+        self._viewport.renderer.set_overlay_bounds(
+            x_min, x_max, y_min, y_max, -z_half, z_half
+        )
+
+    def _on_equalize(self) -> None:
+        """Set x/y bounds to match the current z data range (equal-aspect axes)."""
+        bs = self._viewport.renderer.get_scene_bsphere()
+        if bs is None:
+            return
+        r = max(float(bs[3]), 1.0)
+        r = round(r, 1)
+        self._view_settings.set_bounds(-r, r, -r, r)
+        self._on_bounds_changed(-r, r, -r, r)
 
     def _on_resolution_changed(self, n: int) -> None:
         config = GridConfig(

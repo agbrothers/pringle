@@ -278,8 +278,15 @@ class PringleRenderer:
         # WASD keys: added as an additional handler on top of OrbitController.
         self._renderer.add_event_handler(self._on_key, "key_down")
 
+        # Overlay: axis lines + wireframe bounding box
+        self._axes_visible = True
+        self._bbox_visible = True
+        self._overlay: list[gfx.WorldObject] = []
+        self._overlay_bounds = (-5.0, 5.0, -5.0, 5.0, -5.0, 5.0)  # xn,xx,yn,yx,zn,zx
+        self._rebuild_overlay()
+
     def _on_key(self, event):
-        key = event.get("key", "")
+        key = getattr(event, "key", "") or ""
         step = 0.05
         zoom_in, zoom_out = 0.92, 1.08
         if key == "w":
@@ -294,6 +301,80 @@ class PringleRenderer:
             self._controller.rotate(0, -step)
         elif key == "Shift":
             self._controller.rotate(0, step)
+
+    # ------------------------------------------------------------------
+    # Overlay: axes + wireframe bounding box
+    # ------------------------------------------------------------------
+
+    def _rebuild_overlay(self) -> None:
+        for obj in self._overlay:
+            self._scene.remove(obj)
+        self._overlay.clear()
+
+        xn, xx, yn, yx, zn, zx = self._overlay_bounds
+
+        def _line(p0, p1, color, thickness=1.5):
+            pts = np.array([p0, p1], dtype=np.float32)
+            geo = gfx.Geometry(positions=pts)
+            mat = gfx.LineMaterial(color=color, thickness=thickness)
+            return gfx.Line(geo, mat)
+
+        # Axis lines
+        axes = [
+            _line((xn, 0, 0), (xx, 0, 0), (0.9, 0.2, 0.2, 1.0), 2.0),  # X red
+            _line((0, yn, 0), (0, yx, 0), (0.2, 0.75, 0.2, 1.0), 2.0),  # Y green
+            _line((0, 0, zn), (0, 0, zx), (0.2, 0.45, 0.95, 1.0), 2.0), # Z blue
+        ]
+        for ax in axes:
+            ax.visible = self._axes_visible
+            self._scene.add(ax)
+            self._overlay.append(ax)
+        self._axis_objects = axes
+
+        # Wireframe bounding box — 12 edges
+        corners = [
+            (xn, yn, zn), (xx, yn, zn), (xx, yx, zn), (xn, yx, zn),
+            (xn, yn, zx), (xx, yn, zx), (xx, yx, zx), (xn, yx, zx),
+        ]
+        edges = [
+            (0,1),(1,2),(2,3),(3,0),  # bottom face
+            (4,5),(5,6),(6,7),(7,4),  # top face
+            (0,4),(1,5),(2,6),(3,7),  # verticals
+        ]
+        bbox_objs = []
+        for i, j in edges:
+            ln = _line(corners[i], corners[j], (0.55, 0.55, 0.55, 1.0), 1.0)
+            ln.visible = self._bbox_visible
+            self._scene.add(ln)
+            self._overlay.append(ln)
+            bbox_objs.append(ln)
+        self._bbox_objects = bbox_objs
+
+    def set_overlay_bounds(
+        self,
+        x_min: float, x_max: float,
+        y_min: float, y_max: float,
+        z_min: float, z_max: float,
+    ) -> None:
+        self._overlay_bounds = (x_min, x_max, y_min, y_max, z_min, z_max)
+        self._rebuild_overlay()
+
+    def set_axes_visible(self, visible: bool) -> None:
+        self._axes_visible = visible
+        for obj in self._axis_objects:
+            obj.visible = visible
+
+    def set_bbox_visible(self, visible: bool) -> None:
+        self._bbox_visible = visible
+        for obj in self._bbox_objects:
+            obj.visible = visible
+
+    def get_scene_bsphere(self) -> tuple | None:
+        """Return (cx, cy, cz, radius) of the scene bounding sphere, or None."""
+        bs = self._scene.get_world_bounding_sphere()
+        if bs is None:
+            return None
+        return tuple(bs)
 
     def add_object(self, cell_id: str, obj: gfx.WorldObject) -> bool:
         """Add or replace an object. Returns True if cell_id is new to the scene."""

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QDoubleSpinBox, QSpinBox, QPushButton, QGroupBox,
+    QDoubleSpinBox, QSpinBox, QPushButton, QGroupBox, QCheckBox,
 )
 from PyQt6.QtCore import pyqtSignal
 
@@ -29,6 +29,9 @@ class ViewSettingsWidget(QWidget):
     resolution_changed = pyqtSignal(int)
     camera_preset_requested = pyqtSignal(str)
     fit_all_requested = pyqtSignal()
+    axes_visibility_changed = pyqtSignal(bool)
+    bbox_visibility_changed = pyqtSignal(bool)
+    equalize_requested = pyqtSignal()
 
     def __init__(self, config: GridConfig | None = None, parent=None):
         super().__init__(parent)
@@ -70,11 +73,35 @@ class ViewSettingsWidget(QWidget):
             row.addStretch(1)
             bl.addLayout(row)
 
+        btn_row = QHBoxLayout()
         apply_btn = QPushButton("Apply Bounds")
         apply_btn.setObjectName("apply_bounds_btn")
         apply_btn.setFixedHeight(24)
         apply_btn.clicked.connect(self._on_apply)
-        bl.addWidget(apply_btn)
+        btn_row.addWidget(apply_btn)
+
+        eq_btn = QPushButton("Equalize Axes")
+        eq_btn.setObjectName("equalize_btn")
+        eq_btn.setFixedHeight(24)
+        eq_btn.setToolTip("Set X and Y bounds to match the current Z data range")
+        eq_btn.clicked.connect(self.equalize_requested)
+        btn_row.addWidget(eq_btn)
+        bl.addLayout(btn_row)
+
+        # Overlay toggles
+        toggle_row = QHBoxLayout()
+        self._axes_cb = QCheckBox("Axes")
+        self._axes_cb.setChecked(True)
+        self._axes_cb.toggled.connect(self.axes_visibility_changed)
+        toggle_row.addWidget(self._axes_cb)
+
+        self._bbox_cb = QCheckBox("Wireframe")
+        self._bbox_cb.setChecked(True)
+        self._bbox_cb.toggled.connect(self.bbox_visibility_changed)
+        toggle_row.addWidget(self._bbox_cb)
+        toggle_row.addStretch(1)
+        bl.addLayout(toggle_row)
+
         outer.addWidget(bounds_box)
 
         # Resolution
@@ -108,6 +135,16 @@ class ViewSettingsWidget(QWidget):
         fit_btn.clicked.connect(self.fit_all_requested)
         cl.addWidget(fit_btn)
         outer.addWidget(cam_box)
+
+    def set_bounds(self, x_min: float, x_max: float, y_min: float, y_max: float) -> None:
+        """Push new bounds into the spinboxes (used by equalize)."""
+        for spin, val in (
+            (self._x_min, x_min), (self._x_max, x_max),
+            (self._y_min, y_min), (self._y_max, y_max),
+        ):
+            spin.blockSignals(True)
+            spin.setValue(val)
+            spin.blockSignals(False)
 
     def _on_apply(self):
         self.bounds_changed.emit(

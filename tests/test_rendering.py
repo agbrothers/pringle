@@ -145,9 +145,11 @@ class TestOffscreenRender:
 
     def test_empty_scene_is_background_color(self):
         pr = _make_offscreen_renderer()
+        # Disable overlay so we're checking truly empty user-content scene
+        pr.set_axes_visible(False)
+        pr.set_bbox_visible(False)
         frame = pr.snapshot()
         non_bg = _non_bg_pixel_count(frame)
-        # Empty scene: only background + maybe grid lines — very few non-bg pixels
         assert non_bg < 500, f"Empty scene has too many non-bg pixels: {non_bg}"
 
     def test_surface_produces_non_background_pixels(self):
@@ -183,6 +185,8 @@ class TestOffscreenRender:
     def test_remove_object_clears_pixels(self):
         from pringle.renderer import make_surface_mesh
         pr = _make_offscreen_renderer()
+        pr.set_axes_visible(False)
+        pr.set_bbox_visible(False)
         g, z = _sin_cos_grid()
         pr.add_object("surf", make_surface_mesh(g.x, g.y, z))
         pr.fit_camera()
