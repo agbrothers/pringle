@@ -112,6 +112,24 @@ class TestMeshGeometry:
         scatter = make_scatter_mesh(pts)
         assert scatter.geometry.positions.data.shape == (50, 3)
 
+    def test_fully_clipped_mesh_does_not_crash(self):
+        """All-outside constraint must not raise Buffer size cannot be zero."""
+        from pringle.renderer import make_surface_mesh
+        g, z = _sin_cos_grid()
+        # mask that excludes every vertex
+        mask = np.zeros(z.shape, dtype=bool)
+        mesh = make_surface_mesh(g.x, g.y, z, constraint_mask=mask, z_raw=z)
+        assert isinstance(mesh, __import__("pygfx").Mesh)
+
+    def test_flat_zero_surface_does_not_crash(self):
+        """z = 0 everywhere (e.g. slider at zero) must produce a valid mesh."""
+        from pringle.renderer import make_surface_mesh
+        from pringle.grid import GridConfig, make_grid
+        g = make_grid(GridConfig(n=32))
+        z = np.zeros_like(g.x, dtype=np.float32)
+        mesh = make_surface_mesh(g.x, g.y, z)
+        assert isinstance(mesh, __import__("pygfx").Mesh)
+
 
 # ---------------------------------------------------------------------------
 # Offscreen rendering

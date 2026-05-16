@@ -171,6 +171,16 @@ def make_surface_mesh(
         inside = constraint_mask.ravel().astype(bool)
         positions, indices, normals = _clip_mesh_to_mask(positions, indices, normals, inside)
 
+    if len(indices) == 0:
+        # Degenerate mesh (e.g. slider at zero collapses surface) — return invisible placeholder
+        positions = np.zeros((3, 3), dtype=np.float32)
+        indices   = np.array([[0, 1, 2]], dtype=np.int32)
+        normals   = np.zeros((3, 3), dtype=np.float32)
+        mat = gfx.MeshPhongMaterial(color=color, side="both")
+        mat.opacity = 0.0
+        geo = gfx.Geometry(positions=positions, indices=indices, normals=normals)
+        return gfx.Mesh(geo, mat)
+
     geo = gfx.Geometry(positions=positions, indices=indices, normals=normals)
     mat = gfx.MeshPhongMaterial(color=color, side="both")
     return gfx.Mesh(geo, mat)
