@@ -53,40 +53,16 @@ In `make_surface_mesh`, guard before constructing `gfx.Geometry`: if `indices` i
 ---
 
 ### BUG-003 — `KeyboardEvent` has no `.get()` attribute
-**Status:** Open  
-**Logged:** 2026-05-15
-
-**Description:**  
-Pressing CMD, W, or other keys while the viewer is focused triggers:
-```
-AttributeError: 'KeyboardEvent' object has no attribute 'get'
-```
-
-**Reproduction:**  
-Launch the app, click into the 3D viewport, press CMD or W.
-
-**Root cause:**  
-`PringleRenderer._on_key` accesses the event as `event.get("key", "")` (dict-style), but pygfx delivers a typed `KeyboardEvent` object with attribute access.
-
-**Fix:**  
-Replace `event.get("key", "")` with `getattr(event, "key", "")`. Also add a guard to skip modifier-only keys (CMD, Shift, Alt, Control) that have no movement mapping.
+**Status:** Closed (fixed 2026-05-15, commit `41a40fe`)  
+**Fix:** Keyboard handling moved entirely to the Qt level (`keyPressEvent`/`keyReleaseEvent` on `PringleViewport`). The wgpu-level `_on_key` handler was removed. `event.accept()` also suppresses the macOS press-and-hold accent popover.
 
 ---
 
 ## Features
 
 ### FEAT-001 — Axis visualization with toggle
-**Status:** Open  
-**Logged:** 2026-05-15
-
-**Description:**  
-Display X/Y/Z axis lines in the 3D viewport. User can toggle them on/off via a control in the ViewSettingsWidget.
-
-**Design:**  
-- Colored axis lines: red=X, green=Y, blue=Z (Desmos convention).
-- Optional tick marks and/or labels (lower priority).
-- Implementation: permanent `gfx.Line` objects in the scene under an "axes" group node; `set_visible` on the group when toggled.
-- Toggle exposed in `ViewSettingsWidget` as a checkbox or button.
+**Status:** Closed (implemented 2026-05-15, commit `41a40fe`)  
+**Fix:** Three `gfx.Line` objects (red=X, green=Y, blue=Z) added as permanent overlay scene objects; `set_axes_visible()` toggles them. Axis *labels* and tick marks remain deferred to v2.
 
 ---
 
@@ -110,33 +86,10 @@ Bottom row (below bar, flush left/right): min on the left, max on the right.
 ---
 
 ### FEAT-003 — Desmos-style wireframe bounding box
-**Status:** Open  
-**Logged:** 2026-05-15
-
-**Description:**  
-Render a thin wireframe cube around the axis bounds to give the user a spatial reference frame while rotating/zooming — equivalent to the grey box Desmos 3D draws. Without it, it's easy to lose orientation when the plot is small or sparse.
-
-**How Desmos does it:**  
-Desmos 3D draws 12 line segments forming the edges of the `[x_min, x_max] × [y_min, y_max] × [z_min, z_max]` box. The z range is either fixed (e.g. ±z_scale) or derived from the current data bounding box. The box is a static scene object that doesn't move with the data — it represents the coordinate space, not the data range.
-
-**Implementation plan:**  
-- Compute the 8 corners of the axis-bounds box: `x ∈ {x_min, x_max}`, `y ∈ {y_min, y_max}`, `z ∈ {z_min, z_max}`. For z, use the axis x/y range as a symmetric default (e.g. `z_min = x_min`, `z_max = x_max`) or derive from data bounding sphere.
-- Build 12 edges as a single `gfx.Line` with disjoint segments (or a `gfx.LineSegments`).
-- Add to the scene as a named permanent object (`"__bbox__"`), outside the per-cell object dict.
-- Rebuild when axis bounds change (`_on_bounds_changed`).
-- Toggle visibility via a checkbox in `ViewSettingsWidget`.
+**Status:** Closed (implemented 2026-05-15, commit `41a40fe`)  
+**Fix:** 12 `gfx.Line` objects tracing the box edges added as permanent overlay objects; `set_bbox_visible()` toggles them. Z range = max(|x|, |y|) half-range, kept in sync with `set_overlay_bounds()` on every bounds change. "Equalize Axes" button also updates the z range to match the bounding sphere radius.
 
 ---
-
-### FEAT-004 — WASD pans orbit target in world space
-**Status:** Closed (implemented 2026-05-15)  
-**Fix:** `_on_key` now calls `_pan_target(dx, dy, dz)` which moves both `controller.target` and `camera.local.position` by the same world-space delta. Step = 5% of current camera-to-target distance. W=+Y, S=−Y, A=−X, D=+X, Space=+Z, Shift=−Z. Focus gating is automatic (canvas only receives key events when it has Qt focus).
-
----
-
-### FEAT-005 — Orbit target crosshair indicator
-**Status:** Closed (implemented 2026-05-15)  
-**Fix:** A `gfx.Group` with three short ±X/Y/Z line segments (muted R/G/B, 2.5% of axis range) is added to the scene and repositioned to `controller.target` every frame in `render()`. Toggled via "Crosshair" checkbox in ViewSettingsWidget.
 
 ---
 
@@ -145,3 +98,21 @@ Desmos 3D draws 12 line segments forming the edges of the `[x_min, x_max] × [y_
 ### BUG-002 — Zero-size buffer crash when slider reaches zero
 **Status:** Closed (fixed 2026-05-15, commit `ff20120`)  
 **Fix:** `make_surface_mesh` returns an invisible placeholder mesh when the clipped index array is empty.
+
+### BUG-003 — `KeyboardEvent` has no `.get()` attribute
+**Status:** Closed (fixed 2026-05-15, commit `41a40fe`)  
+**Fix:** Keyboard handling moved to Qt level; wgpu `_on_key` handler removed entirely.
+
+### FEAT-001 — Axis visualization with toggle
+**Status:** Closed (implemented 2026-05-15, commit `41a40fe`)
+
+### FEAT-003 — Desmos-style wireframe bounding box
+**Status:** Closed (implemented 2026-05-15, commit `41a40fe`)
+
+### FEAT-004 — WASD pans orbit target in world space
+**Status:** Closed (implemented 2026-05-15, commit `98bcbdb`/`852a7e5`)  
+**Fix:** Continuous pan via Qt `keyPressEvent`/`keyReleaseEvent`; `event.accept()` suppresses macOS accent popover; `focusOutEvent` clears held keys.
+
+### FEAT-005 — Orbit target crosshair indicator
+**Status:** Closed (implemented 2026-05-15, commit `98bcbdb`)  
+**Fix:** `gfx.Group` with three short axis lines, repositioned to `controller.target` every frame in `render()`. Toggled via "Crosshair" checkbox.

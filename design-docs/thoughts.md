@@ -152,3 +152,9 @@ We also want to use Desmos's axis settings. That is, we want to be able to manua
 On the expression panel, clicking on a cell should select it and add an active cursor to the test box. Pressing enter should add a new cell inline and below the currently selected cell. The expression/data split and text panel vs GUI panel should be draggable. 
 
 If there's any obvious user considerations I'm forgetting, please mention them. Document these and then provide me with a development plan -- what pieces should be built in what order and why. I'd also like to know how you would test each piece to ensure functionality. Since much of this requires visual verification, it would be useful to save off frames from the viewer as png files so that you can close the loop with development, testing, and validation. 
+
+
+-------------------------------
+
+
+Excellent, please proceed to execute the mockup plan. Loop me in if any critical and unexpected design decisions or ambiguities crop up. Please document any minor differences from the plan or design considerations fully. I'm not sure if you have the ability to commit changes, but if you do, please commit after each successfully completed phase. Do not add any currently uncommitted files. If you do not have git access, let me know when phases are complete and I will review and commit manually.

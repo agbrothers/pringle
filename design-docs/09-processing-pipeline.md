@@ -39,7 +39,9 @@ Raw cell string (from UI) + constraint sub-cell strings (from UI)
 [6] CONSTRAINT APPLICATION
     • Evaluate each constraint sub-cell expression (z now available)
     • Combine masks with logical_and
-    • Apply: np.where(mask, value, nan)
+    • Apply: np.where(mask, value, nan)  → z_masked (NaN outside constraint)
+    • Preserve z_raw (pre-mask) and inside_mask (bool array) on CellResult
+      — passed to renderer for smooth boundary clipping
     │
     ▼
 [7] SHAPE VALIDATION
@@ -48,8 +50,16 @@ Raw cell string (from UI) + constraint sub-cell strings (from UI)
     │
     ▼
 [8] RENDERER SUBMISSION
-    • Upload / update geometry buffer
-    • Apply CellStyle (color, opacity, display mode, etc.)
+    • Build vertex positions, indices, normals from (x, y, z_raw) grid
+    • If constraint_mask provided: call _clip_mesh_to_mask()
+      — Triangles fully inside → kept as-is
+      — Triangles fully outside → discarded
+      — Boundary triangles → clipped at edge using linear interpolation;
+        midpoint vertex added at each boundary edge (cached per edge)
+      — Produces smooth diagonal cuts instead of pixel-stepped staircases
+    • Zero-triangle guard: if all triangles clipped away, return invisible
+      placeholder mesh (opacity=0) rather than passing empty buffer to GPU
+    • Apply CellStyle (color, display mode, etc.)
 ```
 
 ---

@@ -43,7 +43,13 @@ This document tracks the high-level design decisions for Pringle and the open qu
 | Session boot sequence | (1) load YAML, (2) build DAG, (3) eval reactive cells (sliders/lambdas), (4) ▶▶ Run All data, (5) eval render cells, (6) first render | Guarantees lambdas available to data cells at load time |
 | Comment cell detection | `#`-only lines OR bare string literals (`"""`, `'''`, `"`, `'`) | Supports both Python comment styles and docstring-style notes |
 | (u,v) parametric grid default | `[0, 2π] × [0, 2π]`; configurable in View Settings panel | Captures full rotation for common cylindrical/spherical surfaces |
-| WASD camera controls | Keyboard navigation in orbit mode: W/S = zoom, A/D = orbit left/right, Space/Shift = orbit up/down | Supported natively via key event callbacks in both Vispy and pygfx |
+| WASD camera controls | Pan the orbit target in world space: W=+Y, S=−Y, A=−X, D=+X, Space=+Z, Shift=−Z. Step = 5% of camera-to-target distance per keypress (single-step) → 0.7% per frame (continuous hold). Continuous movement tracked via Qt `keyPressEvent`/`keyReleaseEvent`; `event.accept()` suppresses the macOS press-and-hold accent popover. `focusOutEvent` clears held keys to prevent stuck movement. | Handled at the Qt level (not wgpu) so macOS text-input interception is bypassed |
+| Constraint boundary clipping | Triangles crossing the constraint boundary are clipped at the exact edge using linear interpolation, producing smooth diagonal cuts instead of a pixel-stepped staircase. Triangles entirely outside are discarded; boundary triangles become 1 or 2 new triangles with midpoint vertices. Pre-mask z values (`z_raw`) are used for vertex positions so boundary interpolation is finite. | `_clip_mesh_to_mask()` in `renderer.py`; O(n_triangles) with edge cache |
+| Zero-size buffer guard | When all triangles are clipped away (e.g., slider at zero with a constraint that excludes everything), `make_surface_mesh` returns an invisible placeholder mesh (opacity=0, 1 degenerate triangle) rather than passing an empty buffer to `gfx.Geometry` which would crash. | Prevents `ValueError: Buffer size cannot be zero` on slider edge cases |
+| Scatter fallback for non-magic names | After checking magic names (`z`, `xyz`, `y`, `x`, `points`), `_detect_magic` scans all other user-assigned variables for plottable shapes — `(N,3)`, `(N,2)`, `(3,)`, `(2,)`. First match is scatter-plotted. | Allows `p = array([[0,0,0]])` to render without requiring the magic name `points` |
+| Camera orbit target | `fit_camera()` always resets `controller.target` to `(0,0,0)` after `show_object()`. Without this, a constrained surface living above z=0 pulls the orbit center upward, making the origin appear off-screen. | `PringleRenderer.fit_camera()` |
+| Camera fit on add | `PringleViewport.add_object()` only calls `fit_camera()` when the cell_id is new to the scene. Slider updates that replace an existing object leave the camera untouched. | Prevents camera jumping when dragging a slider |
+| CellWidget → SliderWidget morphing | When a plain `CellWidget` content changes to a bare scalar assignment (e.g., typing `a = 1`), `_maybe_morph_to_slider()` swaps it in-place for a `SliderWidget`, preserving cell_id and style. | Live slider creation without requiring the user to use a special "add slider" button |
 | Recurrence loop index | User writes `n`; internally renamed to `_pringle_loop_n` before execution | Prevents collision with any slider or variable named `n` |
 
 ## f(x,y) Auto-Render Rules
@@ -101,35 +107,40 @@ Deferred to v2. Focus v1 on explicit and parametric surfaces.
 
 ## Proposed v1 Scope
 
-### Must Have
-- Explicit surfaces: `z = f(x, y)`
-- Parametric surfaces: `xyz = array([fx(u,v), fy(u,v), fz(u,v)])`
-- Parametric curves: `xyz = array([fx(t), fy(t), fz(t)])`
-- Curve / line plots: `y = f(x)`
-- Piecewise surfaces: `z = [f, g, h]` with N condition sub-cells
-- Named parameter sliders with editable range and animation modes
-- `t` as a reserved animation parameter
-- Constraint sub-cells with boolean expressions
-- `f(x,y) = expr` syntax sugar → lambda + auto-render
-- Auto-plot shape inference for bare array expressions
-- Data panel with per-cell ▶ Run button
-- Recurrence relations via `initial_condition:` + `recursion:` data cell sub-cells
-- Dependency-graph evaluation order with undefined-variable suggestion
-- Visibility toggle per cell
-- Folders and comment cells (docstring detection)
-- Per-cell inline error and shape-mismatch warnings
-- GPU-accelerated 3D viewport with orbit/pan/zoom
-- YAML session save/load
-- Per-expression style panel (color, line width, point size, display mode)
+### Implemented (v1)
+- Explicit surfaces: `z = f(x, y)` ✓
+- Parametric surfaces/scatter: `xyz = array(...)` ✓
+- Curve / line plots: `y = f(x)`, `x = f(y)` ✓
+- Piecewise surfaces: `z = [f, g, h]` with N condition sub-cells ✓
+- Named parameter sliders with editable range + drag handle ✓
+- Slider morph: typing `a = 1` in any cell promotes it to a SliderWidget ✓
+- Constraint sub-cells with boolean expressions + smooth boundary clipping ✓
+- `f(x,y) = expr` syntax sugar → lambda + auto-render ✓
+- Auto-plot shape inference for any (N,3)/(N,2)/(3,)/(2,) user variable ✓
+- Dependency-graph evaluation order with undefined-variable warning ✓
+- Visibility toggle per cell ✓
+- Folders and comment cells (docstring detection) ✓
+- Per-cell inline error and shape-mismatch warnings ✓
+- GPU-accelerated 3D viewport: orbit/pan/zoom + WASD continuous world-space pan ✓
+- YAML session save/load (Ctrl+S/O/N) ✓
+- Per-expression style panel (color, line width, point size) ✓
+- Coordinate axes (R/G/B) + wireframe bounding box overlay, toggleable ✓
+- Orbit-target crosshair indicator, synced every frame, toggleable ✓
+- Equalize Axes: sets x/y bounds to match current z data range (bounding sphere radius) ✓
+- Undo/redo (snapshot-based), copy/paste cells ✓
 
 ### Deferred to v2
+- Data panel with per-cell ▶ Run button (designed; not yet implemented)
+- Recurrence relations via initial_condition + recursion sub-cells (designed; not yet implemented)
+- `t` animation parameter + play/pause controls (designed; not yet implemented)
 - Implicit surfaces (`f(x,y,z) = c`)
 - GLSL/WGSL compilation of expressions for GPU-side eval
 - Vector fields (arrow glyphs)
 - ODE trajectory integration and streamlines
 - Frame recording / export
-- Transparency for multiple overlapping surfaces (single surface opacity is v1)
+- Transparency for multiple overlapping surfaces
 - 2D arrays rendered in z=0 plane
+- Axis labels and tick marks
 
 ## Mockup Goals
 

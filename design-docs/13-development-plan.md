@@ -1,5 +1,51 @@
 # Development Plan
 
+## Implementation Status (as of 2026-05-15)
+
+All planned phases (0–12) are **complete**. The prototype is fully runnable via `python -m pringle.app`. 299 tests pass across unit, integration, and GPU offscreen rendering suites.
+
+### Completed phases
+| Phase | Description | Status |
+|---|---|---|
+| 0 | Project setup, dependencies, package structure | ✓ |
+| 1 | GPU baseline — pygfx surface + orbit controls | ✓ |
+| 2 | Expression evaluation engine | ✓ |
+| 3 | Qt + pygfx integration (QRenderWidget) | ✓ |
+| 4 | Cell widget UI | ✓ |
+| 5 | Live cell list with debounced evaluation | ✓ |
+| 6 | Slider cells with reactive downstream evaluation | ✓ |
+| 7 | Dependency graph, topological evaluation, incremental slider updates | ✓ |
+| 8 | Constraint and piecewise sub-cells | ✓ |
+| 9 | Data panel and recurrence cells | ✓ |
+| 10 | View settings panel (axis bounds, camera presets) | ✓ |
+| 11 | YAML session persistence (Ctrl+S/O/N) | ✓ |
+| 12 | Polish — undo/redo, copy/paste, folders, style popover, empty state | ✓ |
+
+### Post-plan features added
+| Feature | Description |
+|---|---|
+| GPU rendering tests | `tests/test_rendering.py` — offscreen frame capture tests for the full evaluator→mesh→GPU pipeline |
+| Smooth constraint edges | Triangle boundary clipping (`_clip_mesh_to_mask`) replaces NaN staircase |
+| Zero-size buffer guard | Invisible placeholder mesh when all triangles clipped |
+| Scatter fallback | Any (N,3)/(N,2) variable auto-plotted, not just the magic name `points` |
+| Camera orbit fix | `controller.target` always reset to origin after fit; no camera jump on slider update |
+| CellWidget morphing | Typing `a = 1` in any cell promotes it to a SliderWidget in-place |
+| Coordinate axes + wireframe box | Permanent overlay with X/Y/Z lines and 12-edge bounding box; toggleable |
+| Equalize Axes button | Sets x/y bounds from scene bounding sphere radius for 1:1:1 aspect |
+| WASD world-space pan | Moves orbit target in world axes; continuous hold via Qt key events; macOS accent popover suppressed |
+| Orbit crosshair | Small three-axis indicator at `controller.target`, updated every frame |
+| Dark theme | Style popover and constraint inputs use dark backgrounds |
+| Default YAML format | File dialogs default to `.yaml` instead of `.pringle` |
+| Bug fixes | BUG-002 (zero-size buffer), BUG-003 (KeyboardEvent.get), camera focus issues |
+
+### Open items (see `14-backlog.md`)
+- BUG-001: Constraint edge clipping still visibly jagged at normal resolutions
+- FEAT-001: Axis visualization toggle (done) — axis *labels* still deferred
+- FEAT-002: Slider min/max layout below the bar
+- FEAT-003: Wireframe bounding box (done)
+
+---
+
 ## Guiding Principles
 
 1. **Vertical slices, not horizontal layers** — each phase produces something visually runnable and testable, not an invisible engine layer.

@@ -111,20 +111,33 @@ The `(u, v)` parametric grid defaults to `[0, 2π] × [0, 2π]` — captures ful
 
 The 3D viewport supports both mouse-based and keyboard-based navigation:
 
-**Mouse (default orbit mode):**
-- Left-drag: orbit (rotate around scene center)
-- Right-drag / middle-drag: pan
-- Scroll: zoom
+**Mouse (default orbit mode via pygfx `OrbitController`):**
+- Left-drag: orbit (rotate around orbit target)
+- Right-drag / middle-drag: pan camera view
+- Scroll: zoom toward/away from orbit target
 
-**Keyboard (WASD + Space/Shift):**
-- `W` / `S`: zoom in / out (move camera toward/away from center)
-- `A` / `D`: orbit left / right
-- `Space` / `Shift`: orbit up / down (traverse z axis)
-- Speed is configurable; holding Shift while using mouse panning accelerates movement
+**Keyboard (WASD + Space/Shift — world-space pan):**
 
-Both modes operate on the same orbit camera model — the camera always orbits a center point ("up" is always up). A first-person fly mode (`FlyController` in pygfx / `FlyCamera` in Vispy) is available as a toggle for exploring vector fields or enclosed regions from inside.
+WASD moves the *orbit target* in world coordinates. The camera rides along by the same delta, preserving its orientation and distance. This is equivalent to "move the center of attention" rather than "move the camera".
 
-Keyboard events are handled by the GPU canvas widget. In PyQt6, these are connected to the camera controller's `pan()`, `zoom()`, and `rotate()` methods. No additional library support is required — both Vispy and pygfx support this natively via key press event callbacks.
+| Key | Movement |
+|---|---|
+| `W` | +Y (pan target forward) |
+| `S` | −Y |
+| `A` | −X (pan target left) |
+| `D` | +X |
+| `Space` | +Z (pan target up) |
+| `Shift` | +Z (pan target down) |
+
+Step size = 0.7% of camera-to-target distance per frame; continuous movement while key is held.
+
+Key handling is implemented at the **Qt level** (`keyPressEvent` / `keyReleaseEvent` on `PringleViewport`) rather than through wgpu's event system. This lets `event.accept()` suppress the macOS press-and-hold accent character popover for movement keys. `focusOutEvent` clears held keys to prevent stuck movement when the user switches to the expression panel.
+
+**Orbit target crosshair:** A small three-axis crosshair (muted R/G/B arms, 2.5% of max axis range) is rendered at `controller.target` and updated every frame. Toggled via the "Crosshair" checkbox in View Settings. Helps the user identify the orbit pivot when WASD panning.
+
+**Known limitation:** pygfx's right-drag mouse pan moves the camera view but does not update `controller.target`. After a right-drag pan, the WASD pivot may differ from the visual center. The crosshair makes this visible.
+
+**Camera fitting:** `fit_camera()` always resets `controller.target` to `(0, 0, 0)` after `show_object()`. A new cell being added to the scene triggers `fit_camera()`; subsequent updates to the same cell (slider drag, re-eval) do not move the camera.
 
 ---
 
@@ -187,14 +200,23 @@ Data cells run more permissive code than equation cells. `__builtins__` is remov
 
 ## View Settings Panel
 
-Collapsible panel (right side or bottom of viewport):
-- `(x, y, z)` axis bounds (min, max)
-- `(u, v)` parametric grid range (min, max)
-- Grid visibility and density
-- Axis labels
-- Background color
-- Camera preset buttons (top, front, isometric, reset)
-- Animation controls (global play/pause, speed multiplier)
+Fixed panel at the bottom of the left column (below the cell list). Contains:
+
+**Axis Bounds**
+- X and Y min/max numeric inputs (controls the spatial sampling grid)
+- **Apply Bounds** — rebuilds the grid and re-evaluates all cells
+- **Equalize Axes** — computes the scene bounding sphere radius `r` and sets X and Y bounds to `[−r, r]`, giving a 1:1:1 aspect ratio across all three axes. Also updates the wireframe z range to match.
+
+**Overlay toggles** (checkboxes, all default On):
+- **Axes** — X (red), Y (green), Z (blue) lines through the origin, extending to the axis bounds
+- **Wireframe** — 12-edge grey box at the axis bounds extent; z range = max(|x|, |y|) half-range, forming a cube
+- **Crosshair** — small three-axis indicator at the orbit target, updated every frame
+
+**Resolution** — grid resolution `n` (default 64; range 8–256, step 8). Shared by the (x,y) spatial grid.
+
+**Camera presets** — Iso, Top, Front buttons snap to predefined positions; **Fit All** calls `fit_camera()` to frame all visible objects.
+
+*Not yet implemented (planned for v2):* (u,v) parametric grid range, axis labels, background color, animation controls.
 
 ---
 
