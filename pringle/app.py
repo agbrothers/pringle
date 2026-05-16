@@ -43,6 +43,10 @@ class PringleViewport(QRenderWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._pr = PringleRenderer(self)
+        # Register the render callback so request_draw() actually calls render.
+        # Without this, request_draw() with no argument is a no-op because
+        # _draw_frame is never set.
+        self.request_draw(self._pr.render)
         self._draw_timer = QTimer(self)
         self._draw_timer.setInterval(16)  # ~60fps cap
         self._draw_timer.timeout.connect(self.request_draw)
@@ -284,6 +288,13 @@ class PringleWindow(QMainWindow):
             mesh = make_surface_mesh(result.x, result.y, result.data, color=style.color)
             vp.add_object(cell_id, mesh)
 
+        elif result.render_type == "surface_y":
+            # y = f(x,y) assigned a 2D array — render as a height surface
+            mesh = make_surface_mesh(
+                self._grid.x, self._grid.y, result.data, color=style.color
+            )
+            vp.add_object(cell_id, mesh)
+
         elif result.render_type == "curve":
             pts = np.column_stack([
                 self._grid.x1d,
@@ -292,6 +303,23 @@ class PringleWindow(QMainWindow):
             ])
             line = make_line_mesh(pts, color=style.color, thickness=style.line_width)
             vp.add_object(cell_id, line)
+
+        elif result.render_type == "curve_x":
+            pts = np.column_stack([
+                result.data,
+                self._grid.y1d,
+                np.zeros(len(result.data), dtype=np.float32),
+            ])
+            line = make_line_mesh(pts, color=style.color, thickness=style.line_width)
+            vp.add_object(cell_id, line)
+
+        elif result.render_type == "parametric":
+            pts = np.asarray(result.data, dtype=np.float32)
+            if pts.ndim == 2 and pts.shape[1] in (2, 3):
+                scatter = make_scatter_mesh(pts, color=style.color, size=style.point_size)
+                vp.add_object(cell_id, scatter)
+            else:
+                vp.remove_object(cell_id)
 
         elif result.render_type in ("scatter", "scatter_2d"):
             scatter = make_scatter_mesh(result.data, color=style.color, size=style.point_size)
