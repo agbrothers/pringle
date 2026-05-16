@@ -275,8 +275,8 @@ class PringleRenderer:
         self._controller = gfx.OrbitController(self._camera)
         self._controller.register_events(self._renderer)
 
-        # WASD keys: added as an additional handler on top of OrbitController.
-        self._renderer.add_event_handler(self._on_key, "key_down")
+        # Keyboard panning is handled at the Qt level in PringleViewport,
+        # not here, so that event.accept() can suppress macOS accent popovers.
 
         # Overlay: axis lines + wireframe bounding box + orbit crosshair
         self._axes_visible = True
@@ -287,24 +287,6 @@ class PringleRenderer:
         self._crosshair_group: gfx.WorldObject | None = None
         self._rebuild_overlay()
         self._rebuild_crosshair()
-
-    def _on_key(self, event):
-        key = getattr(event, "key", "") or ""
-        cam_pos = np.array(self._camera.local.position, dtype=np.float64)
-        target  = np.array(self._controller.target,     dtype=np.float64)
-        dist    = float(np.linalg.norm(cam_pos - target))
-        step    = max(dist * 0.05, 0.01)
-
-        _moves = {
-            "w": ( 0,    step,  0),
-            "s": ( 0,   -step,  0),
-            "a": (-step,  0,    0),
-            "d": ( step,  0,    0),
-            " ": ( 0,    0,    step),
-            "Shift": (0, 0,   -step),
-        }
-        if key in _moves:
-            self._pan_target(*_moves[key])
 
     def _pan_target(self, dx: float, dy: float, dz: float) -> None:
         """Translate the orbit target (and camera by the same delta) in world space."""

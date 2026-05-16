@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout, QLabel, QFrame, QFileDialog, QMessageBox,
 )
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QKeySequence, QShortcut
+from PyQt6.QtGui import QKeySequence, QShortcut, QKeyEvent
 from rendercanvas.qt import QRenderWidget
 
 import pygfx as gfx
@@ -31,26 +31,71 @@ from pringle.cell_list import CellListWidget
 from pringle.view_settings import ViewSettingsWidget
 
 
+# WASD + Space/Shift movement keys mapped to world-space (dx, dy, dz) unit vectors
+_PAN_KEYS: dict[int, tuple[float, float, float]] = {
+    Qt.Key.Key_W:     ( 0,  1,  0),
+    Qt.Key.Key_S:     ( 0, -1,  0),
+    Qt.Key.Key_A:     (-1,  0,  0),
+    Qt.Key.Key_D:     ( 1,  0,  0),
+    Qt.Key.Key_Space: ( 0,  0,  1),
+    Qt.Key.Key_Shift: ( 0,  0, -1),
+}
+_PAN_SPEED = 0.007  # fraction of camera-to-target distance per frame at 60 fps
+
+
 class PringleViewport(QRenderWidget):
     """
     The 3D GPU viewport — a QWidget that owns its own pygfx renderer.
 
-    Embeds PringleRenderer (scene + camera + orbit controller) into the
-    Qt widget tree.  The wgpu render loop fires on request_draw() which
-    QRenderWidget triggers automatically on resize and on explicit calls.
+    Keyboard handling is done at the Qt level (keyPressEvent / keyReleaseEvent)
+    so that event.accept() suppresses the macOS press-and-hold accent popover.
+    Held keys are applied each timer tick for smooth, continuous panning.
     """
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._pr = PringleRenderer(self)
-        # Register the render callback so request_draw() actually calls render.
-        # Without this, request_draw() with no argument is a no-op because
-        # _draw_frame is never set.
         self.request_draw(self._pr.render)
+        self._held_keys: set[int] = set()
         self._draw_timer = QTimer(self)
-        self._draw_timer.setInterval(16)  # ~60fps cap
-        self._draw_timer.timeout.connect(self.request_draw)
+        self._draw_timer.setInterval(16)  # ~60fps
+        self._draw_timer.timeout.connect(self._tick)
         self._draw_timer.start()
+
+    def _tick(self) -> None:
+        if self._held_keys:
+            self._apply_movement()
+        self.request_draw()
+
+    def _apply_movement(self) -> None:
+        import numpy as np
+        cam = np.array(self._pr._camera.local.position, dtype=np.float64)
+        tgt = np.array(self._pr._controller.target,     dtype=np.float64)
+        dist = float(np.linalg.norm(cam - tgt))
+        step = max(dist * _PAN_SPEED, 0.005)
+        for key in self._held_keys:
+            if key in _PAN_KEYS:
+                dx, dy, dz = _PAN_KEYS[key]
+                self._pr._pan_target(dx * step, dy * step, dz * step)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        if not event.isAutoRepeat() and event.key() in _PAN_KEYS:
+            self._held_keys.add(event.key())
+            event.accept()  # suppress macOS press-and-hold accent popover
+        else:
+            super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event: QKeyEvent) -> None:
+        if not event.isAutoRepeat() and event.key() in _PAN_KEYS:
+            self._held_keys.discard(event.key())
+            event.accept()
+        else:
+            super().keyReleaseEvent(event)
+
+    def focusOutEvent(self, event) -> None:
+        self._held_keys.clear()  # avoid stuck keys when focus leaves the viewport
+        super().focusOutEvent(event)
 
     @property
     def renderer(self) -> PringleRenderer:
