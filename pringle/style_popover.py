@@ -83,11 +83,11 @@ class StylePopoverWidget(QFrame):
         op_row.addStretch()
         layout.addLayout(op_row)
 
-        # --- Line width row ---
+        # --- Size row (controls both line width and scatter dot size) ---
         lw_row = QHBoxLayout()
-        lw_row.addWidget(QLabel("Line width:"))
+        lw_row.addWidget(QLabel("Size:"))
         self._lw_spin = QDoubleSpinBox()
-        self._lw_spin.setRange(0.5, 10.0)
+        self._lw_spin.setRange(0.5, 20.0)
         self._lw_spin.setSingleStep(0.5)
         self._lw_spin.setDecimals(1)
         self._lw_spin.setValue(self._style.line_width)
@@ -125,7 +125,7 @@ class StylePopoverWidget(QFrame):
         self.style_changed.emit(self._style)
 
     def _on_lw_changed(self, v: float):
-        self._style = replace(self._style, line_width=v)
+        self._style = replace(self._style, line_width=v, point_size=v)
         self.style_changed.emit(self._style)
 
     def current_style(self) -> CellStyle:

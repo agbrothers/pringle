@@ -421,16 +421,15 @@ class PringleWindow(QMainWindow):
         self._viewport.renderer.set_overlay_bounds(x_min, x_max, y_min, y_max, z_min, z_max)
 
     def _on_equalize(self) -> None:
-        """Set x/y bounds to match the current z data range (equal-aspect axes)."""
-        bs = self._viewport.renderer.get_scene_bsphere()
-        if bs is None:
-            return
-        r = max(float(bs[3]), 1.0)
-        r = round(r, 1)
+        """Set x/y span equal to the current z span, centered at zero."""
         z_min = self._view_settings._z_min.value()
         z_max = self._view_settings._z_max.value()
-        self._view_settings.set_bounds(-r, r, -r, r)
-        self._on_bounds_changed(-r, r, -r, r, z_min, z_max)
+        z_span = z_max - z_min
+        if z_span <= 0:
+            return
+        half = z_span / 2
+        self._view_settings.set_bounds(-half, half, -half, half)
+        self._on_bounds_changed(-half, half, -half, half, z_min, z_max)
 
     def _on_resolution_changed(self, n: int) -> None:
         cfg = self._grid.config
