@@ -239,10 +239,18 @@ class SliderWidget(QWidget):
 
     def _on_slider_moved(self, pos: int):
         v = self._int_to_float(pos)
+        step = self._step_box.value()
+        if step > 0:
+            v = round(v / step) * step
+        v = max(self._min, min(self._max, v))
         self._value = v
         self._spinbox.blockSignals(True)
         self._spinbox.setValue(v)
         self._spinbox.blockSignals(False)
+        # Snap thumb to the quantized position
+        self._slider.blockSignals(True)
+        self._slider.setValue(self._float_to_int(v))
+        self._slider.blockSignals(False)
         self.value_changed.emit(self.name, v)
 
     def _on_spinbox_changed(self, v: float):
