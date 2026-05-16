@@ -1,8 +1,8 @@
 # Development Plan
 
-## Implementation Status (as of 2026-05-15)
+## Implementation Status (as of 2026-05-16)
 
-All planned phases (0–12) are **complete**. The prototype is fully runnable via `python -m pringle.app`. 299 tests pass across unit, integration, and GPU offscreen rendering suites.
+All planned phases (0–12) are **complete**. The prototype is fully runnable via `python -m pringle.app`. 44 tests pass across unit, integration, and GPU offscreen rendering suites.
 
 ### Completed phases
 | Phase | Description | Status |
@@ -26,23 +26,28 @@ All planned phases (0–12) are **complete**. The prototype is fully runnable vi
 |---|---|
 | GPU rendering tests | `tests/test_rendering.py` — offscreen frame capture tests for the full evaluator→mesh→GPU pipeline |
 | Smooth constraint edges | Triangle boundary clipping (`_clip_mesh_to_mask`) replaces NaN staircase |
-| Zero-size buffer guard | Invisible placeholder mesh when all triangles clipped |
+| Zero-size buffer guard | Invisible placeholder mesh when all triangles clipped (surfaces, scatter, lines) |
 | Scatter fallback | Any (N,3)/(N,2) variable auto-plotted, not just the magic name `points` |
 | Camera orbit fix | `controller.target` always reset to origin after fit; no camera jump on slider update |
 | CellWidget morphing | Typing `a = 1` in any cell promotes it to a SliderWidget in-place |
-| Coordinate axes + wireframe box | Permanent overlay with X/Y/Z lines and 12-edge bounding box; toggleable |
-| Equalize Axes button | Sets x/y bounds from scene bounding sphere radius for 1:1:1 aspect |
+| Coordinate axes + wireframe box | Permanent overlay with X/Y/Z lines and 12-edge bounding box; all three toggleable |
+| Equalize Axes button | Sets x/y span to match the z span (`[−z_span/2, +z_span/2]`) for equal-length axes |
 | WASD world-space pan | Moves orbit target in world axes; continuous hold via Qt key events; macOS accent popover suppressed |
 | Orbit crosshair | Small three-axis indicator at `controller.target`, updated every frame |
 | Dark theme | Style popover and constraint inputs use dark backgrounds |
 | Default YAML format | File dialogs default to `.yaml` instead of `.pringle` |
-| Bug fixes | BUG-002 (zero-size buffer), BUG-003 (KeyboardEvent.get), camera focus issues |
+| Slider redesign (2-row) | New layout: value spinbox top-right, min/max/step below bar; no ticker buttons; smart integer display; range auto-expand; step snapping |
+| Unified cell list | Equation and data cells in one scrollable list; `+ Equation` / `+ Data cell` buttons; data cells run on demand, share equation namespace |
+| Data cell namespace | Data cells see all slider values and equation exports; exports persist across reactive rebuilds |
+| Inline value preview | Gray text below each cell: scalar value or 1D array elements (left), array shape (right); bare expressions also previewed |
+| Z bounds UI | Z min/max spinboxes restored to Axis Bounds panel; persisted in session file |
+| Unified size control | Style popover "Size" sets both line_width and point_size together |
+| Bug fixes | BUG-002, BUG-003, BUG-007, BUG-008 (false undefined warnings for function-definition cells) |
 
 ### Open items (see `14-backlog.md`)
 - BUG-001: Constraint edge clipping still visibly jagged at normal resolutions
-- FEAT-001: Axis visualization toggle (done) — axis *labels* still deferred
-- FEAT-002: Slider min/max layout below the bar
-- FEAT-003: Wireframe bounding box (done)
+- BUG-006: Camera shifts when toggling cell visibility
+- Axis labels (tick marks, "X"/"Y"/"Z" text) — deferred to v2
 
 ---
 

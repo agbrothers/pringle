@@ -26,29 +26,29 @@ Style properties are stored as rendering metadata on the cell — separate from 
 
 | Property | Surface | Curve | Scatter | Notes |
 |---|---|---|---|---|
-| Color | ✓ | ✓ | ✓ | RGBA; preset swatches + hex input |
-| Opacity | ✓ | — | — | Nice-to-have; see transparency note |
-| Line width | wireframe only | ✓ | — | |
-| Point size | — | — | ✓ | |
-| Line style | — | ✓ | — | Solid / dashed / dotted |
-| Display mode | ✓ | — | — | Filled / wireframe / both |
-| Label visibility | ✓ | ✓ | ✓ | Show/hide expression label in viewport |
+| Color | ✓ | ✓ | ✓ | RGBA; hex input + color swatch |
+| Opacity | ✓ | ✓ | ✓ | |
+| Size | wireframe only | ✓ | ✓ | Single control sets both line width and dot size |
+| Line style | — | ✓ | — | Solid / dashed / dotted (future) |
+| Display mode | ✓ | — | — | Filled / wireframe / both (future) |
+| Label visibility | ✓ | ✓ | ✓ | Future |
+
+**Size** is a unified control: changing it in the style popover sets both `line_width` (for curves/wireframe) and `point_size` (for scatter dots) to the same value. This keeps the UI simple and ensures consistent visual weight across render types.
 
 ## CellStyle Data Model
 
 ```python
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 @dataclass
 class CellStyle:
-    color: tuple = (0.2, 0.4, 0.9, 1.0)    # RGBA floats 0–1
-    opacity: float = 1.0                     # surface opacity; 1.0 = fully opaque
-    line_width: float = 1.5                  # curves and wireframe
-    point_size: float = 6.0                  # scatter
-    line_style: str = "solid"               # "solid" | "dashed" | "dotted"
-    display_mode: str = "filled"            # "filled" | "wireframe" | "both"
-    show_label: bool = True
+    color: tuple = (0.22, 0.40, 0.88, 1.0)  # RGBA floats 0–1
+    opacity: float = 1.0
+    line_width: float = 2.0    # curves, wireframe; also set by the Size control
+    point_size: float = 6.0    # scatter dots; also set by the Size control
 ```
+
+`line_width` and `point_size` are separate fields internally but exposed as a single "Size" control in the popover. The popover initializes the spinbox from `line_width`; changing it updates both fields simultaneously.
 
 This is trivially serializable to JSON for session persistence. The renderer reads from `CellStyle` when building or updating the visual object for the cell.
 

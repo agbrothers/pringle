@@ -52,14 +52,13 @@ Y  [ -5 ] to [ 5 ]
 Z  [ -5 ] to [ 5 ]
 ```
 
-Changing a bound immediately:
-1. Regenerates the spatial grid (`np.linspace` with new bounds)
-2. Marks all grid-dependent cells as stale → re-evaluates them
-3. Re-renders the scene
+Clicking **"Apply Bounds"** after editing:
+- Regenerates the spatial grid (`np.linspace` with new x/y bounds) and re-evaluates all cells
+- Updates the wireframe bounding box and axis overlay extents using the z bounds
 
-A **"Fit all"** button automatically sets bounds to encompass all currently rendered objects (min/max of all vertex positions with a 10% margin).
+Note: z bounds control only the visual overlay (wireframe box, axis lines) — they do not affect expression evaluation, since the grid is 2D (x, y only).
 
-A **"Recenter"** button resets the camera to the default isometric position without changing bounds.
+**"Equalize Axes"** sets x and y to `[−z_span/2, +z_span/2]` where `z_span = z_max − z_min`. This gives all three axes equal length, useful after evaluating a function to match the data range. Z bounds are left unchanged.
 
 ### Parametric Grid Bounds
 
@@ -75,18 +74,16 @@ V  [ 0 ] to [ 6.283 (2π) ]
 A single slider or numeric input controlling grid resolution (shared by `x,y` and `u,v` grids):
 
 ```
-Resolution  [ 128 ] ──●────  (64 – 512)
+Resolution  [ 64 ] ──●────  (8 – 256)
 ```
 
 ### Toggle Controls
 
 | Toggle | Default | Notes |
 |---|---|---|
-| Show axes | On | X/Y/Z axis lines through origin |
-| Show grid | On | Reference plane grid (z=0) |
-| Show axis labels | On | "X", "Y", "Z" text at axis ends |
-| Show bounding box | Off | Wireframe box at axis extents |
-| Dark background | Off | Switches background between white and dark gray |
+| Axes | On | X/Y/Z axis lines through origin (red/green/blue) |
+| Wireframe | On | 12-edge bounding box at axis extents |
+| Crosshair | On | Small three-axis indicator at the orbit target |
 
 ### Camera Presets
 
@@ -211,16 +208,13 @@ Clicking a cell's **color dot** (left of the cell text) opens a compact popover:
 
 ```
 ┌──────────────────────────────┐
-│  ● ● ● ● ● ● ● [hex input]  │  ← color swatches
-│  Opacity  ──●──────── 100%   │
-│  Width    ──●────────  1.5   │  ← curves / wireframe
-│  Size     ──●────────  6.0   │  ← scatter points
-│  Display  [Filled ▾]         │  ← Filled / Wireframe / Both
-│  Label    [☑ Show]           │
+│  Color   [#3866e0] [■ swatch]│
+│  Opacity ──●──────────  1.00 │
+│  Size    ──●──────────   2.0 │  ← sets line width AND dot size
 └──────────────────────────────┘
 ```
 
-Controls that don't apply to the current cell type are hidden (e.g., Width is hidden for scatter cells). The popover closes when clicking outside it.
+**Size** is a unified control — changing it updates both `line_width` (for curves) and `point_size` (for scatter dots). Range: 0.5–20. The popover closes when clicking outside it.
 
 ---
 

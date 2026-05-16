@@ -85,18 +85,26 @@ A cell whose content is a bare expression (no assignment) is auto-detected and p
 
 ### Shape Inference Rules
 
-| Return shape | Render type | Notes |
+| Return shape | Render type | Preview shown |
 |---|---|---|
-| `(N, 3)` | 3D scatter | Default; style panel allows switching to connected line |
-| `(N, 2)` | 2D scatter | Default; style panel allows switching to connected line |
-| `(3,)` | Single 3D point | Scatter with 1 point |
-| `(2,)` | Single 2D point | |
-| Scalar | No render; warn | |
-| `(N,)` | No render; warn | 1D arrays are ambiguous; not plotted |
-| `(N, M)` not matching grid | No render; defer | Future: assume z=0 plane |
-| Python list | No render; warn | Must be numpy arrays |
+| `(N, 3)` | 3D scatter | shape e.g. `(100, 3)` |
+| `(N, 2)` | 2D scatter | shape |
+| `(3,)` | Single 3D point (scatter) | element values + shape `(1, 3)` |
+| `(2,)` | Single 2D point | element values + shape |
+| Scalar | No render | value |
+| `(N,)` | No render | first k element values |
+| `(N, M)` not matching grid | No render | — |
+| Python list | No render | — |
 
-This applies to cells like `d` (bare variable name) or `f(path)` where `f` takes non-spatial args and returns a plottable array. The return shape determines what happens.
+This applies to cells like `dx(p)` (bare function call returning a scalar) or `array([dx(p), dy(p), dz(p)])` (bare expression returning a 1D array). The return value is captured via `eval` after `exec` and formatted for the preview label.
+
+### Value Preview
+
+Every equation cell shows small gray text below the cell body:
+- **Left-aligned**: scalar value or 1D array elements (e.g. `[0, 26, -1.667]`), truncated with `...` if too wide
+- **Right-aligned**: array shape for rendered outputs (e.g. `(64, 64)`)
+
+Both can appear simultaneously (e.g. `p = array([1,1,1])` shows `[1, 1, 1]` left and `(1, 3)` right). Integers are shown without decimal points. The preview updates on every evaluation.
 
 ---
 
@@ -167,11 +175,33 @@ Detected by the preprocessor: if the entire cell content is a single `ast.Consta
 
 ---
 
+## Data Cells
+
+Data cells live in the unified cell list alongside equation cells. They are added via `+ Data cell`. Unlike equation cells, they do **not** evaluate automatically — they require a manual ▷ Run click. When run, their exported names merge into a persistent `_data_cell_ns` that seeds all subsequent equation evaluations.
+
+Data cells can have `initial_condition` and `recursion` sub-cells for recurrence patterns. The `↺` button opens a dropdown to add them.
+
+Data cells are marked stale (orange status dot) when any upstream slider or equation changes. They must be manually re-run.
+
+---
+
 ## Slider Cells
 
-A scalar assignment: `a = 0.6`. The UI renders a drag handle with editable range and animation controls. `t` is a reserved built-in slider for animation time.
+A scalar assignment: `a = 0.6`. Typing a bare scalar assignment in any equation cell automatically morphs it into a `SliderWidget` in-place (preserving `cell_id` and style).
 
-All slider configuration (min, max, step, loop mode, speed) is set via UI widgets. The configuration is serialized in the YAML session file — see `10-session-format.md`.
+**Layout** (2 rows):
+```
+Row 1: [●] [name]  [value spinbox ──────────────────────────]  [✕]
+Row 2:  [▷]  [min] [──●────────────────] [max]  · step [step]
+```
+
+- Up/down ticker buttons are hidden (`NoButtons`)
+- Integers display without decimal points; trailing zeros stripped
+- Range auto-expands on creation if the initial value exceeds the default max
+- Dragging the slider snaps to exact multiples of the step value
+- ▷ button animates the slider bouncing between min and max at ~60fps
+
+All slider configuration (min, max, step) is set via the row 2 spinboxes. The current value is preserved in the YAML session file — see `10-session-format.md`.
 
 ---
 

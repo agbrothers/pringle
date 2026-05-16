@@ -158,3 +158,66 @@ If there's any obvious user considerations I'm forgetting, please mention them. 
 
 
 Excellent, please proceed to execute the mockup plan. Loop me in if any critical and unexpected design decisions or ambiguities crop up. Please document any minor differences from the plan or design considerations fully. I'm not sure if you have the ability to commit changes, but if you do, please commit after each successfully completed phase. Do not add any currently uncommitted files. If you do not have git access, let me know when phases are complete and I will review and commit manually.
+
+
+-------------------------------
+
+That worked, thanks. One thing that would be extremely helpful for debugging and sanity checking in general would be a minimal preview values held by some non-surface equations. In particular, for equation cells that return scalar values that are not plotted, if we could print the scalar value in gray in the margin below the cell, identical in size and location to the warnings or error messages. Same for 1D arrays, we should print the first k values that fit in the cell followed by an ellipsis. 
+
+For example, if we have a point defined:
+`p = array([1, 1, 1])`
+then [1, 1, 1] is printed below the cell. 
+
+Then if we have another equation defined:
+`value = sum(p)`
+we want to print `3` at the bottom of the cell in small gray text. 
+
+For something like `array([ dx(p), dy(p), dz(p) ])`, seeing the values of the array is incredibly helpful for debugging. 
+
+Additionally, for all equations and/or data that return an array, we should print the shape in the bottom right of the cell. Let me know if this makes sense and has a reasonable path for implementation. I'm happy to add further clarification or more detail on layouts.
+
+
+
+-------------------------------
+
+
+* Color picker
+* App icon
+* Dark mode
+* Better UI overall
+* Adding a slider with a value above the default max (10) caps it at 10
+* Re-arrange expressions
+* Mute colors of axes
+* Print metadata about data objects (shape, first few values?)
+* Disconnect when panning and rotating. This might actually be useful for moving the thingy?
+* Undefined warning in piecewise while actually defined. 
+* Top view doesn't work
+
+* Crash on typing abs(z) < 5
+
+Traceback (most recent call last):
+  File "/Users/greysonbrothers/code/pringle/pringle/cell_list.py", line 361, in _on_cell_changed
+    self._rebuild_namespace()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/greysonbrothers/code/pringle/pringle/cell_list.py", line 330, in _rebuild_namespace
+    self._on_cell_result(cell.cell_id, result, cell.style)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/greysonbrothers/code/pringle/pringle/app.py", line 349, in _on_cell_result
+    mesh = make_surface_mesh(
+        result.x, result.y, result.data, color=style.color,
+        constraint_mask=result.constraint_mask,
+        z_raw=result.data_unmasked,
+    )
+  File "/Users/greysonbrothers/code/pringle/pringle/renderer.py", line 172, in make_surface_mesh
+    positions, indices, normals = _clip_mesh_to_mask(positions, indices, normals, inside)
+                                  ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/greysonbrothers/code/pringle/pringle/renderer.py", line 101, in _clip_mesh_to_mask
+    ia, ib, ic = bool(inside[a]), bool(inside[b]), bool(inside[c])
+                                       ~~~~~~^^^
+IndexError: index 1 is out of bounds for axis 0 with size 1
+Abort trap: 6
+
+
+
+
+

@@ -5,175 +5,121 @@
 All Pringle session state is serialized to a portable YAML file. This enables:
 - **Lightweight saves** — a session is a single human-readable file
 - **Version control** — YAML diffs are meaningful and reviewable
-- **Sharing** — send a `.pringle.yml` file; open it in Pringle
+- **Sharing** — send a `.yaml` file; open it in Pringle
 - **Reproducibility** — exact cell content, slider values, and viewport state are captured
 
 The YAML file is the source of truth for a session. The UI is a view over this file; saving writes the current UI state to it, loading reads it back.
 
-## File Structure
+## Actual File Structure (v1)
+
+The on-disk format written and read by `pringle/session.py`:
 
 ```yaml
-pringle_version: "0.1.0"
+version: 1
 
-viewport:
-  x_range: [-3.5, 3.5]
-  y_range: [-3.5, 3.5]
-  z_range: [-2.8, 3.3]
-  grid: true
-  labels: true
-  background: [0.1, 0.1, 0.1]   # RGB
-  camera:
-    azimuth: 45.0
-    elevation: 30.0
-    distance: 8.0
+grid:
+  x_min: -5.0
+  x_max: 5.0
+  y_min: -5.0
+  y_max: 5.0
+  z_min: -5.0      # controls wireframe/axes visual z extent
+  z_max: 5.0
+  n: 64            # grid points per axis
 
-equation_panel:
-  - id: "eq-001"
-    type: surface             # surface | curve | scatter | piecewise | lambda | slider | comment | folder
-    expression: "z = a*x**2 + b*y**2"
-    visible: false
-    style:
-      color: [0.2, 0.4, 0.9, 1.0]   # RGBA
-      opacity: 1.0
-      line_width: 1.5
-      point_size: 6.0
-      line_style: solid              # solid | dashed | dotted
-      display_mode: filled           # filled | wireframe | both
-      show_label: true
-    constraints: []
-
-  - id: "eq-002"
-    type: piecewise
-    expression: "z = [f, g, h]"
+cells:
+  - id: "550e8400-..."
+    type: equation          # equation | slider | data | folder
+    source: "z = sin(x) * cos(y)"
     visible: true
     style:
-      color: [0.9, 0.4, 0.2, 1.0]
-      display_mode: filled
-    conditions:
-      - "x**2 + y**2 < 1"
-      - "x**2 + y**2 < 2"
-      - "x**2 + y**2 >= 2"
+      color: [0.22, 0.40, 0.88, 1.0]   # RGBA floats 0–1
+    sub_cells:
+      - type: constraint           # constraint | condition | initial_condition | recursion
+        source: "x**2 + y**2 < 4"
 
-  - id: "eq-003"
-    type: surface
-    expression: "z = sin(x) * cos(y)"
-    visible: true
-    style:
-      color: [0.3, 0.8, 0.4, 1.0]
-      display_mode: both             # filled + wireframe
-      line_width: 0.8
-    constraints:
-      - "x**2 + y**2 < 4"
-
-  - id: "eq-004"
+  - id: "..."
     type: slider
-    expression: "a = 0.6"
-    config:
-      min: 0.0
-      max: 2.0
-      step: null                     # null = continuous
-      animation: loop                # static | loop | bounce | once
-      speed: 1.0                     # units per second
-      reflect: false
-
-  - id: "eq-005"
-    type: slider
-    expression: "t = 0"
-    config:
-      min: 0.0
-      max: 10.0
-      step: null
-      animation: loop
-      speed: 1.0
-      reflect: false
-
-  - id: "eq-006"
-    type: lambda
-    expression: "f(x,y) = x**2 + y**2"
-    visible: true
+    source: "a = 2"
+    name: "a"
+    value: 2.0           # current position (may differ from source if dragged)
+    min_val: 0.0
+    max_val: 10.0
+    step: 0.1
     style:
-      color: [0.7, 0.3, 0.9, 1.0]
+      color: [0.85, 0.33, 0.33, 1.0]
+    sub_cells: []
 
-  - id: "eq-007"
-    type: comment
-    content: "This block demonstrates piecewise surface rendering."
+  - id: "..."
+    type: data
+    source: |
+      T = linspace(0, 10, 100)
+      path = zeros((100, 3))
+    style:
+      color: [0.33, 0.75, 0.41, 1.0]
+    sub_cells:
+      - type: initial_condition
+        source: "path[0] = array([1.0, 0.0, 0.0])"
+      - type: recursion
+        source: "path[n] = path[n-1] * 0.95"
 
-  - id: "eq-008"
+  - id: "..."
     type: folder
-    label: "Helper Functions"
+    name: "Helper Functions"
     collapsed: false
-    visible: true
-    children: ["eq-006"]
-
-data_panel:
-  - id: "data-001"
-    type: data
-    expression: |
-      step = 1
-      T = arange(0, 10 + step, step)
-
-  - id: "data-002"
-    type: recurrence
-    expression: "path = zeros((10, 2))"
-    initial_condition: "array([1.0, 0.1])"
-    recursion: "path[n] = 2 * path[n-1]"
-
-  - id: "data-003"
-    type: data
-    expression: "height = g(path)"
+    style:
+      color: [0.55, 0.55, 0.55, 1.0]
+    sub_cells: []
 ```
 
-## Cell Type Values
+## Cell Types
 
-| `type` | Panel | Description |
+| `type` | Description |
+|---|---|
+| `equation` | Any expression — surface, curve, scatter, parametric, lambda, or comment. Auto-detected at eval time. |
+| `slider` | Scalar assignment detected as `name = value`. Has additional `name`, `value`, `min_val`, `max_val`, `step` fields. |
+| `data` | Arbitrary numpy/scipy code, run on demand via ▷. Can have `initial_condition` and `recursion` sub-cells for recurrence patterns. |
+| `folder` | Collapsible group. Has `name` and `collapsed` fields; no source. |
+
+## Sub-cell Types
+
+| `type` | Used on | Description |
 |---|---|---|
-| `surface` | equation | Explicit `z = f(x,y)` or auto-render from `f(x,y) = ...` |
-| `curve` | equation | `y = f(x)` or `x = f(y)` |
-| `scatter` | equation | `points = ...` or bare (N,3) array |
-| `piecewise` | equation | `z = [f, g, h]` with condition sub-cells |
-| `parametric` | equation | `xyz = ...` |
-| `lambda` | equation | `f(x,y) = expr` definition; optionally auto-renders |
-| `slider` | equation | Scalar assignment with drag handle |
-| `comment` | equation | Bare string literal; text annotation |
-| `folder` | equation | Collapsible group with `children` list of IDs |
-| `data` | data | Arbitrary numpy/scipy setup code |
-| `recurrence` | data | Array with `initial_condition` and `recursion` sub-cells |
+| `constraint` | equation | Boolean mask; sets z=NaN where False |
+| `condition` | equation | Piecewise branch selector |
+| `initial_condition` | data | Seed value for a recurrence |
+| `recursion` | data | Recurrence rule, e.g. `path[n] = path[n-1] * 0.9` |
 
-## Style Defaults
+## Style Fields
 
-```yaml
-style_defaults:
-  color_palette:           # assigned cyclically to new cells
-    - [0.24, 0.42, 0.78, 1.0]   # blue
-    - [0.85, 0.33, 0.33, 1.0]   # red
-    - [0.33, 0.75, 0.41, 1.0]   # green
-    - [0.89, 0.65, 0.24, 1.0]   # amber
-    - [0.62, 0.38, 0.85, 1.0]   # purple
-    - [0.24, 0.73, 0.84, 1.0]   # teal
-  opacity: 1.0
-  line_width: 1.5
-  point_size: 6.0
-  line_style: solid
-  display_mode: filled
-  show_label: true
+Only `color` (RGBA) is currently persisted per cell. The `CellStyle` also holds `line_width`, `point_size`, and `opacity`, but these are not yet saved/loaded (they reset to defaults on reload).
+
+Default palette (assigned cyclically):
+```python
+PALETTE = [
+    (0.22, 0.40, 0.88, 1.0),   # blue
+    (0.13, 0.53, 0.20, 1.0),   # green
+    (0.82, 0.18, 0.18, 1.0),   # red
+    (0.55, 0.55, 0.55, 1.0),   # gray (data cells)
+]
 ```
 
-## Versioning and Compatibility
+## Grid Config
 
-The `pringle_version` field enables future migration. When loading a file with an older version, Pringle applies a migration chain to bring the format up to the current schema. Breaking changes increment the minor version; additive changes do not.
+`z_min`/`z_max` control how the wireframe bounding box and axis overlays are drawn in the 3D scene. They do **not** affect expression evaluation (which only uses `x`, `y` grids). Changing them via the Axis Bounds panel and clicking "Apply Bounds" updates the overlay immediately without re-evaluating cells.
+
+## Versioning
+
+The `version: 1` field enables future migration. `load_session` raises `ValueError` for unrecognised version numbers. Old sessions without `z_min`/`z_max` default to ±5.0.
 
 ## Diff Example
 
-A version-controlled YAML diff for changing a slider range is readable:
+A YAML diff for changing a slider range is readable:
 
 ```diff
-   - id: "eq-004"
-     type: slider
-     expression: "a = 0.6"
-     config:
--      max: 2.0
-+      max: 5.0
-       animation: loop
+   type: slider
+   source: "a = 2"
+-  max_val: 10.0
++  max_val: 20.0
 ```
 
 This makes session history meaningful in git — each commit represents a meaningful state of the visualization.
