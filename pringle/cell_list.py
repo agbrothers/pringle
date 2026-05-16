@@ -66,6 +66,7 @@ class CellListWidget(QWidget):
         self._grid = grid or make_grid()
         self._cells: list[CellWidget] = []
         self._shared_ns: dict = {}
+        self._data_ns: dict = {}   # namespace contributed by the data panel
         self._cell_index: int = 0  # for palette cycling
         self._undo_history: deque[list[dict]] = deque(maxlen=_MAX_UNDO)
         self._redo_history: deque[list[dict]] = deque(maxlen=_MAX_UNDO)
@@ -224,6 +225,11 @@ class CellListWidget(QWidget):
         self._grid = grid
         self._rebuild_namespace()
 
+    def set_data_namespace(self, ns: dict) -> None:
+        """Receive namespace exports from the data panel and re-evaluate."""
+        self._data_ns = dict(ns)
+        self._rebuild_namespace()
+
     # ------------------------------------------------------------------
     # Undo / redo (structural: add / remove cell)
     # ------------------------------------------------------------------
@@ -309,7 +315,7 @@ class CellListWidget(QWidget):
         ordered_cells, cyclic_ids = topo_order(dag, evaluable)
         undef = undefined_names(evaluable)
 
-        shared: dict = {}
+        shared: dict = dict(self._data_ns)   # seed with data panel outputs
         for cell in ordered_cells:
             if isinstance(cell, SliderWidget):
                 shared[cell.name] = _ns_value(cell.value)

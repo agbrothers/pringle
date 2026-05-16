@@ -212,3 +212,19 @@ def restore_cell_list(
                     sub._edit.setText(sub_data.get("source", ""))
 
         # Restore data cell sub-cells (not applicable here — handled via data_panel)
+
+
+def restore_data_panel(
+    data_panel: DataPanelWidget,
+    cells_data: list[dict],
+) -> None:
+    """Reconstruct a DataPanelWidget from loaded YAML data_cells data."""
+    for cell in list(data_panel._cells):
+        data_panel.remove_cell(cell.cell_id)
+
+    for data in cells_data:
+        source = data.get("source", "")
+        cell = data_panel.add_cell(source=source)
+        for sub_data in data.get("sub_cells", []):
+            sub = cell.add_sub_cell(sub_data.get("type", "initial_condition"))
+            sub._edit.setText(sub_data.get("source", ""))
