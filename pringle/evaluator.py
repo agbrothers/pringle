@@ -426,6 +426,16 @@ def run_cell(
             result.preview = preview
             break
 
+    # Bare expression (no assignment): eval source to capture value for preview
+    if result.preview is None and not user_stores and func_name is None:
+        try:
+            val = eval(preprocessed, local_ns, {})  # noqa: S307
+            result.preview = _make_preview(val)
+            if isinstance(val, np.ndarray):
+                result.shape_preview = str(val.shape)
+        except Exception:
+            pass
+
     if render_type is None:
         return result
 
