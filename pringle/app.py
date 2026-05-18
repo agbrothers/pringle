@@ -267,6 +267,12 @@ class PringleWindow(QMainWindow):
         self._view_settings.background_changed.connect(self._on_background_changed)
         self._view_settings.equalize_requested.connect(self._on_equalize)
         self._view_settings.fit_requested.connect(self._on_fit_to_data)
+        self._view_settings.shadow_visibility_changed.connect(
+            self._viewport.renderer.set_shadow_visible
+        )
+        self._view_settings.shadow_opacity_changed.connect(
+            self._viewport.renderer.set_shadow_opacity
+        )
 
         self._settings_dialog = AxisSettingsDialog(self._view_settings, parent=self)
         # When user closes dialog via title-bar X, uncheck the ⚙ button
@@ -391,6 +397,10 @@ class PringleWindow(QMainWindow):
             self._view_settings._bbox_cb.setChecked(view.get("show_bbox", True))
             self._view_settings._crosshair_cb.setChecked(view.get("show_crosshair", True))
             self._view_settings._bg_cb.setChecked(view.get("show_light_bg", False))
+            # Restore shadow: set opacity first so material is correct when shadows are made visible
+            if "shadow_opacity" in view:
+                self._view_settings._shadow_opacity_spin.setValue(view["shadow_opacity"])
+            self._view_settings._shadow_cb.setChecked(view.get("show_shadow", False))
             if "camera_position" in view and "orbit_target" in view:
                 cam = self._viewport._pr._camera
                 tgt = view["orbit_target"]
@@ -457,6 +467,8 @@ class PringleWindow(QMainWindow):
             "show_bbox":       self._view_settings._bbox_cb.isChecked(),
             "show_crosshair":  self._view_settings._crosshair_cb.isChecked(),
             "show_light_bg":   self._view_settings._bg_cb.isChecked(),
+            "show_shadow":     self._view_settings._shadow_cb.isChecked(),
+            "shadow_opacity":  self._view_settings._shadow_opacity_spin.value(),
             "camera_position": [float(cam_pos[0]), float(cam_pos[1]), float(cam_pos[2])],
             "orbit_target":    [float(tgt[0]),     float(tgt[1]),     float(tgt[2])],
         }
@@ -585,6 +597,7 @@ class PringleWindow(QMainWindow):
         self._viewport.renderer.set_background_color(
             self._LIGHT_BG if light else self._DARK_BG
         )
+        self._viewport.renderer.set_shadow_color_for_bg(light)
 
     def _on_equalize(self) -> None:
         """Set x/y span equal to the current z span, centered at zero."""

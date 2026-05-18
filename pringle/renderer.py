@@ -346,6 +346,13 @@ class PringleRenderer:
         self._rebuild_overlay()
         self._rebuild_crosshair()
 
+        # Drop shadows — projected silhouettes at the z_min floor plane
+        self._shadow_objects: dict[str, gfx.WorldObject] = {}
+        self._shadow_visible: bool = False
+        self._shadow_opacity: float = 0.35
+        # Light color so shadows show against the default dark background
+        self._shadow_color: tuple[float, float, float] = (0.85, 0.85, 0.85)
+
     def _pan_target(self, dx: float, dy: float, dz: float) -> None:
         """Translate the orbit target (and camera by the same delta) in world space."""
         delta = np.array([dx, dy, dz], dtype=np.float64)
@@ -408,9 +415,12 @@ class PringleRenderer:
         y_min: float, y_max: float,
         z_min: float, z_max: float,
     ) -> None:
+        old_zfloor = self._overlay_bounds[4]
         self._overlay_bounds = (x_min, x_max, y_min, y_max, z_min, z_max)
         self._rebuild_overlay()
         self._rebuild_crosshair()
+        if z_min != old_zfloor:
+            self._rebuild_shadows()
 
     def set_axes_visible(self, visible: bool) -> None:
         self._axes_visible = visible
@@ -456,26 +466,116 @@ class PringleRenderer:
             return None
         return tuple(bs)
 
+    # ------------------------------------------------------------------
+    # Shadow management
+    # ------------------------------------------------------------------
+
+    def _make_shadow_object(self, obj: gfx.WorldObject) -> gfx.WorldObject | None:
+        """Build a flattened copy of obj projected down onto the z_min floor."""
+        z_floor = float(self._overlay_bounds[4]) + 1e-3  # tiny offset avoids z-fighting
+        color = (*self._shadow_color, self._shadow_opacity)
+        try:
+            geom = obj.geometry
+            if geom is None or geom.positions is None:
+                return None
+            pos = np.array(geom.positions.data, dtype=np.float32).copy()
+            if pos.shape[1] < 3 or len(pos) == 0:
+                return None
+            pos[:, 2] = z_floor
+
+            if isinstance(obj, gfx.Mesh):
+                indices = (np.array(geom.indices.data, dtype=np.int32)
+                           if geom.indices is not None else None)
+                shadow_geo = gfx.Geometry(positions=pos, indices=indices)
+                mat = gfx.MeshBasicMaterial(color=color, side="both")
+                return gfx.Mesh(shadow_geo, mat)
+            elif isinstance(obj, gfx.Line):
+                shadow_geo = gfx.Geometry(positions=pos)
+                mat = gfx.LineMaterial(
+                    color=color,
+                    thickness=obj.material.thickness,
+                    thickness_space="world",
+                )
+                return gfx.Line(shadow_geo, mat)
+            elif isinstance(obj, gfx.Points):
+                shadow_geo = gfx.Geometry(positions=pos)
+                mat = gfx.PointsMaterial(
+                    color=color,
+                    size=obj.material.size,
+                    size_space="world",
+                )
+                return gfx.Points(shadow_geo, mat)
+        except Exception:
+            pass
+        return None
+
+    def _rebuild_shadows(self) -> None:
+        """Recreate all shadow objects (called when z_min floor changes)."""
+        for shadow in list(self._shadow_objects.values()):
+            self._scene.remove(shadow)
+        self._shadow_objects.clear()
+        for cell_id, obj in self._objects.items():
+            shadow = self._make_shadow_object(obj)
+            if shadow is not None:
+                shadow.visible = self._shadow_visible and obj.visible
+                self._scene.add(shadow)
+                self._shadow_objects[cell_id] = shadow
+
+    def set_shadow_visible(self, visible: bool) -> None:
+        self._shadow_visible = visible
+        for cell_id, shadow in self._shadow_objects.items():
+            src = self._objects.get(cell_id)
+            shadow.visible = visible and (src is None or src.visible)
+
+    def set_shadow_opacity(self, opacity: float) -> None:
+        self._shadow_opacity = opacity
+        color = (*self._shadow_color, opacity)
+        for shadow in self._shadow_objects.values():
+            shadow.material.color = color
+
+    def set_shadow_color_for_bg(self, light_bg: bool) -> None:
+        """Switch shadow colour to contrast with the active background."""
+        self._shadow_color = (0.05, 0.05, 0.05) if light_bg else (0.85, 0.85, 0.85)
+        color = (*self._shadow_color, self._shadow_opacity)
+        for shadow in self._shadow_objects.values():
+            shadow.material.color = color
+
+    # ------------------------------------------------------------------
+    # Object management
+    # ------------------------------------------------------------------
+
     def add_object(self, cell_id: str, obj: gfx.WorldObject) -> bool:
         """Add or replace an object. Returns True if cell_id is new to the scene."""
         is_new = cell_id not in self._objects
         self.remove_object(cell_id)
         self._objects[cell_id] = obj
         self._scene.add(obj)
+        shadow = self._make_shadow_object(obj)
+        if shadow is not None:
+            shadow.visible = self._shadow_visible
+            self._scene.add(shadow)
+            self._shadow_objects[cell_id] = shadow
         return is_new
 
     def remove_object(self, cell_id: str) -> None:
         if cell_id in self._objects:
             self._scene.remove(self._objects.pop(cell_id))
+        if cell_id in self._shadow_objects:
+            self._scene.remove(self._shadow_objects.pop(cell_id))
 
     def set_visible(self, cell_id: str, visible: bool) -> None:
         if cell_id in self._objects:
             self._objects[cell_id].visible = visible
+        if cell_id in self._shadow_objects:
+            self._shadow_objects[cell_id].visible = visible and self._shadow_visible
 
     def set_background_color(self, color: tuple) -> None:
         self._bg.material = gfx.BackgroundMaterial(color)
 
     def fit_camera(self) -> None:
+        # Temporarily hide shadows so they don't inflate the bounding sphere
+        for shadow in self._shadow_objects.values():
+            shadow.visible = False
         bsphere = self._scene.get_world_bounding_sphere()
         if bsphere is not None:
             self._camera.show_object(self._scene, up=(0, 0, 1))
@@ -483,6 +583,9 @@ class PringleRenderer:
             # center.  A surface constrained to z>0 would otherwise pull the
             # orbit target upward, making the origin appear off-screen.
             self._controller.target = (0.0, 0.0, 0.0)
+        for cell_id, shadow in self._shadow_objects.items():
+            src = self._objects.get(cell_id)
+            shadow.visible = self._shadow_visible and (src is None or src.visible)
 
     def render(self) -> None:
         if self._crosshair_group is not None:

@@ -33,8 +33,10 @@ class ViewSettingsWidget(QWidget):
     bbox_visibility_changed = pyqtSignal(bool)
     crosshair_visibility_changed = pyqtSignal(bool)
     equalize_requested = pyqtSignal()
-    fit_requested = pyqtSignal()          # fit all axis bounds to rendered data
-    background_changed = pyqtSignal(bool) # True = light, False = dark
+    fit_requested = pyqtSignal()           # fit all axis bounds to rendered data
+    background_changed = pyqtSignal(bool)  # True = light, False = dark
+    shadow_visibility_changed = pyqtSignal(bool)
+    shadow_opacity_changed = pyqtSignal(float)
 
     def __init__(self, config: GridConfig | None = None, parent=None):
         super().__init__(parent)
@@ -125,6 +127,26 @@ class ViewSettingsWidget(QWidget):
 
         toggle_row.addStretch(1)
         bl.addLayout(toggle_row)
+
+        # Shadow toggle + opacity on its own row
+        shadow_row = QHBoxLayout()
+        shadow_row.setSpacing(8)
+        self._shadow_cb = QCheckBox("Shadow")
+        self._shadow_cb.setChecked(False)
+        self._shadow_cb.toggled.connect(self.shadow_visibility_changed)
+        shadow_row.addWidget(self._shadow_cb)
+
+        shadow_row.addWidget(QLabel("opacity:"))
+        self._shadow_opacity_spin = QDoubleSpinBox()
+        self._shadow_opacity_spin.setRange(0.0, 1.0)
+        self._shadow_opacity_spin.setSingleStep(0.05)
+        self._shadow_opacity_spin.setDecimals(2)
+        self._shadow_opacity_spin.setValue(0.35)
+        self._shadow_opacity_spin.setFixedWidth(55)
+        self._shadow_opacity_spin.valueChanged.connect(self.shadow_opacity_changed)
+        shadow_row.addWidget(self._shadow_opacity_spin)
+        shadow_row.addStretch(1)
+        bl.addLayout(shadow_row)
 
         outer.addWidget(bounds_box)
 
