@@ -147,7 +147,7 @@ class DataCellWidget(QWidget):
 
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
-        line.setStyleSheet("color: #ddd;")
+        line.setStyleSheet("color: #2a2a2a;")
         outer.addWidget(line)
 
     # ------------------------------------------------------------------

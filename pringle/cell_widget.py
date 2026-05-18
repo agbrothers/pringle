@@ -134,7 +134,7 @@ class ConstraintSubCell(QWidget):
         )
         self._edit.setStyleSheet(
             "QLineEdit { border: 1px dashed #666; border-radius: 3px; "
-            "padding: 1px 4px; font-size: 12px; background: #2a2a2a; color: #ddd; }"
+            "padding: 1px 4px; font-size: 12px; color: #ddd; }"
         )
         self._edit.textChanged.connect(self.content_changed)
         row.addWidget(self._edit, 1)
@@ -377,7 +377,7 @@ class CellWidget(QWidget):
         # Thin separator line below
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
-        line.setStyleSheet("color: #ddd;")
+        line.setStyleSheet("color: #2a2a2a;")
         outer.addWidget(line)
 
     # ------------------------------------------------------------------
