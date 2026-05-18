@@ -384,6 +384,18 @@ class PringleWindow(QMainWindow):
             self._viewport.renderer.set_overlay_bounds(
                 cfg.x_min, cfg.x_max, cfg.y_min, cfg.y_max, cfg.z_min, cfg.z_max
             )
+        view = data.get("view", {})
+        if view:
+            self._view_settings._axes_cb.setChecked(view.get("show_axes", True))
+            self._view_settings._bbox_cb.setChecked(view.get("show_bbox", True))
+            self._view_settings._crosshair_cb.setChecked(view.get("show_crosshair", True))
+            if "camera_position" in view and "orbit_target" in view:
+                cam = self._viewport._pr._camera
+                tgt = view["orbit_target"]
+                cam.local.position = view["camera_position"]
+                cam.look_at(tgt)
+                self._viewport._pr._controller.target = tuple(tgt)
+
         self._session_path = path
         self._modified = False
         self._update_title()
@@ -435,8 +447,18 @@ class PringleWindow(QMainWindow):
 
     def _write_session(self, path: str) -> None:
         from pringle.session import save_session
+        pr = self._viewport._pr
+        cam_pos = pr._camera.local.position
+        tgt = pr._controller.target
+        view = {
+            "show_axes":       self._view_settings._axes_cb.isChecked(),
+            "show_bbox":       self._view_settings._bbox_cb.isChecked(),
+            "show_crosshair":  self._view_settings._crosshair_cb.isChecked(),
+            "camera_position": [float(cam_pos[0]), float(cam_pos[1]), float(cam_pos[2])],
+            "orbit_target":    [float(tgt[0]),     float(tgt[1]),     float(tgt[2])],
+        }
         try:
-            save_session(path, self._cell_list, self._grid.config)
+            save_session(path, self._cell_list, self._grid.config, view=view)
         except Exception as exc:
             QMessageBox.critical(self, "Save error", str(exc))
             return

@@ -127,6 +127,7 @@ def save_session(
     path: str | Path,
     cell_list: CellListWidget,
     grid_config: GridConfig,
+    view: dict | None = None,
 ) -> None:
     """Serialize session to a YAML file at *path*."""
     session = {
@@ -134,6 +135,8 @@ def save_session(
         "grid": grid_config_to_dict(grid_config),
         "cells": [cell_to_dict(c) for c in cell_list._cells],
     }
+    if view:
+        session["view"] = view
     Path(path).write_text(yaml.dump(session, allow_unicode=True, sort_keys=False))
 
 

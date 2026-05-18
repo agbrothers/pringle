@@ -8,43 +8,6 @@ See [14-backlog.md](14-backlog.md) for the bug backlog.
 
 ## Open
 
-### FEAT-023 — Persist axis/overlay toggle states across session save/load
-**Status:** Open  
-**Logged:** 2026-05-18
-
-**Description:**  
-The visibility state of the Axes, Wireframe bounding box, and Crosshair overlays is not saved to the session YAML. All three checkboxes always reset to checked (visible) on load, regardless of how they were when the session was saved.
-
-**Root cause:**  
-`save_session` in `session.py` writes only a `grid` block (bounds + resolution) and a `cells` list. There is no `view` block. The three checkbox widgets (`_axes_cb`, `_bbox_cb`, `_crosshair_cb` in `view_settings.py:104–117`) each default to `setChecked(True)` on construction and are never read during save or written during restore.
-
-**Fix — add a `view` block to the session YAML:**
-
-```python
-# session.py — save_session: add alongside "grid" and "cells"
-"view": {
-    "show_axes":      view_settings._axes_cb.isChecked(),
-    "show_bbox":      view_settings._bbox_cb.isChecked(),
-    "show_crosshair": view_settings._crosshair_cb.isChecked(),
-},
-```
-
-On restore, after `restore_cell_list` completes, read the block and push it into `ViewSettingsWidget`. Setting the checkbox state will emit the existing `axes_visibility_changed`, `bbox_visibility_changed`, and `crosshair_visibility_changed` signals, which already wire to `renderer.set_axes_visible` etc. — so no additional plumbing is needed:
-
-```python
-view = data.get("view", {})
-view_settings._axes_cb.setChecked(view.get("show_axes", True))
-view_settings._bbox_cb.setChecked(view.get("show_bbox", True))
-view_settings._crosshair_cb.setChecked(view.get("show_crosshair", True))
-```
-
-The `get(..., True)` defaults ensure older session files (without a `view` block) load with all overlays visible, matching the current default behaviour.
-
-**`save_session` currently takes only `cell_list` and `grid_config`** — the `view_settings` widget reference will need to be passed in as a third argument (or the relevant state extracted at the call site in `app.py` before calling `save_session`).
-
-**Stretch goal:** also save the camera position (`camera.local.position`) and orbit target (`controller.target`) so the viewport reopens at the same angle the user left it.
-
----
 
 ### FEAT-017 — Dark vs light mode toggle
 **Status:** Open  
@@ -252,6 +215,12 @@ if m:
 - Non-rendered 1D arrays (e.g. `p = array([1,1,1])`) — elements shown left-aligned, truncated with `...` if too wide
 - Rendered arrays (surfaces, curves, scatter) — shape shown right-aligned, e.g. `(64, 64)`
 - Bare expressions (no assignment) — same preview rules apply, value captured via `eval`
+
+---
+
+### FEAT-023 — Persist axis/overlay toggle states across session save/load
+**Status:** Closed (implemented 2026-05-18)  
+**Fix:** `save_session` now accepts an optional `view` dict and writes it alongside `grid` and `cells`. `_write_session` in `app.py` extracts overlay checkbox states (`show_axes`, `show_bbox`, `show_crosshair`) and camera state (`camera_position`, `orbit_target`) before calling `save_session`. `_on_open` reads the `view` block after restore and pushes it into the checkboxes (which emit their existing signals to update the renderer) and restores the camera position/look-at/controller target. Older session files without a `view` block load with all overlays visible by default.
 
 ---
 
