@@ -92,9 +92,11 @@ class CellListWidget(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("QScrollArea { background: #111111; border: none; }")
         outer.addWidget(scroll)
 
         self._container = QWidget()
+        self._container.setStyleSheet("background-color: #111111;")
         self._layout = QVBoxLayout(self._container)
         self._layout.setContentsMargins(0, 4, 0, 4)
         self._layout.setSpacing(0)
@@ -118,8 +120,8 @@ class CellListWidget(QWidget):
 
         # Add buttons: equation cell (left) and data cell (right)
         _btn_style = (
-            "QPushButton { color: #555; padding: 8px; font-size: 13px; }"
-            "QPushButton:hover { color: #222; }"
+            "QPushButton { color: #555; padding: 8px; font-size: 13px; background: transparent; }"
+            "QPushButton:hover { color: #ccc; }"
         )
         add_row = QHBoxLayout()
         add_row.setContentsMargins(0, 0, 0, 0)

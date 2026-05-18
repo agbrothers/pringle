@@ -102,6 +102,7 @@ class ViewSettingsWidget(QWidget):
 
         # Overlay toggles
         toggle_row = QHBoxLayout()
+        toggle_row.setSpacing(12)
         self._axes_cb = QCheckBox("Axes")
         self._axes_cb.setChecked(True)
         self._axes_cb.toggled.connect(self.axes_visibility_changed)
