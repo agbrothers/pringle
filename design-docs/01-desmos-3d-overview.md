@@ -67,6 +67,35 @@ Each expression cell has a colored dot that opens a per-expression style panel. 
 
 Style properties are stored separately from the expression string — they are rendering metadata attached to each cell. Changing a color or opacity does not re-evaluate the expression; it only updates a shader uniform. This makes style changes instantaneous.
 
+## Organization Features
+
+### Folders
+
+Desmos allows expressions to be grouped into named, collapsible folders.
+
+**Behavior:**
+- A `+ Folder` button in the expression panel creates a new folder header.
+- Each expression has an explicit `folderId` property; dragging a cell into a folder sets its `folderId`. Cells with no `folderId` are at the top level.
+- The folder header shows a colored dot, an editable name, and a ▶/▼ collapse arrow.
+- **Collapse:** clicking the arrow hides all member cells from the expression panel. The cells continue to evaluate and render — collapsing is purely a panel UI operation, not a visibility change.
+- **Folder visibility toggle:** the folder header also has an eye icon. Toggling it off suppresses rendering for all member cells without changing their individual visibility flags. This is additive — a cell is rendered only if both its own visibility and its folder's visibility are on.
+- **Indentation:** member cells are visually indented under the folder header (a thin colored left border or left margin) when the folder is expanded.
+- **No nesting:** Desmos does not support folders inside folders.
+- **Drag to reorganize:** cells can be dragged out of a folder back to the top level or into a different folder. The folder itself can be dragged to reorder it within the panel.
+
+### Comment Cells
+
+Desmos supports note/comment cells as a distinct cell type (separate from the expression evaluator). In Desmos 2D the cell type is `"text"`; in Desmos 3D it behaves the same way.
+
+**Behavior:**
+- Created by selecting "Note" from the `+` add menu, or in some versions by typing a `#` or `"` as the first character.
+- A comment cell is pure free text — it is never evaluated, never contributes to the namespace, and has no visibility toggle or color dot.
+- The cell wraps text and grows vertically as content is added.
+- Visually distinct from expression cells: typically italic, gray, or a lighter font weight.
+- Useful for labeling groups of expressions, documenting parameter choices, or leaving scratch notes.
+
+---
+
 ## What Desmos 3D Does Not Support
 
 These are gaps a Python clone could address:

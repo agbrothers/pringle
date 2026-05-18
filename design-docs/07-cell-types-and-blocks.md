@@ -167,11 +167,15 @@ z = where(x > 0, x**2, -x**2)
 
 ## Comment Cells
 
-A cell whose content is a bare string literal (Python docstring):
-```python
-"""This is a comment about the following equations."""
+A cell whose first character is `#` is treated as a comment cell — free text, never evaluated, no namespace contribution.
+
 ```
-Detected by the preprocessor: if the entire cell content is a single `ast.Constant` of type `str`, treat as a comment cell. No execution; no namespace contribution.
+# This is a note about the equations below.
+```
+
+**Detection and morphing:** in `_on_cell_changed`, if the cell source starts with `#`, the cell morphs to a `CommentCellWidget` in place (same pattern as scalar assignment → `SliderWidget`). If the `#` is removed from the start, it morphs back to a `CellWidget`.
+
+**Previous design (superseded):** an earlier version triggered on Python docstrings (`"""..."""`) detected via `ast.Constant`. This is replaced by the `#` trigger only. Single/double-quoted strings are treated as equation cell content (they evaluate as string literals), not as comments.
 
 ---
 

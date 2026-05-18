@@ -71,6 +71,69 @@ Abort trap: 6
 
 ---
 
+### BUG-015 — Visibility toggle triggers full namespace rebuild, causing random cells to re-sample
+**Status:** Open  
+**Logged:** 2026-05-18  
+**Related:** Shares root cause with BUG-006 (camera moves on visibility toggle)
+
+**Description:**  
+Toggling the eye icon on any equation cell causes every other equation cell to re-evaluate, including cells that call random functions. Any cell producing a random scatter, random surface, or any other stochastic output visibly re-samples — its geometry changes — even though the user only changed visibility on an unrelated cell.
+
+**Reproduction:**  
+1. Add an equation cell: `p = random.randn(200, 3)` (auto-renders as scatter).  
+2. Add any other equation cell, e.g. `z = sin(x)`.  
+3. Toggle the eye icon on `z = sin(x)`.  
+4. The scatter plot for `p` re-renders with a new random sample.
+
+**Root cause:**  
+`CellWidget._on_visibility_toggled` (`cell_widget.py:565–570`) updates `_visible`, then emits `content_changed`:
+
+```python
+def _on_visibility_toggled(self, checked: bool):
+    self._visible = checked
+    ...
+    self.content_changed.emit(self.cell_id)   # ← triggers full rebuild
+```
+
+`content_changed` is connected to `CellListWidget._on_cell_changed` (`cell_list.py:559`), which calls `_rebuild_namespace()`. `_rebuild_namespace` re-evaluates every equation cell in topological order (`cell_list.py:481`). Cells containing random calls (e.g. `random.randn(...)`) produce a new sample on every evaluation, so they re-render with different geometry.
+
+A visibility toggle requires no re-evaluation whatsoever. The existing result for the toggled cell is already cached — showing or hiding it is purely a renderer-side operation (send or withhold the cached result). Every other cell's result should be completely unaffected.
+
+This is the same misrouting as BUG-006: both are caused by visibility toggle incorrectly flowing through `content_changed` → `_on_cell_changed` → `_rebuild_namespace` rather than through a dedicated visibility-only path.
+
+**Fix:**  
+`CellWidget` should emit a dedicated `visibility_toggled` signal (as `DataCellWidget` already does) instead of reusing `content_changed`. `CellListWidget` handles it by re-applying only the toggled cell's cached result — no rebuild:
+
+```python
+# cell_widget.py — add signal
+visibility_toggled = pyqtSignal(str, bool)   # cell_id, is_visible
+
+def _on_visibility_toggled(self, checked: bool):
+    self._visible = checked
+    ...
+    self.visibility_toggled.emit(self.cell_id, checked)  # NOT content_changed
+```
+
+```python
+# cell_list.py — connect and handle (mirrors _on_data_cell_visibility_toggled)
+cell.visibility_toggled.connect(self._on_equation_cell_visibility_toggled)
+
+def _on_equation_cell_visibility_toggled(self, cell_id: str, is_visible: bool) -> None:
+    idx = self._index_of(cell_id)
+    if idx < 0:
+        return
+    cell = self._cells[idx]
+    last = getattr(cell, "_last_result", None)
+    if is_visible and last is not None:
+        self._on_cell_result(cell_id, last, cell.style)
+    else:
+        self._on_cell_result(cell_id, CellResult(), cell.style)
+```
+
+This requires equation cells to cache their last result in `_last_result` (as `DataCellWidget` already does) so it can be re-applied without re-evaluation.
+
+---
+
 ### BUG-014 — `RuntimeError: CallerHelper has been deleted` on app close
 **Status:** Open  
 **Logged:** 2026-05-18  

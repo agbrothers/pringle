@@ -10,6 +10,111 @@ See [14-backlog.md](14-backlog.md) for the bug backlog.
 
 
 
+### FEAT-028 — Folder cells with actual containment, indentation, and collapse
+**Status:** Open  
+**Logged:** 2026-05-18
+
+**Description:**  
+`FolderCellWidget` exists and renders a collapsible header banner, but it is a purely visual divider — it has no cell membership tracking, no indentation, and collapsing it does nothing to the cells below it. This feature makes folders functional: cells explicitly belong to a folder, expanding/collapsing the folder shows/hides its members, and members are visually indented.
+
+**What's already implemented (`folder_cell_widget.py`):**  
+- Header row with ▶/▼ toggle, editable name, rename (✏), delete (✕), drag handle.  
+- `set_collapsed(bool)` / `toggle()` — updates the arrow and hides/shows `_body`, which is currently always empty.  
+- Session serialization (`cell_to_dict` / `restore_cell_list`) handles `type: folder` in the YAML.  
+- `CellListWidget` skips `FolderCellWidget` during DAG evaluation.
+
+**What needs to be built:**
+
+1. **Explicit cell membership:** Each non-folder cell needs a `folder_id: str | None` field (default `None` = top level). `CellListWidget` maintains a `_folder_members(folder_id) → [cell_ids]` lookup. Session YAML adds a `folder_id` key to each cell dict. Positional inference (cells between folder banners belong to the one above) is simpler but breaks on drag-reorder; explicit IDs are the correct approach (matching Desmos's internal `folderId` field).
+
+2. **Collapse/expand hides member cells:** `FolderCellWidget.set_collapsed` emits a new `collapse_changed(cell_id, collapsed)` signal. `CellListWidget` handles it by calling `cell.setVisible(not collapsed)` on all member widgets. Cells continue to evaluate and render when their folder is collapsed — this is panel-only, not visibility in the renderer sense.
+
+3. **Visual indentation:** Member cells get a left margin (`setContentsMargins(indent, ...)`) or a left-border decoration when inside an open folder. `CellListWidget` applies/removes this margin when folder membership changes or when a cell is added to a folder.
+
+4. **Folder visibility eye icon:** Add an eye button to the folder header row. Toggling it calls `renderer.set_visible(cell_id, folder_visible and cell_visible)` for all members. This is additive — a cell renders only if both its own eye and its folder's eye are on. The folder eye state persists in the YAML.
+
+5. **Drag cells into/out of folders:** When a cell is dragged and dropped, the drop position determines folder membership. Dropping between two member cells assigns the dragged cell to that folder; dropping before the folder header or after the last member removes it from the folder. A visual "drop zone" highlight should indicate folder membership as the user drags.
+
+6. **No nesting:** Folders cannot contain other folders. If a folder is dragged inside another folder, it is placed at the top level adjacent to the target folder.
+
+**Desmos reference:** see `01-desmos-3d-overview.md` — Organization Features → Folders, updated 2026-05-18.
+
+---
+
+### FEAT-027 — Comment cells triggered by `#`
+**Status:** Open  
+**Logged:** 2026-05-18
+
+**Description:**  
+When a user types `#` as the first character in any cell, the cell automatically morphs into a comment cell — free text, never evaluated, no namespace contribution, no color dot, no eye icon. The cell wraps text and grows vertically as content is added. Removing the `#` from the start reverts it to a normal equation cell.
+
+**Design decision — trigger character:** `#` only. Single/double-quoted strings and `"""` docstrings are not triggers; they evaluate as Python string literals in equation cells. Design doc `07-cell-types-and-blocks.md` has been updated to reflect this.
+
+**Implementation:**
+
+- **`CommentCellWidget`**: a new thin widget class (similar in structure to `FolderCellWidget` — no evaluation, no sub-cells). Contains a `QPlainTextEdit` in word-wrap mode with auto-grow behavior, a drag handle, and a delete (✕) button. No color dot, no eye icon, no sub-cell (+) button.
+
+- **Auto-grow height:** connect `document().contentsChanged` to a slot that sets the widget height to `document().size().toSize().height() + vertical_margins`. `QPlainTextEdit` with `setVerticalScrollBarPolicy(ScrollBarAlwaysOff)` and `setSizePolicy(Expanding, Preferred)` is the standard Qt pattern for this.
+
+- **Auto-morph detection** (`cell_list.py` — `_on_cell_changed`): if the source of a `CellWidget` starts with `#`, replace it in `_cells` and the layout with a `CommentCellWidget`, preserving `cell_id` and position. The inverse: if a `CommentCellWidget`'s text no longer starts with `#`, replace it with a `CellWidget`.
+
+- **Appearance:** gray or muted styling to distinguish from active cells — e.g. slightly lighter background, italic or regular-weight text, no status indicator row. The `#` is stripped from the displayed text and shown as a small fixed `#` decoration on the left margin of the cell (similar to how the color dot occupies that position on equation cells), so the user's free text fills the edit area cleanly.
+
+- **Session format:** serialized as `type: comment` with a `source` field containing the full text (including the leading `#`). `restore_cell_list` reconstructs a `CommentCellWidget` for these entries.
+
+- **Limitations:** none significant. `QPlainTextEdit` handles multi-line text and word wrap natively. The auto-grow pattern is well-established in Qt. The morph/de-morph logic is the same as the existing slider morph and carries the same caveats (cell_id is preserved; undo history may need updating if undo is tracked at the cell level).
+
+**Desmos reference:** see `01-desmos-3d-overview.md` — Organization Features → Comment Cells, updated 2026-05-18.
+
+---
+
+### FEAT-026 — Drop shadow projected onto bottom plane of bounding box
+**Status:** Open  
+**Logged:** 2026-05-18
+
+**Description:**  
+Render a semi-transparent shadow of each plotted object projected straight down onto the `z_min` floor plane of the wireframe bounding box. The shadow would be a flat, dark silhouette that helps orient the user in 3D space and gives a sense of height above the floor.
+
+**Performance cost: essentially zero.** A straight-down orthographic shadow is just geometry — copy each object's vertex positions, clamp all Z coordinates to `z_min`, and render with a semi-transparent dark material. This adds geometry to the normal render pass but requires no extra GPU passes, no depth textures, and no shadow maps.
+
+**Why not use pygfx's built-in shadow maps?**  
+pygfx does support `cast_shadow` / `receive_shadow` on world objects and `DirectionalLight`, and the shadow pipeline covers Mesh, Line, and Points. However, shadow maps add a full extra render pass per frame per casting light — overhead that is unwarranted here since a straight-down projection is mathematically exact with the simpler technique.
+
+**Implementation:**  
+For each cell object in `_objects`, maintain a corresponding "shadow" object: a copy of the geometry with all Z values flattened to `z_min + ε` (tiny offset to avoid Z-fighting with the wireframe floor edge), rendered with a `MeshBasicMaterial` / `LineMaterial` / `PointsMaterial` in near-black at ~30–40% opacity:
+
+```python
+def _make_shadow(obj: gfx.WorldObject, z_floor: float) -> gfx.WorldObject | None:
+    geom = obj.geometry
+    if geom is None or geom.positions is None:
+        return None
+    pos = np.array(geom.positions.data, dtype=np.float32).copy()
+    pos[:, 2] = z_floor + 1e-3          # flatten + tiny Z offset
+    shadow_geom = gfx.Geometry(positions=pos, indices=geom.indices)
+    if isinstance(obj, gfx.Mesh):
+        mat = gfx.MeshBasicMaterial(color=(0, 0, 0, 0.35), side="both")
+        return gfx.Mesh(shadow_geom, mat)
+    elif isinstance(obj, gfx.Line):
+        mat = gfx.LineMaterial(color=(0, 0, 0, 0.35), thickness=obj.material.thickness)
+        return gfx.Line(shadow_geom, mat)
+    elif isinstance(obj, gfx.Points):
+        mat = gfx.PointsMaterial(color=(0, 0, 0, 0.35), size=obj.material.size)
+        return gfx.Points(shadow_geom, mat)
+    return None
+```
+
+Shadow objects are tracked in a parallel `_shadow_objects: dict[str, gfx.WorldObject]` dict in `PringleRenderer`, added/removed alongside their source objects in `add_object` and `remove_object`. They are also hidden when the source object is hidden (`set_visible`).
+
+**The `z_min` value needs to be kept in sync with the axis bounds.** When the user changes the Z min spinbox, all shadow objects should have their floor Z updated. This means either rebuilding shadow geometry on bounds change, or storing the floor plane as a uniform and doing the projection in a custom shader (more complex but avoids CPU geometry copies on every bounds change).
+
+**Excluded from bounding box calculations:** Shadow objects must be excluded from `get_data_bounding_box` (FEAT-019) and `fit_camera` so they don't inflate the scene bounds or affect camera fitting.
+
+**Toggle and opacity:** Add a "Shadow" checkbox to the axis/view settings panel alongside the existing Axes, Wireframe, and Crosshair toggles, with a companion opacity spinbox or slider (range 0.0–1.0, default ~0.35). The checkbox wires the same way as the other overlays — a `shadow_visibility_changed` signal on `ViewSettingsWidget` connected to a `set_shadow_visible` method on `PringleRenderer` that shows/hides all entries in `_shadow_objects`. The opacity control calls a `set_shadow_opacity` method that updates the alpha on each shadow material. Default visibility TBD (off by default seems reasonable given it adds visual noise for simple plots). Both values persist in the `view` YAML block introduced by FEAT-023.
+
+**Style consideration:** Shadow color should adapt for light vs. dark backgrounds (FEAT-024) — near-black on white, near-white on dark.
+
+---
+
 ### FEAT-025 — Save button and unsaved-changes indicator
 **Status:** Open  
 **Logged:** 2026-05-18
