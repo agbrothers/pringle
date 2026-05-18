@@ -349,9 +349,9 @@ class PringleRenderer:
         # Drop shadows — projected silhouettes at the z_min floor plane
         self._shadow_objects: dict[str, gfx.WorldObject] = {}
         self._shadow_visible: bool = False
-        self._shadow_opacity: float = 0.35
+        self._shadow_opacity: float = 0.5
         # Light color so shadows show against the default dark background
-        self._shadow_color: tuple[float, float, float] = (0.85, 0.85, 0.85)
+        self._shadow_color: tuple[float, float, float] = (0.15, 0.15, 0.15)
 
     def _pan_target(self, dx: float, dy: float, dz: float) -> None:
         """Translate the orbit target (and camera by the same delta) in world space."""
@@ -535,7 +535,7 @@ class PringleRenderer:
 
     def set_shadow_color_for_bg(self, light_bg: bool) -> None:
         """Switch shadow colour to contrast with the active background."""
-        self._shadow_color = (0.05, 0.05, 0.05) if light_bg else (0.85, 0.85, 0.85)
+        self._shadow_color = (0.8, 0.8, 0.8) if light_bg else (0.15, 0.15, 0.15)
         color = (*self._shadow_color, self._shadow_opacity)
         for shadow in self._shadow_objects.values():
             shadow.material.color = color

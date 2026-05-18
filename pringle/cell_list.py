@@ -92,11 +92,11 @@ class CellListWidget(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet("QScrollArea { background: #111111; border: none; }")
+        scroll.setStyleSheet("QScrollArea { background: #171717; border: none; }")
         outer.addWidget(scroll)
 
         self._container = QWidget()
-        self._container.setStyleSheet("background-color: #111111;")
+        self._container.setStyleSheet("background-color: #171717;")
         self._layout = QVBoxLayout(self._container)
         self._layout.setContentsMargins(0, 4, 0, 4)
         self._layout.setSpacing(0)

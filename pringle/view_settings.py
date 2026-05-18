@@ -141,7 +141,7 @@ class ViewSettingsWidget(QWidget):
         self._shadow_opacity_spin.setRange(0.0, 1.0)
         self._shadow_opacity_spin.setSingleStep(0.05)
         self._shadow_opacity_spin.setDecimals(2)
-        self._shadow_opacity_spin.setValue(0.35)
+        self._shadow_opacity_spin.setValue(0.5)
         self._shadow_opacity_spin.setFixedWidth(55)
         self._shadow_opacity_spin.valueChanged.connect(self.shadow_opacity_changed)
         shadow_row.addWidget(self._shadow_opacity_spin)
