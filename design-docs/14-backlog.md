@@ -1,28 +1,190 @@
-# Pringle — Bug & Feature Backlog
+# Pringle — Bug Backlog
 
-Items are logged here as they are identified. Each entry includes a description, reproduction steps or context, and a suggested fix or approach where known.
+Bugs are logged here as they are identified. Each entry includes a description, reproduction steps, root cause analysis, and suggested fixes where known.
+
+See [15-feature-backlog.md](15-feature-backlog.md) for the feature backlog.
 
 ---
 
-## Open Bugs
+## Open
 
-### BUG-006 — Camera moves when toggling cell visibility
+### BUG-009 — Hard crash (`Abort trap: 6`) when data cell produces NaN or Inf
 **Status:** Open  
-**Logged:** 2026-05-15
+**Logged:** 2026-05-16  
+**Severity:** Critical — process terminates, all unsaved work lost
 
 **Description:**  
-Toggling a cell's visibility (eye icon) back on causes the camera to rotate or shift slightly. Also observed when adding/removing expressions. The camera should be completely unaffected by visibility changes; only explicit user navigation (orbit, pan, zoom, WASD) should move it.
+When a recursive data cell produces NaN or Inf values (e.g. because a numerical integration diverges at a large time step), the app crashes hard with `Abort trap: 6`. The crash originates in `_fmt_scalar` in `evaluator.py`, which calls `int()` on a NaN float — an operation Python does not allow. The unhandled `ValueError` propagates all the way through the call stack and aborts the process.
 
 **Reproduction:**  
-Add `p = array([[0, 0, 0], [1, 1, 1]])`. Toggle visibility off, then back on. Camera rotates.
+1. Load `sessions/rossler.yml`.
+2. Change `dt` from `0.01` to `0.1` (via the slider spinbox or source edit).
+3. Press ▷ on the `path = np.zeros((k+1, 3))` data cell.
+4. App crashes immediately.
 
-**Root cause hypothesis:**  
-`fit_camera()` or `show_object()` is likely being called somewhere on the re-add code path for visibility toggle, which repositions the camera even though the cell already exists in the scene.
+**Full error trace:**
+```
+/Users/greysonbrothers/code/pringle/pringle/cell_list.py:345: RuntimeWarning: overflow encountered in cast
+  result.data = arr.astype(np.float32)
+Traceback (most recent call last):
+  File ".../cell_list.py", line 357, in _run_data_cell
+    self._rebuild_namespace()
+  File ".../cell_list.py", line 467, in _rebuild_namespace
+    result = self._eval_cell(cell, shared)
+  File ".../cell_list.py", line 493, in _eval_cell
+    result = run_cell(...)
+  File ".../evaluator.py", line 424, in run_cell
+    preview = _make_preview(local_ns.get(name))
+  File ".../evaluator.py", line 129, in _make_preview
+    parts = [_fmt_scalar(x) for x in val]
+  File ".../evaluator.py", line 117, in _fmt_scalar
+    return str(int(f)) if f == int(f) and abs(f) < 1e15 else f"{f:g}"
+ValueError: cannot convert float NaN to integer
+Abort trap: 6
+```
 
-**Fix:**  
-Visibility toggle should only swap material opacity or `world.visible` on the existing object — never call `fit_camera()` or `show_object()` from the visibility path.
+**Root cause — layered failure with three contributing factors:**
+
+1. **Numerical divergence** (`recurrence.py` / `execute_recurrence`): The Rössler attractor's forward Euler scheme is only stable for `dt ≲ 0.05` with the session's parameters (`a = 0.1, b = 0.1, c = 14`). At `dt = 0.1` with `k = 5000` steps, the integration diverges and the `path` array fills with float64 values that grow without bound.
+
+2. **float32 overflow** (`cell_list.py:345`): After `execute_recurrence` returns, `arr.astype(np.float32)` silently clamps out-of-range float64 values to `inf` (numpy emits a `RuntimeWarning` but execution continues). The resulting `path` array exported to `_data_cell_ns` and `_shared_ns` contains `inf` and, after subsequent arithmetic (e.g. `anim = path[time]` slicing an `inf` row), `NaN`.
+
+3. **`_fmt_scalar` crashes on non-finite floats** (`evaluator.py:117`): The preview system calls `_fmt_scalar` for each element of 1D arrays. The guard `f == int(f)` is evaluated before `int(f)` is called in the return expression — but Python short-circuits `if` conditions left-to-right, and `float('nan') == int(float('nan'))` itself raises `ValueError: cannot convert float NaN to integer`. The exception is caught nowhere in the stack, propagating through `_make_preview → run_cell → _eval_cell → _rebuild_namespace → _run_data_cell` until the process aborts.
+
+**Possible fixes:**
+
+- **Immediate / minimal fix** (`evaluator.py:117`): Guard `_fmt_scalar` against non-finite values before any integer conversion:
+  ```python
+  def _fmt_scalar(x) -> str:
+      f = float(x)
+      if not math.isfinite(f):
+          return str(f)          # yields "nan", "inf", "-inf"
+      return str(int(f)) if f == int(f) and abs(f) < 1e15 else f"{f:g}"
+  ```
+  Import `math` at the top of `evaluator.py`. This is a one-line fix that prevents the crash and renders non-finite values legibly in the preview.
+
+- **Defense in depth** (`evaluator.py` — `_make_preview` or the preview block in `run_cell`): Wrap the entire preview-generation block in `try/except Exception` so any unexpected formatting error degrades to `None` (no preview shown) rather than propagating. The preview is cosmetic — it should never crash the app.
+
+- **Surface overflow as a cell warning** (`cell_list.py:~345`): Detect the numpy overflow before it silently corrupts downstream state. Use `np.errstate` or `warnings.catch_warnings` around the `astype(np.float32)` call; if overflow is detected, set the cell status to a warning ("Overflow: values exceed float32 range — integration may have diverged") and optionally skip the `_rebuild_namespace` call. This gives the user actionable feedback.
+
+- **Longer-term**: Evaluate whether the float32 cast at `cell_list.py:345` is actually necessary for the render pipeline, or whether float64 arrays could be passed through to avoid lossy downcasting for large-valued simulations.
 
 ---
+
+### BUG-014 — `RuntimeError: CallerHelper has been deleted` on app close
+**Status:** Open  
+**Logged:** 2026-05-18  
+**Severity:** Low — app has already exited cleanly; error is printed to stderr only, no data loss
+
+**Description:**  
+Closing the application after a normal session (save → close) sometimes prints a `RuntimeError` traceback to stderr:
+
+```
+Exception ignored from cffi callback <function GPUBuffer.map_async.<locals>.buffer_map_callback ...>
+...
+RuntimeError: wrapped C/C++ object of type CallerHelper has been deleted
+```
+
+The error appears to be reproducible after toggling visibility controls (axes, crosshair) before closing, though the toggle operations themselves are likely incidental — any close after a rendered frame can trigger it (see root cause below).
+
+**Full trace:**
+```
+Exception ignored from cffi callback GPUBuffer.map_async.<locals>.buffer_map_callback:
+  wgpu/backends/wgpu_native/_api.py — buffer_map_callback
+    promise._wgpu_set_input(status)
+  wgpu/_async.py — _wgpu_set_input / _set_input / _set_pending_resolved
+    self._call_soon_threadsafe(self._resolve_callback)
+  rendercanvas/core/loop.py — call_soon_threadsafe
+    self._rc_call_soon_threadsafe(wrapper)
+  rendercanvas/qt.py — _rc_call_soon_threadsafe
+    self._caller.call.emit(callback)
+RuntimeError: wrapped C/C++ object of type CallerHelper has been deleted
+```
+
+**Root cause — shutdown ordering race between Qt object teardown and a pending GPU async callback:**
+
+rendercanvas uses a small Qt helper object (`CallerHelper`, `rendercanvas/qt.py:192`) to safely marshal callbacks from the GPU driver thread back to the Qt main thread. It works by emitting a Qt signal: `self._caller.call.emit(callback)`.
+
+The render pipeline initiates an async GPU buffer read (`map_async("READ_NOSYNC")`) every frame as part of texture presentation (`rendercanvas/contexts/wgpucontext.py:389`). This operation is asynchronous — the GPU driver calls back when it's done, from a background thread.
+
+When the app closes:
+1. Qt's `aboutToQuit` fires → rendercanvas `QtLoop.stop(force=True)` is called, stopping the event loop.
+2. Qt proceeds to destroy all `QObject`s, including `CallerHelper`.
+3. The pending `map_async` GPU callback from the last rendered frame fires from the wgpu-native background thread.
+4. The callback chain reaches `self._caller.call.emit(callback)` — but `_caller` (a `CallerHelper` `QObject`) has already been deleted by Qt.
+5. Shiboken (PyQt6's C++ binding layer) raises `RuntimeError: wrapped C/C++ object of type CallerHelper has been deleted`.
+
+The toggle operations before closing are **not the cause** — they just happen to be what the user did before closing. Any close sequence following a render will have this pending callback in flight.
+
+**Why it's "Exception ignored":** The error originates in a cffi callback registered with the wgpu-native C library. Python can't propagate exceptions out of cffi callbacks, so it prints the traceback and continues — hence "Exception ignored." The app has already exited cleanly by this point.
+
+**Possible fixes:**
+
+- **Flush pending GPU work in `closeEvent`** (simplest workaround, `app.py`): Override `closeEvent` on `PringleWindow` to call `QApplication.processEvents()` before the default close, giving any queued callbacks a chance to fire while `CallerHelper` is still alive:
+  ```python
+  def closeEvent(self, event: QCloseEvent) -> None:
+      QApplication.processEvents()   # drain pending GPU callbacks
+      super().closeEvent(event)
+  ```
+  This is a best-effort workaround and may not be reliable under all timing conditions.
+
+- **Upstream fix in rendercanvas**: The correct fix is for rendercanvas's `QtLoop` to either (a) cancel/discard the pending `map_async` awaitable when `stop(force=True)` is called, or (b) keep `CallerHelper` alive (via `QApplication.instance()` ownership) until all pending async callbacks have resolved. This warrants filing a bug report upstream against [rendercanvas](https://github.com/pygfx/rendercanvas).
+
+- **Suppress the noise**: Wrap the cffi callback path with a `try/except RuntimeError` inside rendercanvas. Since the error is already "ignored," this would simply silence the stderr output. Again an upstream fix, not something we can do from application code.
+
+---
+
+### BUG-013 — Camera locks and crosshair drifts when panning and rotating simultaneously
+**Status:** Open  
+**Logged:** 2026-05-17
+
+**Description:**  
+Holding a WASD pan key while dragging the mouse to orbit causes two visible problems: (1) the camera view freezes in place — WASD movement appears to have no effect — and (2) the crosshair continues drifting across the scene independently of the camera. When the mouse button is released and a pan key is pressed again, the camera jumps to an unexpected position.
+
+**Root cause:**  
+Two update paths write `camera.local.position` without coordination:
+
+- **WASD pan** (`_pan_target` in `renderer.py:305`): each `_tick` call reads `controller.target` and `camera.local.position`, adds a delta to both, and writes them back. This keeps the camera-to-target offset constant.
+
+- **Mouse orbit** (`gfx.OrbitController`, registered via `register_events`): while a mouse button is held and the user drags, the controller receives mouse-move events and recomputes `camera.local.position` from its internally cached spherical coordinates (elevation, azimuth, distance from target) that were captured at drag start. Every mouse-move event overwrites `camera.local.position` with a value derived from that internal state.
+
+When both are active simultaneously:
+1. `_pan_target` shifts `controller.target` successfully (the controller does not cache the target internally during drag — it reads it fresh).
+2. `_pan_target` also writes `camera.local.position`, but the next mouse-move event from the `OrbitController` immediately overwrites it using the stale spherical-coordinate cache. The camera appears frozen.
+3. Because `controller.target` is being shifted by `_pan_target` each tick, the crosshair (drawn at `controller.target` every frame in `render()`) moves — but the camera does not follow, causing visual decoupling.
+4. When the drag ends, the controller stops overwriting `camera.local.position`. The next keypress then applies movement relative to a `controller.target` that has already drifted by the accumulated WASD delta — producing a jump.
+
+**Can rotate and pan simultaneously be achieved?**  
+Not without modifying or replacing the `OrbitController`. Its spherical-coordinate cache is internal and inaccessible, so there is no way to inject a "shift the orbit origin mid-drag" operation without the controller immediately undoing it on the next mouse-move event. True simultaneous orbit+pan would require either subclassing `OrbitController` to expose its internal state or replacing it with a custom controller (larger refactor).
+
+**Possible fixes, in order of complexity:**
+
+- **Suppress WASD movement during mouse drag** (recommended short-term fix): Track mouse-button-held state by overriding `mousePressEvent` / `mouseReleaseEvent` on `PringleViewport` (the Qt canvas widget). In `_tick`, skip `_apply_movement` when a mouse button is held. This prevents both the camera lock (no conflicting writes) and the crosshair drift (target is not shifted during drag). WASD and orbit still work individually. The downside is no simultaneous pan+rotate, but the controls are at least predictable.
+
+  ```python
+  # PringleViewport
+  def mousePressEvent(self, event):
+      self._mouse_held = True
+      super().mousePressEvent(event)
+
+  def mouseReleaseEvent(self, event):
+      self._mouse_held = False
+      super().mouseReleaseEvent(event)
+
+  def _tick(self):
+      if self._held_keys and not self._mouse_held:
+          self._apply_movement()
+      self.request_draw()
+  ```
+
+- **Freeze crosshair only, don't fix drift** (cosmetic only): Skip the crosshair position update in `render()` when `_mouse_held` is True. The underlying target drift still occurs and the jump-on-release remains, but the visual decoupling is hidden. Not recommended on its own.
+
+- **Full simultaneous pan+rotate** (larger refactor): Replace `gfx.OrbitController` with a custom controller that handles both mouse orbit and keyboard pan in a single unified update loop with no internal caching. This is the video-game-style approach and gives the best UX, but is a significant change to the navigation architecture.
+
+---
+
+
+
 
 ### BUG-001 — Constraint edge clipping still jagged
 **Status:** Open  
@@ -46,13 +208,31 @@ Add a constrained surface, e.g. `z = x**2 - y**2` with constraint `x**2 + y**2 <
 
 ---
 
-## Open Features
+## Closed
 
-*(none — see Closed section below)*
+### BUG-006 — Camera moves when toggling cell visibility
+**Status:** Closed (fixed 2026-05-18)  
+**Description:** Toggling a cell's eye icon off removed its object from `renderer._objects`; toggling back on re-added it with a new `cell_id → is_new=True` check, triggering `fit_camera()`. Fixed by adding `_seen_cell_ids: set[str]` to `PringleViewport`: `add_object` only calls `fit_camera()` on a cell's first-ever render. A `forget_cell(cell_id)` method (wired to `CellListWidget.remove_cell` via the new `on_cell_deleted` callback) removes ids when cells are truly deleted, so genuinely new cells still auto-fit.
 
 ---
 
-## Closed
+### BUG-010 — Top view has inconsistent / erratic orbit behavior
+**Status:** Closed (fixed 2026-05-18)  
+**Description:** Camera at `(0, 0, 12)` placed the view direction exactly parallel to the orbit controller's up vector, causing a cross-product singularity (gimbal lock). Also, manually writing `cam.local.position` left the controller's internal spherical-coordinate cache stale. Fixed in `PringleViewport.set_camera_preset`: top preset shifted to `(0.001, 0, 12)` to avoid the singularity; `controller.target = (0, 0, 0)` added after every preset to re-sync the controller state.
+
+---
+
+### BUG-012 — Opacity and size style settings not persisted in session files
+**Status:** Closed (fixed 2026-05-18)  
+**Description:** `opacity`, `line_width`, and `point_size` were never written to the YAML style dict in `cell_to_dict`, so reloading a session silently reset them to defaults. Fixed by adding all three fields to the `cell_to_dict` style dict and reading them back in `restore_cell_list` with `get(..., default)` fallbacks for older files.
+
+---
+
+### BUG-011 — Data cells do not auto-run on session load
+**Status:** Closed (fixed 2026-05-18)  
+**Description:** Data cells were restored with source text but never executed, leaving the viewport empty until the user manually clicked ▷. Fixed in `app.py:_on_open` — after `restore_cell_list` returns, iterate over all `DataCellWidget` instances with non-empty source and call `_run_data_cell` on each.
+
+---
 
 ### BUG-008 — False "Undefined" warnings for function-definition cells
 **Status:** Closed (fixed 2026-05-16)  
@@ -75,73 +255,3 @@ Add a constrained surface, e.g. `z = x**2 - y**2` with constraint `x**2 + y**2 <
 ### BUG-003 — `KeyboardEvent` has no `.get()` attribute
 **Status:** Closed (fixed 2026-05-15, commit `41a40fe`)  
 **Fix:** Keyboard handling moved to Qt level; wgpu `_on_key` handler removed entirely.
-
----
-
-### FEAT-002 — Slider widget redesign
-**Status:** Closed (implemented 2026-05-16)  
-**Fix:** Complete 2-row layout redesign:
-- Row 1: `[color dot] [name] [value spinbox (stretch)] [✕]`
-- Row 2: `[▷ play] [min] [slider (stretch)] [max] · step [step]`
-- Up/down ticker buttons removed (`NoButtons`)
-- Smart decimal display — integers show without decimal point; trailing zeros stripped
-- Range auto-expand on creation (if initial value exceeds default max, range doubles)
-- Slider snaps to multiples of the step value when dragged
-
----
-
-### FEAT-001 — Axis visualization with toggle
-**Status:** Closed (implemented 2026-05-15, commit `41a40fe`)  
-**Fix:** Three `gfx.Line` objects (red=X, green=Y, blue=Z) added as permanent overlay scene objects; `set_axes_visible()` toggles them. Axis labels and tick marks deferred to v2.
-
----
-
-### FEAT-003 — Desmos-style wireframe bounding box
-**Status:** Closed (implemented 2026-05-15, commit `41a40fe`)  
-**Fix:** 12 `gfx.Line` objects tracing the box edges added as permanent overlay objects; `set_bbox_visible()` toggles them.
-
----
-
-### FEAT-004 — WASD pans orbit target in world space
-**Status:** Closed (implemented 2026-05-15, commit `98bcbdb`/`852a7e5`)  
-**Fix:** Continuous pan via Qt `keyPressEvent`/`keyReleaseEvent`; `event.accept()` suppresses macOS accent popover.
-
----
-
-### FEAT-005 — Orbit target crosshair indicator
-**Status:** Closed (implemented 2026-05-15, commit `98bcbdb`)  
-**Fix:** `gfx.Group` with three short axis lines, repositioned to `controller.target` every frame in `render()`. Toggled via "Crosshair" checkbox.
-
----
-
-### FEAT-006 — Unified cell list (data + equation cells in one panel)
-**Status:** Closed (implemented 2026-05-16)  
-**Description:** Merged equation panel and data panel into a single scrollable `CellListWidget`. Two add buttons — `+ Equation` and `+ Data cell` — replace the old single `+ Add expression`. Data cells are skipped during reactive evaluation (marked stale) and run on demand via their ▷ button. Data cell exports persist in `_data_cell_ns` and seed the equation namespace.
-
----
-
-### FEAT-007 — Inline value previews for equation cells
-**Status:** Closed (implemented 2026-05-16)  
-**Description:** Non-rendered cells now show small gray text below the cell body:
-- Scalar results (e.g. `value = sum(p)`) — value shown left-aligned
-- Non-rendered 1D arrays (e.g. `p = array([1,1,1])`) — elements shown left-aligned, truncated with `...` if too wide
-- Rendered arrays (surfaces, curves, scatter) — shape shown right-aligned, e.g. `(64, 64)`
-- Bare expressions (no assignment) — same preview rules apply, value captured via `eval`
-
----
-
-### FEAT-008 — Z bounds spinboxes in Axis Bounds panel
-**Status:** Closed (implemented 2026-05-16)  
-**Description:** The axis bounds loop only built X and Y rows; Z existed in `GridConfig` but had no UI. Added Z row. Session save/load now persists `z_min`/`z_max`. Loading a session restores the spinboxes and overlay bounds. `_on_bounds_changed` now takes 6 parameters.
-
----
-
-### FEAT-009 — Fix equalize axes to use Z span
-**Status:** Closed (implemented 2026-05-16)  
-**Description:** "Equalize Axes" previously used the scene bounding sphere radius. Now reads `z_min`/`z_max` from spinboxes, computes span, and sets x and y to `[−span/2, +span/2]` so all three axes have equal length.
-
----
-
-### FEAT-010 — Unified line/dot size control
-**Status:** Closed (implemented 2026-05-16)  
-**Description:** Style popover "Line width" renamed to "Size". The control now sets both `line_width` (curves) and `point_size` (scatter dots) to the same value. Range extended from 10 to 20.

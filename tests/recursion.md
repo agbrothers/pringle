@@ -1,7 +1,7 @@
 # ---------------------- Expressions ----------------------
 
 ### SURFACE TOGGLED OFF
-g(x,y) = a*x**2 + b*y**2
+g(x,y) = x**2 - y**2
    `visible: False`
 
 
@@ -32,7 +32,7 @@ T = arange(0, 10+step, step)
 
 ### PSUEDO RECURRENCE CAN BE IMPLEMENTED AS SUBCELLS TO A DATA CELL
 path = zeros((10, 2))
-   initial_condition: array(1, 0.1)  # <- Implicitly set path[0] 
+   initial_condition: array([1, 0.1])  # <- Implicitly set path[0] 
    recursion: path[n] = 2 * path[n-1]
    ### UNDER THE HOOD, THIS IS COPIED INTO A FOR LOOP LIKE 
    ### `[2 * path[n-1] for n in path[1:]]`
