@@ -244,6 +244,41 @@ class CellListWidget(QWidget):
         self._update_placeholder()
         return cell
 
+    def add_comment_cell(
+        self,
+        source: str = "#",
+        after_id: str | None = None,
+        style: CellStyle | None = None,
+    ):
+        """Add a comment/annotation cell (not evaluated)."""
+        from pringle.comment_cell_widget import CommentCellWidget
+        self._push_undo()
+        if style is None:
+            style = CellStyle()
+
+        cell = CommentCellWidget(source=source, style=style)
+        cell.delete_requested.connect(self._on_delete_requested)
+        cell.content_changed.connect(self._on_cell_changed)
+        cell.drag_started.connect(self._on_drag_started)
+        cell.drag_moved.connect(self._on_drag_moved)
+        cell.drag_ended.connect(self._on_drag_ended)
+
+        if after_id is not None:
+            idx = self._index_of(after_id)
+            if idx >= 0:
+                self._cells.insert(idx + 1, cell)
+                self._layout.insertWidget(idx + 1, cell)
+                cell.focus()
+                self._update_placeholder()
+                return cell
+
+        stretch_pos = self._layout.count() - 1
+        self._layout.insertWidget(stretch_pos, cell)
+        self._cells.append(cell)
+        cell.focus()
+        self._update_placeholder()
+        return cell
+
     def add_folder(
         self,
         name: str = "Group",
@@ -450,9 +485,13 @@ class CellListWidget(QWidget):
         """
         from pringle.dag import build_dag, topo_order, undefined_names
         from pringle.folder_cell_widget import FolderCellWidget
+        from pringle.comment_cell_widget import CommentCellWidget
 
         t0 = time.monotonic()
-        evaluable = [c for c in self._cells if not isinstance(c, FolderCellWidget)]
+        evaluable = [
+            c for c in self._cells
+            if not isinstance(c, (FolderCellWidget, CommentCellWidget))
+        ]
 
         dag = build_dag(evaluable)
         ordered_cells, cyclic_ids = topo_order(dag, evaluable)
@@ -557,8 +596,38 @@ class CellListWidget(QWidget):
             self._on_cell_result(cell_id, last, cell.style)
 
     def _on_cell_changed(self, cell_id: str) -> None:
+        self._maybe_morph_to_comment(cell_id)
         self._maybe_morph_to_slider(cell_id)
         self._rebuild_namespace()
+
+    def _maybe_morph_to_comment(self, cell_id: str) -> None:
+        """
+        If a plain CellWidget source now starts with '#', swap it for a
+        CommentCellWidget in-place, preserving cell_id and style.
+        """
+        from pringle.comment_cell_widget import CommentCellWidget
+        idx = self._index_of(cell_id)
+        if idx < 0:
+            return
+        cell = self._cells[idx]
+        if not isinstance(cell, CellWidget) or isinstance(cell, SliderWidget):
+            return
+
+        if not cell.source().startswith("#"):
+            return
+
+        source = cell.source()
+        style = cell.style
+        comment = CommentCellWidget(source=source, style=style, cell_id=cell_id)
+        comment.delete_requested.connect(self._on_delete_requested)
+        comment.content_changed.connect(self._on_cell_changed)
+        comment.drag_started.connect(self._on_drag_started)
+        comment.drag_moved.connect(self._on_drag_moved)
+        comment.drag_ended.connect(self._on_drag_ended)
+
+        self._layout.replaceWidget(cell, comment)
+        self._cells[idx] = comment
+        cell.deleteLater()
 
     def _maybe_morph_to_slider(self, cell_id: str) -> None:
         """
@@ -599,8 +668,12 @@ class CellListWidget(QWidget):
         """
         from pringle.dag import build_dag, downstream_of
         from pringle.folder_cell_widget import FolderCellWidget
+        from pringle.comment_cell_widget import CommentCellWidget
 
-        evaluable = [c for c in self._cells if not isinstance(c, FolderCellWidget)]
+        evaluable = [
+            c for c in self._cells
+            if not isinstance(c, (FolderCellWidget, CommentCellWidget))
+        ]
 
         if not self._shared_ns and evaluable:
             self._rebuild_namespace()

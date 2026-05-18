@@ -50,6 +50,7 @@ def cell_to_dict(cell) -> dict:
     from pringle.slider_widget import SliderWidget
     from pringle.data_cell_widget import DataCellWidget
     from pringle.folder_cell_widget import FolderCellWidget
+    from pringle.comment_cell_widget import CommentCellWidget
 
     base = {
         "id": cell.cell_id,
@@ -63,6 +64,11 @@ def cell_to_dict(cell) -> dict:
             "colormap_reversed":  cell.style.colormap_reversed,
         },
     }
+
+    if isinstance(cell, CommentCellWidget):
+        base["type"] = "comment"
+        base["source"] = cell.source()
+        return base
 
     if isinstance(cell, FolderCellWidget):
         base["type"] = "folder"
@@ -198,6 +204,13 @@ def restore_cell_list(
             colormap=style_data.get("colormap", None),
             colormap_reversed=bool(style_data.get("colormap_reversed", False)),
         )
+
+        if cell_type == "comment":
+            cell_list.add_comment_cell(
+                source=data.get("source", "#"),
+                style=style,
+            )
+            continue
 
         if cell_type == "folder":
             from pringle.folder_cell_widget import FolderCellWidget
