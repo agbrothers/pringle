@@ -6,6 +6,29 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-016 — Scene geometry occluded by circular near-clip artifact when zooming in
+**Status:** Closed (fixed 2026-05-18)  
+**Severity:** Medium — reproducible with any scene when the camera gets within ~1 world unit of geometry
+
+**Description:**  
+Zooming in close to any rendered object causes a circular clipping boundary to appear — geometry inside the boundary vanishes as if blocked by a "spherical collider" centered at the camera. The boundary is the perspective near-clipping plane intersecting the scene; from the viewer's perspective it looks curved/circular due to perspective distortion.
+
+**Reproduction:**  
+1. Open `sessions/hello.yml`.  
+2. Scroll-zoom into the surface until the camera is within ~1 unit of the geometry.  
+3. A circular occlusion boundary appears and grows as you zoom further in.
+
+**Root cause:**  
+`gfx.PerspectiveCamera(50)` (no `depth_range` argument) uses pygfx's default `near ≈ 1.07`. Any geometry within 1.07 world units of the camera position is clipped. For a scene with objects in a ±5 unit cube, zooming in to inspect fine detail quickly brings the camera inside the 1.07-unit exclusion zone.
+
+**Fix (`renderer.py:328`):** Pass explicit `depth_range` to the constructor:
+```python
+self._camera = gfx.PerspectiveCamera(50, depth_range=(0.01, 100_000))
+```
+`show_object` / `fit_camera` do not reset `depth_range`, so the value persists through camera resets. `near=0.01` allows the camera to approach within 1 cm of geometry before clipping, which is sufficient for all expected use cases.
+
+---
+
 ### BUG-006 — Camera moves when toggling cell visibility
 **Status:** Closed (fixed 2026-05-18)  
 **Description:** Toggling a cell's eye icon off removed its object from `renderer._objects`; toggling back on re-added it with a new `cell_id → is_new=True` check, triggering `fit_camera()`. Fixed by adding `_seen_cell_ids: set[str]` to `PringleViewport`: `add_object` only calls `fit_camera()` on a cell's first-ever render. A `forget_cell(cell_id)` method (wired to `CellListWidget.remove_cell` via the new `on_cell_deleted` callback) removes ids when cells are truly deleted, so genuinely new cells still auto-fit.

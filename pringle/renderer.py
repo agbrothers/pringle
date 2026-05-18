@@ -325,7 +325,7 @@ class PringleRenderer:
 
         # Camera — PerspectiveCamera with a sensible default position.
         # fit_camera() should be called after objects are added to reframe properly.
-        self._camera = gfx.PerspectiveCamera(50)
+        self._camera = gfx.PerspectiveCamera(50, depth_range=(0.01, 100_000))
         self._camera.local.position = (6, -8, 6)
         self._camera.look_at((0, 0, 0))
 
