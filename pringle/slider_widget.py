@@ -82,6 +82,7 @@ class SliderWidget(QWidget):
         self._max: float = max_val
         self._step: float = step if step is not None else max(0.001, (max_val - min_val) / 100.0)
         self._anim_dir: int = 1           # +1 or -1 for bounce
+        self._anim_mode: str = "pingpong"  # "pingpong" | "loop"
 
         self._build_ui()
 
@@ -151,9 +152,15 @@ class SliderWidget(QWidget):
         self._play_btn = QPushButton("▷")
         self._play_btn.setFixedSize(28, 24)
         self._play_btn.setCheckable(True)
-        self._play_btn.setToolTip("Animate (bounce)")
+        self._play_btn.setToolTip("Animate")
         self._play_btn.clicked.connect(self._on_play_toggled)
         row2.addWidget(self._play_btn)
+
+        self._mode_btn = QPushButton("↔")
+        self._mode_btn.setFixedSize(28, 24)
+        self._mode_btn.setToolTip("Ping-pong — click to switch to loop")
+        self._mode_btn.clicked.connect(self._on_mode_toggled)
+        row2.addWidget(self._mode_btn)
 
         self._min_box = _SpinBox()
         self._min_box.setRange(-1e6, 1e6)
@@ -286,6 +293,18 @@ class SliderWidget(QWidget):
         self._slider.setValue(self._float_to_int(self._value))
         self._slider.blockSignals(False)
 
+    def set_anim_mode(self, mode: str) -> None:
+        self._anim_mode = mode if mode in ("pingpong", "loop") else "pingpong"
+        if self._anim_mode == "loop":
+            self._mode_btn.setText("⟳")
+            self._mode_btn.setToolTip("Loop — click to switch to ping-pong")
+        else:
+            self._mode_btn.setText("↔")
+            self._mode_btn.setToolTip("Ping-pong — click to switch to loop")
+
+    def _on_mode_toggled(self):
+        self.set_anim_mode("loop" if self._anim_mode == "pingpong" else "pingpong")
+
     def _on_play_toggled(self, checked: bool):
         if checked:
             self._play_btn.setText("‖")
@@ -298,10 +317,16 @@ class SliderWidget(QWidget):
     def _anim_tick(self):
         step = self._step_box.value()
         new_val = self._value + self._anim_dir * step
-        if new_val >= self._max:
-            new_val = self._max
-            self._anim_dir = -1   # bounce
-        elif new_val <= self._min:
-            new_val = self._min
-            self._anim_dir = 1
+        if self._anim_mode == "loop":
+            if new_val > self._max:
+                new_val = self._min
+            elif new_val < self._min:
+                new_val = self._max
+        else:  # pingpong
+            if new_val >= self._max:
+                new_val = self._max
+                self._anim_dir = -1
+            elif new_val <= self._min:
+                new_val = self._min
+                self._anim_dir = 1
         self.set_value(new_val)
