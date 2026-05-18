@@ -26,6 +26,9 @@ def palette_color(index: int) -> tuple[float, float, float, float]:
     return PALETTE[index % len(PALETTE)]
 
 
+COLORMAPS: tuple[str, ...] = ("viridis", "plasma", "inferno", "hot", "hsv")
+
+
 @dataclass
 class CellStyle:
     color: tuple[float, float, float, float] = (0.22, 0.40, 0.88, 1.0)
@@ -36,6 +39,8 @@ class CellStyle:
     display_mode: str = "filled"      # "filled" | "wireframe" | "both"
     show_label: bool = True
     scatter_as_line: bool = False     # render (N,2)/(N,3) arrays as connected line
+    colormap: str | None = None       # None = uniform color; one of COLORMAPS for gradient
+    colormap_reversed: bool = False   # reverse colormap direction
 
     def color_hex(self) -> str:
         r, g, b, _ = self.color

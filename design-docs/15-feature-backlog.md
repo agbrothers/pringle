@@ -110,34 +110,26 @@ Support rendering 3D vector fields as arrow glyphs — a set of origin points ea
 
 ---
 
-### FEAT-013 — Conditional coloring and colormap support
-**Status:** Open  
-**Logged:** 2026-05-16
+### FEAT-013 — Colormap support
+**Status:** Closed  
+**Logged:** 2026-05-16  
+**Closed:** 2026-05-18
 
 **Description:**  
-Allow the color of a rendered object to be driven by a data-dependent mapping rather than a single uniform color. Three specific sub-goals:
-1. Apply a colormap to a surface by Z value.
-2. Color curve segments by segment index (position along the path).
-3. Color objects by a time-varying scalar (e.g. a slider variable).
+Apply named colormaps from matplotlib to surface, curve, and scatter render types. Colormaps are selected and reversed from the style popover and persisted in session files.
 
-**Tech stack assessment (pygfx / wgpu-py):**
+**Implementation:**
 
-All three material types used in the renderer (`MeshPhongMaterial`, `LineMaterial`, `PointsMaterial`) support `color_mode="vertex"` and accept a `colors` buffer on `gfx.Geometry`. This is the correct mechanism for all three sub-goals.
+- `pringle/style.py` — added `colormap: str | None` and `colormap_reversed: bool` fields to `CellStyle`; exported `COLORMAPS = ("viridis", "plasma", "inferno", "hot", "hsv")`.
+- `pringle/renderer.py` — added `_apply_colormap(values, cmap_name, reverse)` helper (uses `matplotlib.cm`). Updated `make_surface_mesh`, `make_line_mesh`, `make_scatter_mesh` to accept `colormap` and `colormap_reversed` kwargs.
+  - **Surfaces**: colormap normalized over the Z range of the final vertex positions (after constraint clipping); uses `MeshBasicMaterial(color_mode="vertex")` to avoid Phong-lighting darkening.
+  - **Lines / scatter**: colormap normalized over index range 0..N via `np.linspace(0, 1, N)`.
+- `pringle/style_popover.py` — added colormap section: row of 5 gradient swatch buttons (48×28 px, rendered via matplotlib) and a `⇄` reverse toggle. Clicking the active swatch deselects (returns to uniform color).
+- `pringle/app.py` — all seven mesh-builder call sites pass `colormap=style.colormap, colormap_reversed=style.colormap_reversed`.
+- `pringle/session.py` — `cell_to_dict` saves `colormap`/`colormap_reversed` in the style block; `restore_cell_list` reads them back.
 
-- **Z-value colormap on surfaces** — Feasible. For each vertex, normalize its Z coordinate into `[0, 1]` relative to `z_min`/`z_max`, sample a colormap at that value to get an RGBA, and write it into `geometry.colors`. Set `material.color_mode = "vertex"`.
-- **Curve coloring by segment index** — Feasible. `LineMaterial` supports `color_mode="vertex"`. Assign each vertex a color `colormap(i / N)`. Colors are linearly interpolated between adjacent vertices by the GPU, giving a smooth gradient along the path.
-- **Time-varying color** — Feasible but requires the color array to be recomputed on each slider update (not only on geometry rebuild). This hooks into the reactive update pipeline: when a slider that appears in the color expression changes, the per-vertex color buffer must be recomputed and re-uploaded. The mechanism exists (reactive eval already reruns cells on slider change) but the renderer currently only rebuilds geometry, not color buffers independently. A partial-update path (update colors without rebuilding the mesh) would be needed for performance.
-
-**Known limitation — lighting interaction:**  
-`MeshPhongMaterial` modulates vertex colors by the Phong lighting model, so colormap values toward black will appear very dark under typical scene lighting regardless of the actual data range. For faithful colormap display, either switch to `MeshBasicMaterial` (unlit) when a colormap is active, or expose a shininess/flatShading control to minimize the effect.
-
-**Known limitation — no built-in colormaps:**  
-pygfx does not ship named colormaps (viridis, plasma, etc.). Options:
-- Use `matplotlib.cm` to generate RGBA arrays — matplotlib is a common scientific dep and likely already present.
-- Implement a small set of colormaps (viridis, turbo, grayscale) directly in `style.py` as hardcoded LUTs for zero extra dependencies.
-
-**UX sketch:**  
-In the style popover, a "Color by" dropdown: `Uniform | Z value | Index | Expression`. Selecting a non-uniform mode reveals a colormap picker (named presets + min/max clamp controls). The expression mode allows a free-form scalar expression referencing cell variables.
+**Remaining sub-goals (not implemented):**
+- Time-varying color driven by a slider expression — needs a partial color-buffer update path independent of geometry rebuild.
 
 ---
 

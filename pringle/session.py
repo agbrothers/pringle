@@ -54,11 +54,13 @@ def cell_to_dict(cell) -> dict:
     base = {
         "id": cell.cell_id,
         "style": {
-            "color":           list(cell.style.color),
-            "opacity":         cell.style.opacity,
-            "line_width":      cell.style.line_width,
-            "point_size":      cell.style.point_size,
-            "scatter_as_line": cell.style.scatter_as_line,
+            "color":              list(cell.style.color),
+            "opacity":            cell.style.opacity,
+            "line_width":         cell.style.line_width,
+            "point_size":         cell.style.point_size,
+            "scatter_as_line":    cell.style.scatter_as_line,
+            "colormap":           cell.style.colormap,
+            "colormap_reversed":  cell.style.colormap_reversed,
         },
     }
 
@@ -192,6 +194,8 @@ def restore_cell_list(
             line_width=float(style_data.get("line_width", 0.05)),
             point_size=float(style_data.get("point_size", 0.1)),
             scatter_as_line=style_data.get("scatter_as_line", False),
+            colormap=style_data.get("colormap", None),
+            colormap_reversed=bool(style_data.get("colormap_reversed", False)),
         )
 
         if cell_type == "folder":

@@ -136,6 +136,22 @@ def _clip_mesh_to_mask(
     return out_pos, out_idx, out_nor
 
 
+def _apply_colormap(values: np.ndarray, cmap_name: str, reverse: bool = False) -> np.ndarray:
+    """Map scalar values to RGBA colors via matplotlib. Returns (N, 4) float32."""
+    import matplotlib
+    cmap = matplotlib.colormaps[cmap_name]
+    if reverse:
+        cmap = cmap.reversed()
+    v_min = float(np.nanmin(values))
+    v_max = float(np.nanmax(values))
+    if v_max - v_min < 1e-10:
+        norm = np.full(len(values), 0.5, dtype=np.float32)
+    else:
+        norm = ((values - v_min) / (v_max - v_min)).astype(np.float32)
+    np.clip(norm, 0.0, 1.0, out=norm)
+    return cmap(norm).astype(np.float32)
+
+
 def make_surface_mesh(
     x: np.ndarray,
     y: np.ndarray,
@@ -143,6 +159,8 @@ def make_surface_mesh(
     color: tuple = (0.2, 0.4, 0.9, 1.0),
     constraint_mask: np.ndarray | None = None,
     z_raw: np.ndarray | None = None,
+    colormap: str | None = None,
+    colormap_reversed: bool = False,
 ) -> gfx.Mesh:
     """
     Build a pygfx Mesh from a height-field surface.
@@ -176,13 +194,23 @@ def make_surface_mesh(
         positions = np.zeros((3, 3), dtype=np.float32)
         indices   = np.array([[0, 1, 2]], dtype=np.int32)
         normals   = np.zeros((3, 3), dtype=np.float32)
-        mat = gfx.MeshPhongMaterial(color=color, side="both")
+        if colormap is not None:
+            colors = np.zeros((3, 4), dtype=np.float32)
+            geo = gfx.Geometry(positions=positions, indices=indices, normals=normals, colors=colors)
+            mat = gfx.MeshBasicMaterial(color_mode="vertex", side="both")
+        else:
+            geo = gfx.Geometry(positions=positions, indices=indices, normals=normals)
+            mat = gfx.MeshPhongMaterial(color=color, side="both")
         mat.opacity = 0.0
-        geo = gfx.Geometry(positions=positions, indices=indices, normals=normals)
         return gfx.Mesh(geo, mat)
 
-    geo = gfx.Geometry(positions=positions, indices=indices, normals=normals)
-    mat = gfx.MeshPhongMaterial(color=color, side="both")
+    if colormap is not None:
+        colors = _apply_colormap(positions[:, 2], colormap, colormap_reversed)
+        geo = gfx.Geometry(positions=positions, indices=indices, normals=normals, colors=colors)
+        mat = gfx.MeshBasicMaterial(color_mode="vertex", side="both")
+    else:
+        geo = gfx.Geometry(positions=positions, indices=indices, normals=normals)
+        mat = gfx.MeshPhongMaterial(color=color, side="both")
     return gfx.Mesh(geo, mat)
 
 
@@ -190,6 +218,8 @@ def make_line_mesh(
     points: np.ndarray,
     color: tuple = (0.9, 0.4, 0.2, 1.0),
     thickness: float = 0.05,
+    colormap: str | None = None,
+    colormap_reversed: bool = False,
 ) -> gfx.Line:
     """
     Build a pygfx Line from an (N, 3) or (N, 2) array of points.
@@ -208,8 +238,14 @@ def make_line_mesh(
         mat.opacity = 0.0
         return gfx.Line(geo, mat)
 
-    geo = gfx.Geometry(positions=pts)
-    mat = gfx.LineMaterial(color=color, thickness=thickness, thickness_space="world")
+    if colormap is not None:
+        idx_vals = np.linspace(0.0, 1.0, len(pts), dtype=np.float32)
+        colors = _apply_colormap(idx_vals, colormap, colormap_reversed)
+        geo = gfx.Geometry(positions=pts, colors=colors)
+        mat = gfx.LineMaterial(color_mode="vertex", thickness=thickness, thickness_space="world")
+    else:
+        geo = gfx.Geometry(positions=pts)
+        mat = gfx.LineMaterial(color=color, thickness=thickness, thickness_space="world")
     return gfx.Line(geo, mat)
 
 
@@ -217,6 +253,8 @@ def make_scatter_mesh(
     points: np.ndarray,
     color: tuple = (0.9, 0.6, 0.1, 1.0),
     size: float = 0.1,
+    colormap: str | None = None,
+    colormap_reversed: bool = False,
 ) -> gfx.Points:
     """
     Build a pygfx Points object from an (N, 3) or (N, 2) array.
@@ -234,8 +272,14 @@ def make_scatter_mesh(
         mat.opacity = 0.0
         return gfx.Points(geo, mat)
 
-    geo = gfx.Geometry(positions=pts)
-    mat = gfx.PointsMaterial(color=color, size=size, size_space="world")
+    if colormap is not None:
+        idx_vals = np.linspace(0.0, 1.0, len(pts), dtype=np.float32)
+        colors = _apply_colormap(idx_vals, colormap, colormap_reversed)
+        geo = gfx.Geometry(positions=pts, colors=colors)
+        mat = gfx.PointsMaterial(color_mode="vertex", size=size, size_space="world")
+    else:
+        geo = gfx.Geometry(positions=pts)
+        mat = gfx.PointsMaterial(color=color, size=size, size_space="world")
     return gfx.Points(geo, mat)
 
 

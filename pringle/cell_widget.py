@@ -523,10 +523,23 @@ class CellWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _update_color_dot(self):
-        r, g, b, _ = self.style.color
-        hex_color = "#{:02x}{:02x}{:02x}".format(int(r*255), int(g*255), int(b*255))
+        if not self._visible:
+            bg = "#333333"
+        elif self.style.colormap:
+            import matplotlib
+            cmap = matplotlib.colormaps[self.style.colormap]
+            if self.style.colormap_reversed:
+                cmap = cmap.reversed()
+            stops = ", ".join(
+                f"stop:{i/5:.2f} #{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}"
+                for i, (r, g, b, _) in ((i, cmap(i / 5)) for i in range(6))
+            )
+            bg = f"qlineargradient(x1:0, y1:0, x2:1, y2:0, {stops})"
+        else:
+            r, g, b, _ = self.style.color
+            bg = "#{:02x}{:02x}{:02x}".format(int(r*255), int(g*255), int(b*255))
         self._color_dot.setStyleSheet(
-            f"QPushButton {{ background-color: {hex_color}; "
+            f"QPushButton {{ background: {bg}; "
             f"border-radius: 9px; border: 1px solid rgba(0,0,0,0.15); }}"
             f"QPushButton:hover {{ border: 1px solid rgba(0,0,0,0.35); }}"
         )
@@ -553,6 +566,7 @@ class CellWidget(QWidget):
         self._visible = checked
         opacity = "1.0" if checked else "0.4"
         self._text_edit.setStyleSheet(f"opacity: {opacity};")
+        self._update_color_dot()
         self.content_changed.emit(self.cell_id)  # re-render with new visibility
 
     def _on_color_dot_clicked(self):

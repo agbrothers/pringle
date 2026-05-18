@@ -7,14 +7,31 @@ edit hex color, opacity, and line width without opening a separate dialog.
 
 from __future__ import annotations
 
+import numpy as np
 from dataclasses import replace
 from PyQt6.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QLabel,
     QDoubleSpinBox, QLineEdit, QPushButton, QCheckBox,
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, QSize, pyqtSignal
+from PyQt6.QtGui import QImage, QPixmap, QIcon
 
-from pringle.style import CellStyle
+from pringle.style import CellStyle, COLORMAPS
+
+
+def _make_cmap_pixmap(cmap_name: str, width: int = 48, height: int = 28, reverse: bool = False) -> QPixmap:
+    """Render a colormap as a horizontal gradient QPixmap."""
+    import matplotlib
+    cmap = matplotlib.colormaps[cmap_name]
+    if reverse:
+        cmap = cmap.reversed()
+    x = np.linspace(0.0, 1.0, width, dtype=np.float64)
+    rgba = cmap(x)                              # (width, 4) float64
+    rgba_u8 = (rgba * 255).clip(0, 255).astype(np.uint8)
+    img_array = np.tile(rgba_u8[np.newaxis], (height, 1, 1))  # (height, width, 4)
+    buf = bytes(img_array.tobytes())
+    img = QImage(buf, width, height, width * 4, QImage.Format.Format_RGBA8888).copy()
+    return QPixmap.fromImage(img)
 
 
 class StylePopoverWidget(QFrame):
@@ -110,6 +127,50 @@ class StylePopoverWidget(QFrame):
             rm_row.addStretch()
             layout.addLayout(rm_row)
 
+        # --- Colormap section ---
+        cmap_label_row = QHBoxLayout()
+        cmap_label_row.addWidget(QLabel("Colormap:"))
+        cmap_label_row.addStretch()
+        layout.addLayout(cmap_label_row)
+
+        cmap_row = QHBoxLayout()
+        cmap_row.setSpacing(3)
+
+        _SWATCH_W, _SWATCH_H = 48, 28
+        _BTN_STYLE = (
+            "QPushButton { border: 2px solid transparent; border-radius: 2px; padding: 0px; }"
+            "QPushButton:checked { border: 2px solid #fff; }"
+        )
+        self._cmap_btns: dict[str, QPushButton] = {}
+        for cmap_name in COLORMAPS:
+            pix = _make_cmap_pixmap(cmap_name, _SWATCH_W, _SWATCH_H)
+            btn = QPushButton()
+            btn.setFixedSize(_SWATCH_W + 4, _SWATCH_H + 4)
+            btn.setIcon(QIcon(pix))
+            btn.setIconSize(QSize(_SWATCH_W, _SWATCH_H))
+            btn.setCheckable(True)
+            btn.setChecked(self._style.colormap == cmap_name)
+            btn.setToolTip(cmap_name)
+            btn.setStyleSheet(_BTN_STYLE)
+            btn.clicked.connect(lambda _checked, n=cmap_name: self._on_cmap_selected(n))
+            cmap_row.addWidget(btn)
+            self._cmap_btns[cmap_name] = btn
+
+        self._rev_btn = QPushButton("⇄")
+        self._rev_btn.setFixedSize(28, _SWATCH_H + 4)
+        self._rev_btn.setCheckable(True)
+        self._rev_btn.setChecked(self._style.colormap_reversed)
+        self._rev_btn.setToolTip("Reverse colormap")
+        self._rev_btn.setStyleSheet(
+            "QPushButton { color: #aaa; background: #2d2d2d; border: 1px solid #555;"
+            "              border-radius: 2px; font-size: 13px; }"
+            "QPushButton:checked { color: #fff; background: #3a5a8a; border-color: #4a7ab0; }"
+        )
+        self._rev_btn.toggled.connect(self._on_cmap_reversed)
+        cmap_row.addWidget(self._rev_btn)
+        cmap_row.addStretch()
+        layout.addLayout(cmap_row)
+
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
@@ -143,6 +204,20 @@ class StylePopoverWidget(QFrame):
 
     def _on_render_mode_changed(self, checked: bool):
         self._style = replace(self._style, scatter_as_line=checked)
+        self.style_changed.emit(self._style)
+
+    def _on_cmap_selected(self, name: str):
+        new_cmap = None if self._style.colormap == name else name
+        self._style = replace(self._style, colormap=new_cmap)
+        self._update_cmap_btn_states()
+        self.style_changed.emit(self._style)
+
+    def _update_cmap_btn_states(self):
+        for name, btn in self._cmap_btns.items():
+            btn.setChecked(self._style.colormap == name)
+
+    def _on_cmap_reversed(self, checked: bool):
+        self._style = replace(self._style, colormap_reversed=checked)
         self.style_changed.emit(self._style)
 
     def current_style(self) -> CellStyle:
