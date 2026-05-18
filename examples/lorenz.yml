@@ -1,0 +1,267 @@
+version: 1
+grid:
+  x_min: -50.0
+  x_max: 50.0
+  y_min: -50.0
+  y_max: 50.0
+  z_min: -25.0
+  z_max: 75.0
+  n: 64
+cells:
+- id: 7479d262-6099-472f-a794-a857dc8436d2
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: slider
+  source: k = 2000.0
+  name: k
+  value: 2000.0
+  min_val: 0.0
+  max_val: 5000.0
+  step: 1.0
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: 3881452b-dbe0-4ab7-b1b2-02eb74f9c709
+  style:
+    color:
+    - 0.85
+    - 0.55
+    - 0.05
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: slider
+  source: sigma = 10.0
+  name: sigma
+  value: 10.0
+  min_val: 0.0
+  max_val: 10.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: 71b6932e-7461-48aa-b581-144750b2d1f7
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: slider
+  source: rho = 28.0
+  name: rho
+  value: 28.0
+  min_val: 0.0
+  max_val: 56.0
+  step: 0.56
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: eac6b277-97c8-480b-9e31-063f50951010
+  style:
+    color:
+    - 0.1
+    - 0.65
+    - 0.75
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: slider
+  source: beta = 2.666666
+  name: beta
+  value: 2.666666
+  min_val: 0.0
+  max_val: 10.0
+  step: 10.0
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: e523d83c-da2c-4ffc-8904-5b347cac76f1
+  style:
+    color:
+    - 0.9
+    - 0.3
+    - 0.65
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: slider
+  source: dt = 0.01
+  name: dt
+  value: 0.01
+  min_val: 0.0
+  max_val: 0.1
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: 02ae8d58-c01c-4af5-a2b2-249bf8b680e1
+  style:
+    color:
+    - 0.5
+    - 0.35
+    - 0.2
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: equation
+  source: dx(pos) = sigma * (pos[1] - pos[0])
+  visible: false
+  sub_cells: []
+- id: 50f485a2-055d-434e-8517-ec3de0bbf56b
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: equation
+  source: dy(pos) = pos[0] * (rho - pos[2]) - pos[1]
+  visible: false
+  sub_cells: []
+- id: 5056ab06-0f75-43b2-9637-6386d43a2a60
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: equation
+  source: dz(pos) = pos[0] * pos[1] - beta * pos[2]
+  visible: false
+  sub_cells: []
+- id: e4b4cd4b-6f9f-49c5-bea7-bee14b48efdf
+  style:
+    color:
+    - 0.1
+    - 0.65
+    - 0.75
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: equation
+  source: dL(pos) = array([ dx(pos), dy(pos), dz(pos) ])
+  visible: false
+  sub_cells: []
+- id: 4bf4bf05-d4e0-497f-8fb4-6db8d8364ee7
+  style:
+    color:
+    - 0.85
+    - 0.55
+    - 0.05
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: true
+    colormap: null
+    colormap_reversed: false
+  type: data
+  source: path = np.zeros((k, 3))
+  visible: false
+  sub_cells:
+  - type: recursion
+    source: path[n] = path[n-1] + dt * dL(path[n-1])
+  - type: initial_condition
+    source: path[0] = array([1, 1, 1])
+- id: b1ed33be-a451-41cc-bbce-6ecef106f5d7
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: slider
+  source: time = 22.0
+  name: time
+  value: 22.0
+  min_val: 0.0
+  max_val: 2000.0
+  step: 1.0
+  is_playing: true
+  anim_mode: pingpong
+  sub_cells: []
+- id: 0abb946d-61d4-46a9-8b84-4561de990619
+  style:
+    color:
+    - 0.85
+    - 0.55
+    - 0.05
+    - 1.0
+    opacity: 1.0
+    line_width: 0.5
+    point_size: 0.5
+    scatter_as_line: true
+    colormap: inferno
+    colormap_reversed: false
+  type: equation
+  source: anim = path[:time]
+  visible: true
+  sub_cells: []
+view:
+  show_axes: false
+  show_bbox: true
+  show_crosshair: false
+  show_light_bg: false
+  camera_position:
+  - -143.63832682965744
+  - 31.37417895873329
+  - 88.04422685054608
+  orbit_target:
+  - 0.0
+  - 0.0
+  - 12.287846565246582

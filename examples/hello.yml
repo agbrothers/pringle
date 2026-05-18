@@ -1,0 +1,179 @@
+version: 1
+grid:
+  x_min: -5.0
+  x_max: 5.0
+  y_min: -5.0
+  y_max: 5.0
+  z_min: -5.0
+  z_max: 5.0
+  n: 256
+cells:
+- id: 0c7defd1-f665-46c7-a74e-98ebdc93457b
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: equation
+  source: z = sin(x) * a * cos(y)
+  visible: false
+  sub_cells: []
+- id: 50bd309c-cbc3-4be5-a5e6-6c100d22aa24
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: slider
+  source: a = 0.413
+  name: a
+  value: 0.413
+  min_val: 0.0
+  max_val: 1.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: 39282470-7021-4065-982a-4b04a8acd7be
+  style:
+    color:
+    - 0.2
+    - 0.7
+    - 0.3
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: equation
+  source: y=b*x
+  visible: false
+  sub_cells: []
+- id: 6b505f6a-305c-4a9b-8af5-cc1b90f4b306
+  style:
+    color:
+    - 0.85
+    - 0.55
+    - 0.05
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: equation
+  source: z = (a*(x-2))**2 - y**2 + c
+  visible: true
+  sub_cells:
+  - type: constraint
+    source: (x-2)**2+y**2 < 1
+- id: 4c864c68-f70b-4320-99c7-5865d0e5f316
+  style:
+    color:
+    - 0.9
+    - 0.3
+    - 0.65
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: slider
+  source: b = 1.0
+  name: b
+  value: 1.0
+  min_val: 0.0
+  max_val: 10.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: 07b13f7d-3a6a-4e8a-861e-e8fd125b6624
+  style:
+    color:
+    - 0.9
+    - 0.3
+    - 0.65
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: slider
+  source: c = 2.11
+  name: c
+  value: 2.11
+  min_val: 0.0
+  max_val: 10.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: ec265406-4abe-49a3-85a6-0f8805a9c559
+  style:
+    color:
+    - 0.2196078431372549
+    - 0.4
+    - 0.8784313725490196
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: equation
+  source: p = array([[0, 0, 0]])
+  visible: true
+  sub_cells: []
+- id: 2f246ff9-a1fd-425e-a5a0-146faeb23840
+  style:
+    color:
+    - 0.2
+    - 0.7
+    - 0.3
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: equation
+  source: p = array([[0, 0, 0], [1, 1, 1]])
+  visible: false
+  sub_cells: []
+view:
+  show_axes: true
+  show_bbox: true
+  show_crosshair: true
+  show_light_bg: false
+  camera_position:
+  - -6.476007153646483
+  - -9.97472944459754
+  - 4.385552080365246
+  orbit_target:
+  - 0.0
+  - 0.0
+  - 0.0

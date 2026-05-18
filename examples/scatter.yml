@@ -1,0 +1,171 @@
+version: 1
+grid:
+  x_min: -5.0
+  x_max: 5.0
+  y_min: -5.0
+  y_max: 5.0
+  z_min: -5.0
+  z_max: 5.0
+  n: 256
+cells:
+- id: 848a579c-39e5-4a48-b248-9f8ff51f0b6a
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: equation
+  source: g(x,y) = (0.65*x)**2 - (0.5*y)**2
+  visible: false
+  sub_cells: []
+- id: 95a6ab9d-200d-43b5-9e72-15fa7dcaefd5
+  style:
+    color:
+    - 0.2
+    - 0.7
+    - 0.3
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: equation
+  source: d = random.random(k) * 2 - 1
+  visible: true
+  sub_cells: []
+- id: 35b4cb39-52d0-472f-b515-53d0c76bc84c
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: slider
+  source: k = 760.0
+  name: k
+  value: 760.0
+  min_val: 100.0
+  max_val: 1000.0
+  step: 10.0
+  is_playing: true
+  anim_mode: pingpong
+  sub_cells: []
+- id: 3b5b2ae9-f11d-40da-bd88-8dba8ea8c8fd
+  style:
+    color:
+    - 0.1
+    - 0.65
+    - 0.75
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: equation
+  source: sine = r * sin(d*pi)
+  visible: true
+  sub_cells: []
+- id: ef2d03cf-8db7-4ad0-94b7-520939e7385c
+  style:
+    color:
+    - 0.9
+    - 0.3
+    - 0.65
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: equation
+  source: cosine = r * cos(d*pi)
+  visible: true
+  sub_cells: []
+- id: dede5f8f-254b-4a94-8406-e133aabf562b
+  style:
+    color:
+    - 0.85
+    - 0.55
+    - 0.05
+    - 1.0
+    opacity: 0.5
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: equation
+  source: circle = array((cosine, sine, g(cosine, sine))).T
+  visible: true
+  sub_cells: []
+- id: 858612d3-8003-4fab-b8b2-19a646d12b4c
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: slider
+  source: r = 4.8500000000000005
+  name: r
+  value: 4.8500000000000005
+  min_val: 0.0
+  max_val: 5.0
+  step: 0.05
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: b1452b39-72c3-42bc-9a2b-e7f1f24ab634
+  style:
+    color:
+    - 0.85
+    - 0.55
+    - 0.05
+    - 1.0
+    opacity: 0.5
+    line_width: 0.05
+    point_size: 0.1
+    scatter_as_line: false
+    colormap: null
+    colormap_reversed: false
+  type: equation
+  source: r = random.random(k) * 2 - 1
+  visible: false
+  sub_cells: []
+view:
+  show_axes: false
+  show_bbox: true
+  show_crosshair: false
+  show_light_bg: false
+  camera_position:
+  - -7.440648238228382
+  - 8.216094246743177
+  - 2.83650097452676
+  orbit_target:
+  - 0.0
+  - 0.0
+  - 0.0
