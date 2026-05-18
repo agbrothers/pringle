@@ -10,6 +10,44 @@ See [14-backlog.md](14-backlog.md) for the bug backlog.
 
 
 
+### FEAT-025 — Save button and unsaved-changes indicator
+**Status:** Open  
+**Logged:** 2026-05-18
+
+**Description:**  
+Add a visible save button and/or an unsaved-changes indicator to the UI. The app already tracks `_modified` and keyboard shortcuts (`Cmd+S` / `Ctrl+S`) work, but there is no on-screen affordance communicating save state or providing a click target for users who don't know the shortcut.
+
+**What's already in place (`app.py:324–335`):**  
+- `_modified: bool` is set on every cell/slider change and cleared on save.
+- `_update_title()` prepends `"* "` to the window title when modified — e.g. `"* pringle — rossler.yml"`.
+- `Cmd+S` / `Ctrl+S` (save) and `Cmd+Shift+S` / `Ctrl+Shift+S` (save-as) shortcuts are registered.
+
+**What's missing:**
+
+1. **Native macOS close-button dot:** Qt provides `QMainWindow.setWindowModified(bool)` and a `[*]` placeholder in `setWindowTitle`. When used together, Qt automatically shows the native dot inside the red traffic-light close button on macOS (and an asterisk in the title on other platforms). The current code uses a manual `"* "` prefix instead, so the macOS dot never appears. Fix: replace the manual prefix with the standard Qt mechanism:
+   ```python
+   # _update_title in app.py
+   self.setWindowTitle(f"pringle — {name}[*]")   # [*] is Qt's placeholder
+   self.setWindowModified(self._modified)          # drives the dot on macOS
+   ```
+
+2. **On-screen save button / indicator:** The window title `*` is easy to miss. An explicit UI element (location and style TBD — to be discussed) would make the save state more prominent. Options to consider:
+   - A small `●` dot or `Save` button in the top bar / toolbar area that is highlighted when `_modified` is True and grayed out when clean.
+   - A floppy-disk icon button (`💾` or a custom SVG) that triggers `_on_save` on click.
+   - A pill-shaped status label (e.g. `"Unsaved"` / `"Saved"`) styled similarly to how the cell status area works.
+   - A thin colored border or highlight on the left panel header when unsaved (minimal footprint, no extra button).
+
+**Cross-platform notes:**  
+- **macOS:** native dot on the red close button via `setWindowModified` (free once the `[*]` fix above is applied). No extra work needed for the title bar — macOS renders `[*]` as a bullet `•` before the filename automatically.
+- **Windows/Linux:** `setWindowModified` causes Qt to substitute `[*]` with `*` in the title. An explicit on-screen indicator matters more on these platforms since there's no native close-button equivalent.
+
+**Open questions (to discuss before implementing):**  
+- Where should the save button live? Top-left of the left panel? Inline in the menu/toolbar area? Inside the axis settings popup?
+- Should it be icon-only, text-only, or icon+text?
+- Should "Save" and "Save As…" both be surfaced, or just "Save"?
+
+---
+
 ### FEAT-017 — Dark vs light mode toggle
 **Status:** Open  
 **Logged:** 2026-05-16

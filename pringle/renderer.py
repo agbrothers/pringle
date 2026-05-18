@@ -276,7 +276,7 @@ class PringleRenderer:
         self._scene.add(sun)
 
         # Background
-        self._bg = gfx.Background(None, gfx.BackgroundMaterial((0.95, 0.95, 0.95)))
+        self._bg = gfx.Background(None, gfx.BackgroundMaterial((0.067, 0.067, 0.067, 1.0)))
         self._scene.add(self._bg)
 
         # Camera — PerspectiveCamera with a sensible default position.

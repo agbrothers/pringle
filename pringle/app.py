@@ -390,7 +390,7 @@ class PringleWindow(QMainWindow):
             self._view_settings._axes_cb.setChecked(view.get("show_axes", True))
             self._view_settings._bbox_cb.setChecked(view.get("show_bbox", True))
             self._view_settings._crosshair_cb.setChecked(view.get("show_crosshair", True))
-            self._view_settings._bg_cb.setChecked(view.get("show_light_bg", True))
+            self._view_settings._bg_cb.setChecked(view.get("show_light_bg", False))
             if "camera_position" in view and "orbit_target" in view:
                 cam = self._viewport._pr._camera
                 tgt = view["orbit_target"]

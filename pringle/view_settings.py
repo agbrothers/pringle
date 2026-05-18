@@ -119,7 +119,7 @@ class ViewSettingsWidget(QWidget):
         toggle_row.addWidget(self._crosshair_cb)
 
         self._bg_cb = QCheckBox("Light bg")
-        self._bg_cb.setChecked(True)
+        self._bg_cb.setChecked(False)
         self._bg_cb.toggled.connect(self.background_changed)
         toggle_row.addWidget(self._bg_cb)
 

@@ -6,7 +6,7 @@ They are skipped automatically if the GPU / wgpu context is unavailable.
 
 The key invariant: after evaluating an expression and adding the resulting
 mesh to the renderer, the captured frame must contain non-background pixels.
-Background is (0.95, 0.95, 0.95) ≈ rgb(242, 242, 242).  Any pixel that
+Background is (0.067, 0.067, 0.067) ≈ rgb(17, 17, 17).  Any pixel that
 differs by more than 10 counts in any channel is counted as "surface pixel".
 
 Tests
@@ -43,7 +43,7 @@ pytestmark = pytest.mark.skipif(
 # Helpers
 # ---------------------------------------------------------------------------
 
-_BG_RGB = np.array([int(0.95 * 255)] * 3, dtype=np.int32)  # ≈ [242, 242, 242]
+_BG_RGB = np.array([int(0.067 * 255)] * 3, dtype=np.int32)  # ≈ [17, 17, 17]
 
 
 def _non_bg_pixel_count(frame: np.ndarray, threshold: int = 10) -> int:
@@ -368,7 +368,7 @@ class TestConstraintBoundaryClipping:
         def boundary_pixels(frame, threshold=10):
             """Count pixels that neighbor a background pixel."""
             rgb = frame[:, :, :3].astype(np.int32)
-            bg = np.array([int(0.95 * 255)] * 3)
+            bg = np.array([int(0.067 * 255)] * 3)
             is_bg = (np.abs(rgb - bg).max(axis=2) <= threshold)
             is_surface = ~is_bg
             # erode surface: find surface pixels with any bg neighbor
