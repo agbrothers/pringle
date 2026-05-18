@@ -498,7 +498,7 @@ class PringleWindow(QMainWindow):
 
         if result.render_type == "surface":
             mesh = make_surface_mesh(
-                result.x, result.y, result.data, color=style.color,
+                result.x, result.y, result.data, color=style.color, opacity=style.opacity,
                 constraint_mask=result.constraint_mask,
                 z_raw=result.data_unmasked,
                 colormap=cmap, colormap_reversed=cmap_rev,
@@ -508,7 +508,7 @@ class PringleWindow(QMainWindow):
         elif result.render_type == "surface_y":
             # y = f(x,y) assigned a 2D array — render as a height surface
             mesh = make_surface_mesh(
-                self._grid.x, self._grid.y, result.data, color=style.color,
+                self._grid.x, self._grid.y, result.data, color=style.color, opacity=style.opacity,
                 colormap=cmap, colormap_reversed=cmap_rev,
             )
             vp.add_object(cell_id, mesh)
@@ -519,7 +519,8 @@ class PringleWindow(QMainWindow):
                 result.data,
                 np.zeros(len(result.data), dtype=np.float32),
             ])
-            line = make_line_mesh(pts, color=style.color, thickness=style.line_width,
+            line = make_line_mesh(pts, color=style.color, opacity=style.opacity,
+                                  thickness=style.line_width,
                                   colormap=cmap, colormap_reversed=cmap_rev)
             vp.add_object(cell_id, line)
 
@@ -529,14 +530,16 @@ class PringleWindow(QMainWindow):
                 self._grid.y1d,
                 np.zeros(len(result.data), dtype=np.float32),
             ])
-            line = make_line_mesh(pts, color=style.color, thickness=style.line_width,
+            line = make_line_mesh(pts, color=style.color, opacity=style.opacity,
+                                  thickness=style.line_width,
                                   colormap=cmap, colormap_reversed=cmap_rev)
             vp.add_object(cell_id, line)
 
         elif result.render_type == "parametric":
             pts = np.asarray(result.data, dtype=np.float32)
             if pts.ndim == 2 and pts.shape[1] in (2, 3):
-                scatter = make_scatter_mesh(pts, color=style.color, size=style.point_size,
+                scatter = make_scatter_mesh(pts, color=style.color, opacity=style.opacity,
+                                            size=style.point_size,
                                             colormap=cmap, colormap_reversed=cmap_rev)
                 vp.add_object(cell_id, scatter)
             else:
@@ -544,11 +547,13 @@ class PringleWindow(QMainWindow):
 
         elif result.render_type in ("scatter", "scatter_2d"):
             if style.scatter_as_line:
-                line = make_line_mesh(result.data, color=style.color, thickness=style.line_width,
+                line = make_line_mesh(result.data, color=style.color, opacity=style.opacity,
+                                      thickness=style.line_width,
                                       colormap=cmap, colormap_reversed=cmap_rev)
                 vp.add_object(cell_id, line)
             else:
-                scatter = make_scatter_mesh(result.data, color=style.color, size=style.point_size,
+                scatter = make_scatter_mesh(result.data, color=style.color, opacity=style.opacity,
+                                            size=style.point_size,
                                             colormap=cmap, colormap_reversed=cmap_rev)
                 vp.add_object(cell_id, scatter)
 

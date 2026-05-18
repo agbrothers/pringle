@@ -157,6 +157,7 @@ def make_surface_mesh(
     y: np.ndarray,
     z: np.ndarray,
     color: tuple = (0.2, 0.4, 0.9, 1.0),
+    opacity: float = 1.0,
     constraint_mask: np.ndarray | None = None,
     z_raw: np.ndarray | None = None,
     colormap: str | None = None,
@@ -211,12 +212,16 @@ def make_surface_mesh(
     else:
         geo = gfx.Geometry(positions=positions, indices=indices, normals=normals)
         mat = gfx.MeshPhongMaterial(color=color, side="both")
+    if opacity < 1.0:
+        mat.opacity = opacity
+        mat.alpha_mode = "blend"
     return gfx.Mesh(geo, mat)
 
 
 def make_line_mesh(
     points: np.ndarray,
     color: tuple = (0.9, 0.4, 0.2, 1.0),
+    opacity: float = 1.0,
     thickness: float = 0.05,
     colormap: str | None = None,
     colormap_reversed: bool = False,
@@ -246,12 +251,16 @@ def make_line_mesh(
     else:
         geo = gfx.Geometry(positions=pts)
         mat = gfx.LineMaterial(color=color, thickness=thickness, thickness_space="world")
+    if opacity < 1.0:
+        mat.opacity = opacity
+        mat.alpha_mode = "blend"
     return gfx.Line(geo, mat)
 
 
 def make_scatter_mesh(
     points: np.ndarray,
     color: tuple = (0.9, 0.6, 0.1, 1.0),
+    opacity: float = 1.0,
     size: float = 0.1,
     colormap: str | None = None,
     colormap_reversed: bool = False,
@@ -280,6 +289,9 @@ def make_scatter_mesh(
     else:
         geo = gfx.Geometry(positions=pts)
         mat = gfx.PointsMaterial(color=color, size=size, size_space="world")
+    if opacity < 1.0:
+        mat.opacity = opacity
+        mat.alpha_mode = "blend"
     return gfx.Points(geo, mat)
 
 
