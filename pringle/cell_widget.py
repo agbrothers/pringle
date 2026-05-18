@@ -557,7 +557,7 @@ class CellWidget(QWidget):
 
     def _on_color_dot_clicked(self):
         from pringle.style_popover import StylePopoverWidget
-        popover = StylePopoverWidget(self.style, parent=self)
+        popover = StylePopoverWidget(self.style, parent=self, show_render_mode=self._data_mode)
         popover.style_changed.connect(self._on_style_changed)
         pos = self._color_dot.mapToGlobal(self._color_dot.rect().bottomLeft())
         popover.move(pos)

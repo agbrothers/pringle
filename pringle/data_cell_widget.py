@@ -27,12 +27,13 @@ from pringle.style import CellStyle
 class DataCellWidget(QWidget):
     """A single data panel cell."""
 
-    run_requested = pyqtSignal(str)          # cell_id
-    delete_requested = pyqtSignal(str)       # cell_id
-    visibility_toggled = pyqtSignal(str, bool)  # cell_id, is_visible
-    drag_started = pyqtSignal(str)           # cell_id
-    drag_moved = pyqtSignal(str, int)        # cell_id, global_y
-    drag_ended = pyqtSignal(str)             # cell_id
+    run_requested = pyqtSignal(str)              # cell_id
+    delete_requested = pyqtSignal(str)           # cell_id
+    visibility_toggled = pyqtSignal(str, bool)   # cell_id, is_visible
+    render_mode_changed = pyqtSignal(str)        # cell_id — scatter_as_line toggled
+    drag_started = pyqtSignal(str)               # cell_id
+    drag_moved = pyqtSignal(str, int)            # cell_id, global_y
+    drag_ended = pyqtSignal(str)                 # cell_id
 
     _STATUS_STYLES = {
         "idle":  "color: #bbb;",
@@ -218,7 +219,7 @@ class DataCellWidget(QWidget):
 
     def _on_color_dot_clicked(self) -> None:
         from pringle.style_popover import StylePopoverWidget
-        popover = StylePopoverWidget(self.style, parent=self)
+        popover = StylePopoverWidget(self.style, parent=self, show_render_mode=True)
         popover.style_changed.connect(self._on_style_changed)
         pos = self._color_dot.mapToGlobal(self._color_dot.rect().bottomLeft())
         popover.move(pos)
@@ -226,8 +227,11 @@ class DataCellWidget(QWidget):
 
     def _on_style_changed(self, new_style) -> None:
         from dataclasses import replace
+        old_scatter_as_line = self.style.scatter_as_line
         self.style = replace(new_style)
         self._update_color_dot()
+        if new_style.scatter_as_line != old_scatter_as_line and self._last_result is not None:
+            self.render_mode_changed.emit(self.cell_id)
 
     def _on_visibility_toggled(self, checked: bool) -> None:
         self._visible = checked

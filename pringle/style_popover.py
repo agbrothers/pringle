@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import replace
 from PyQt6.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QLabel,
-    QDoubleSpinBox, QLineEdit, QPushButton,
+    QDoubleSpinBox, QLineEdit, QPushButton, QCheckBox,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
@@ -27,9 +27,10 @@ class StylePopoverWidget(QFrame):
 
     style_changed = pyqtSignal(object)  # CellStyle
 
-    def __init__(self, style: CellStyle, parent=None):
+    def __init__(self, style: CellStyle, parent=None, show_render_mode: bool = False):
         super().__init__(parent)
         self._style = replace(style)  # work on a copy
+        self._show_render_mode = show_render_mode
         self.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
         self.setFrameShape(QFrame.Shape.Box)
         self.setLineWidth(1)
@@ -87,15 +88,27 @@ class StylePopoverWidget(QFrame):
         lw_row = QHBoxLayout()
         lw_row.addWidget(QLabel("Size:"))
         self._lw_spin = QDoubleSpinBox()
-        self._lw_spin.setRange(0.5, 20.0)
-        self._lw_spin.setSingleStep(0.5)
-        self._lw_spin.setDecimals(1)
+        self._lw_spin.setRange(0.005, 2.0)
+        self._lw_spin.setSingleStep(0.005)
+        self._lw_spin.setDecimals(3)
         self._lw_spin.setValue(self._style.line_width)
         self._lw_spin.setFixedWidth(72)
         self._lw_spin.valueChanged.connect(self._on_lw_changed)
         lw_row.addWidget(self._lw_spin)
         lw_row.addStretch()
         layout.addLayout(lw_row)
+
+        # --- Render mode row (scatter vs line) — only for data-array cells ---
+        if self._show_render_mode:
+            rm_row = QHBoxLayout()
+            rm_row.addWidget(QLabel("Render:"))
+            self._line_check = QCheckBox("Line")
+            self._line_check.setChecked(self._style.scatter_as_line)
+            self._line_check.setStyleSheet("QCheckBox { color: #ccc; font-size: 12px; }")
+            self._line_check.toggled.connect(self._on_render_mode_changed)
+            rm_row.addWidget(self._line_check)
+            rm_row.addStretch()
+            layout.addLayout(rm_row)
 
     # ------------------------------------------------------------------
     # Internal
@@ -126,6 +139,10 @@ class StylePopoverWidget(QFrame):
 
     def _on_lw_changed(self, v: float):
         self._style = replace(self._style, line_width=v, point_size=v)
+        self.style_changed.emit(self._style)
+
+    def _on_render_mode_changed(self, checked: bool):
+        self._style = replace(self._style, scatter_as_line=checked)
         self.style_changed.emit(self._style)
 
     def current_style(self) -> CellStyle:

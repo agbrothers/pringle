@@ -30,11 +30,12 @@ def palette_color(index: int) -> tuple[float, float, float, float]:
 class CellStyle:
     color: tuple[float, float, float, float] = (0.22, 0.40, 0.88, 1.0)
     opacity: float = 1.0
-    line_width: float = 2.0
-    point_size: float = 6.0
+    line_width: float = 0.05   # world units (~2–3 px at default view distance)
+    point_size: float = 0.1    # world units (~5 px at default view distance)
     line_style: str = "solid"         # "solid" | "dashed" | "dotted"
     display_mode: str = "filled"      # "filled" | "wireframe" | "both"
     show_label: bool = True
+    scatter_as_line: bool = False     # render (N,2)/(N,3) arrays as connected line
 
     def color_hex(self) -> str:
         r, g, b, _ = self.color
