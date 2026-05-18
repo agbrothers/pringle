@@ -9,6 +9,7 @@ See [14-backlog.md](14-backlog.md) for the bug backlog.
 ## Open
 
 
+
 ### FEAT-017 — Dark vs light mode toggle
 **Status:** Open  
 **Logged:** 2026-05-16
@@ -215,6 +216,12 @@ if m:
 - Non-rendered 1D arrays (e.g. `p = array([1,1,1])`) — elements shown left-aligned, truncated with `...` if too wide
 - Rendered arrays (surfaces, curves, scatter) — shape shown right-aligned, e.g. `(64, 64)`
 - Bare expressions (no assignment) — same preview rules apply, value captured via `eval`
+
+---
+
+### FEAT-024 — Viewport background color toggle (dark / light)
+**Status:** Closed (implemented 2026-05-18)  
+**Fix:** `PringleRenderer` now stores `self._bg` and exposes `set_background_color(color)` which replaces the `BackgroundMaterial`. A "Light bg" checkbox added to the toggle row in `ViewSettingsWidget` emits `background_changed(bool)`; `app.py` maps this to `_LIGHT_BG` (0.95, 0.95, 0.95) or `_DARK_BG` (0.067, 0.067, 0.067). `show_light_bg` is persisted in the session `view` block alongside the other overlay states.
 
 ---
 

@@ -276,8 +276,8 @@ class PringleRenderer:
         self._scene.add(sun)
 
         # Background
-        bg = gfx.Background(None, gfx.BackgroundMaterial((0.95, 0.95, 0.95)))
-        self._scene.add(bg)
+        self._bg = gfx.Background(None, gfx.BackgroundMaterial((0.95, 0.95, 0.95)))
+        self._scene.add(self._bg)
 
         # Camera — PerspectiveCamera with a sensible default position.
         # fit_camera() should be called after objects are added to reframe properly.
@@ -427,6 +427,9 @@ class PringleRenderer:
     def set_visible(self, cell_id: str, visible: bool) -> None:
         if cell_id in self._objects:
             self._objects[cell_id].visible = visible
+
+    def set_background_color(self, color: tuple) -> None:
+        self._bg.material = gfx.BackgroundMaterial(color)
 
     def fit_camera(self) -> None:
         bsphere = self._scene.get_world_bounding_sphere()

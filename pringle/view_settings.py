@@ -34,6 +34,7 @@ class ViewSettingsWidget(QWidget):
     crosshair_visibility_changed = pyqtSignal(bool)
     equalize_requested = pyqtSignal()
     fit_requested = pyqtSignal()          # fit all axis bounds to rendered data
+    background_changed = pyqtSignal(bool) # True = light, False = dark
 
     def __init__(self, config: GridConfig | None = None, parent=None):
         super().__init__(parent)
@@ -115,6 +116,12 @@ class ViewSettingsWidget(QWidget):
         self._crosshair_cb.setChecked(True)
         self._crosshair_cb.toggled.connect(self.crosshair_visibility_changed)
         toggle_row.addWidget(self._crosshair_cb)
+
+        self._bg_cb = QCheckBox("Light bg")
+        self._bg_cb.setChecked(True)
+        self._bg_cb.toggled.connect(self.background_changed)
+        toggle_row.addWidget(self._bg_cb)
+
         toggle_row.addStretch(1)
         bl.addLayout(toggle_row)
 

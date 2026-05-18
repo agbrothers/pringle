@@ -264,6 +264,7 @@ class PringleWindow(QMainWindow):
         self._view_settings.crosshair_visibility_changed.connect(
             self._viewport.renderer.set_crosshair_visible
         )
+        self._view_settings.background_changed.connect(self._on_background_changed)
         self._view_settings.equalize_requested.connect(self._on_equalize)
         self._view_settings.fit_requested.connect(self._on_fit_to_data)
 
@@ -389,6 +390,7 @@ class PringleWindow(QMainWindow):
             self._view_settings._axes_cb.setChecked(view.get("show_axes", True))
             self._view_settings._bbox_cb.setChecked(view.get("show_bbox", True))
             self._view_settings._crosshair_cb.setChecked(view.get("show_crosshair", True))
+            self._view_settings._bg_cb.setChecked(view.get("show_light_bg", True))
             if "camera_position" in view and "orbit_target" in view:
                 cam = self._viewport._pr._camera
                 tgt = view["orbit_target"]
@@ -454,6 +456,7 @@ class PringleWindow(QMainWindow):
             "show_axes":       self._view_settings._axes_cb.isChecked(),
             "show_bbox":       self._view_settings._bbox_cb.isChecked(),
             "show_crosshair":  self._view_settings._crosshair_cb.isChecked(),
+            "show_light_bg":   self._view_settings._bg_cb.isChecked(),
             "camera_position": [float(cam_pos[0]), float(cam_pos[1]), float(cam_pos[2])],
             "orbit_target":    [float(tgt[0]),     float(tgt[1]),     float(tgt[2])],
         }
@@ -564,6 +567,14 @@ class PringleWindow(QMainWindow):
             self._settings_dialog.raise_()
         else:
             self._settings_dialog.hide()
+
+    _LIGHT_BG = (0.95, 0.95, 0.95, 1.0)
+    _DARK_BG  = (0.067, 0.067, 0.067, 1.0)
+
+    def _on_background_changed(self, light: bool) -> None:
+        self._viewport.renderer.set_background_color(
+            self._LIGHT_BG if light else self._DARK_BG
+        )
 
     def _on_equalize(self) -> None:
         """Set x/y span equal to the current z span, centered at zero."""
