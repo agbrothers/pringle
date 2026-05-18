@@ -8,21 +8,22 @@ grid:
   x_min: float  x_max: float  y_min: float  y_max: float  n: int
 cells:
   - id: str
-    type: equation | slider | data
+    type: equation | slider | data | comment | folder
     source: str
+    folder_id: str | null     # which folder this cell belongs to
     style:
       color: [r, g, b, a]
-    visible: bool          # equation cells
-    value: float           # slider cells (current, possibly != initial)
-    min_val: float         # slider cells
-    max_val: float         # slider cells
+    visible: bool             # equation/data cells
+    value: float              # slider cells
+    min_val: float            # slider cells
+    max_val: float            # slider cells
     sub_cells:
       - type: constraint | condition | initial_condition | recursion
         source: str
 
 Public API
 ----------
-cell_to_dict(cell)                     → dict
+cell_to_dict(cell, folder_id=None)     → dict
 save_session(path, cell_list, grid_config, data_panel=None)
 load_session(path)                     → dict
 restore_cell_list(cell_list, cells_data)
@@ -45,7 +46,7 @@ if TYPE_CHECKING:
 # Serialization helpers
 # ---------------------------------------------------------------------------
 
-def cell_to_dict(cell) -> dict:
+def cell_to_dict(cell, folder_id: str | None = None) -> dict:
     """Serialize any cell widget to a JSON-safe dict."""
     from pringle.slider_widget import SliderWidget
     from pringle.data_cell_widget import DataCellWidget
@@ -68,15 +69,22 @@ def cell_to_dict(cell) -> dict:
     if isinstance(cell, CommentCellWidget):
         base["type"] = "comment"
         base["source"] = cell.source()
+        if folder_id:
+            base["folder_id"] = folder_id
         return base
 
     if isinstance(cell, FolderCellWidget):
         base["type"] = "folder"
         base["name"] = cell.name
         base["collapsed"] = cell.is_collapsed
+        base["visible"] = cell.is_folder_visible
         base["sub_cells"] = []
+        return base
 
-    elif isinstance(cell, SliderWidget):
+    if folder_id:
+        base["folder_id"] = folder_id
+
+    if isinstance(cell, SliderWidget):
         base["type"] = "slider"
         base["source"] = cell.source()
         base["name"] = cell.name
@@ -142,7 +150,10 @@ def save_session(
     session = {
         "version": 1,
         "grid": grid_config_to_dict(grid_config),
-        "cells": [cell_to_dict(c) for c in cell_list._cells],
+        "cells": [
+            cell_to_dict(c, cell_list._cell_folder.get(c.cell_id))
+            for c in cell_list._cells
+        ],
     }
     if view:
         session["view"] = view
@@ -177,18 +188,28 @@ def restore_cell_list(
     """
     Reconstruct a CellListWidget from loaded YAML cell data.
 
-    Clears existing cells first.
+    Two-pass approach:
+      Pass 1 — create all cells with folder inference disabled.
+      Pass 2 — apply folder_id memberships, indentation, collapsed/visible states.
     """
     from pringle.style import CellStyle
     from pringle.slider_widget import SliderWidget
-    from pringle.cell_widget import ConstraintSubCell
+    from pringle.folder_cell_widget import FolderCellWidget
 
     # Remove all existing cells
     for cell in list(cell_list._cells):
         cell_list.remove_cell(cell.cell_id)
 
+    cell_list._skip_folder_inference = True
     sliders_to_play: list = []
+    # Track (restored_cell_id, folder_id) for pass 2
+    pending_folder_assignments: list[tuple[str, str]] = []
+    # Track folder widgets needing collapsed/visible restoration
+    pending_folder_states: list[tuple[str, bool, bool]] = []  # (folder_id, collapsed, visible)
 
+    # ------------------------------------------------------------------
+    # Pass 1: create all cells
+    # ------------------------------------------------------------------
     for data in cells_data:
         cell_type = data.get("type", "equation")
         source = data.get("source", "")
@@ -204,22 +225,27 @@ def restore_cell_list(
             colormap=style_data.get("colormap", None),
             colormap_reversed=bool(style_data.get("colormap_reversed", False)),
         )
+        cell_id = data.get("id")
+        folder_id = data.get("folder_id")
 
         if cell_type == "comment":
-            cell_list.add_comment_cell(
-                source=data.get("source", "#"),
-                style=style,
-            )
+            cell = cell_list.add_comment_cell(source=source, style=style)
+            if cell_id:
+                cell.cell_id = cell_id
+            if folder_id:
+                pending_folder_assignments.append((cell.cell_id, folder_id))
             continue
 
         if cell_type == "folder":
-            from pringle.folder_cell_widget import FolderCellWidget
-            folder = cell_list.add_folder(
-                name=data.get("name", "Group"),
-                style=style,
-            )
-            if data.get("collapsed", False):
-                folder.set_collapsed(True)
+            folder = cell_list.add_folder(name=data.get("name", "Group"), style=style)
+            if cell_id:
+                folder.cell_id = cell_id
+                cell_list._folder_visible[folder.cell_id] = True
+            pending_folder_states.append((
+                folder.cell_id,
+                data.get("collapsed", False),
+                data.get("visible", True),
+            ))
             continue
 
         if cell_type == "data":
@@ -227,9 +253,14 @@ def restore_cell_list(
         else:
             cell = cell_list.add_cell(source=source, style=style)
 
+        if cell_id:
+            cell.cell_id = cell_id
+
+        if folder_id:
+            pending_folder_assignments.append((cell.cell_id, folder_id))
+
         # Restore slider-specific state
         if cell_type == "slider" and isinstance(cell, SliderWidget):
-            # Set box values first so _on_range_changed reads correct pair
             cell._min_box.setValue(float(data.get("min_val", 0.0)))
             cell._max_box.setValue(float(data.get("max_val", 10.0)))
             if "step" in data:
@@ -241,7 +272,6 @@ def restore_cell_list(
             if data.get("is_playing", False):
                 sliders_to_play.append(cell)
 
-        # Restore equation cell state
         elif cell_type == "equation":
             from pringle.cell_widget import CellWidget
             if isinstance(cell, CellWidget):
@@ -252,7 +282,6 @@ def restore_cell_list(
                     sub = cell.add_sub_cell(sub_data.get("type", "constraint"))
                     sub._edit.setText(sub_data.get("source", ""))
 
-        # Restore data cell sub-cells and visibility
         elif cell_type == "data":
             from pringle.data_cell_widget import DataCellWidget
             if isinstance(cell, DataCellWidget):
@@ -263,10 +292,38 @@ def restore_cell_list(
                     cell._eye_btn.setChecked(False)
                     cell._on_visibility_toggled(False)
 
-    # Start any sliders that were playing when saved (must happen after full restore
-    # so the shared namespace is populated before the first animation tick fires)
+    cell_list._skip_folder_inference = False
+
+    # ------------------------------------------------------------------
+    # Pass 2: apply folder memberships, indentation, collapse, visibility
+    # ------------------------------------------------------------------
+    for cell_id, folder_id in pending_folder_assignments:
+        idx = cell_list._index_of(cell_id)
+        if idx >= 0:
+            cell_list._assign_folder(cell_list._cells[idx], folder_id)
+
+    for folder_id, collapsed, visible in pending_folder_states:
+        # Visibility state
+        cell_list._folder_visible[folder_id] = visible
+        idx = cell_list._index_of(folder_id)
+        if idx < 0:
+            continue
+        folder = cell_list._cells[idx]
+        if not visible and hasattr(folder, "_eye_btn"):
+            folder._eye_btn.blockSignals(True)
+            folder._eye_btn.setChecked(False)
+            folder._folder_visible = False
+            folder._eye_btn.blockSignals(False)
+        # Collapsed state (do AFTER assignments so members are known)
+        if collapsed:
+            cell_list._folder_collapsed[folder_id] = True
+            for member in cell_list._folder_members(folder_id):
+                member.setVisible(False)
+            if hasattr(folder, "_toggle_btn"):
+                folder._toggle_btn.setText("▶")
+                folder._collapsed = True
+
+    # Start sliders that were playing when saved
     for cell in sliders_to_play:
         cell._play_btn.setChecked(True)
         cell._on_play_toggled(True)
-
-

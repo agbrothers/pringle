@@ -77,6 +77,14 @@ class CellListWidget(QWidget):
         self._drag_cell_id: str | None = None
         self._drag_target_idx: int = 0
 
+        # Folder membership: cell_id → folder_id (None = top level)
+        self._cell_folder: dict[str, str | None] = {}
+        # Per-folder state (keyed by folder cell_id)
+        self._folder_collapsed: dict[str, bool] = {}
+        self._folder_visible: dict[str, bool] = {}
+        # Suppress position-based folder inference during bulk restores
+        self._skip_folder_inference: bool = False
+
         self._build_ui()
 
     # ------------------------------------------------------------------
@@ -129,17 +137,63 @@ class CellListWidget(QWidget):
 
         self._add_eq_btn = QPushButton("+ Equation")
         self._add_eq_btn.setFlat(True)
+        self._add_eq_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._add_eq_btn.setStyleSheet(_btn_style)
-        self._add_eq_btn.clicked.connect(lambda: self.add_cell())
+        self._add_eq_btn.clicked.connect(lambda: self.add_cell(after_id=self._focused_cell_id()))
         add_row.addWidget(self._add_eq_btn)
 
-        self._add_data_btn = QPushButton("+ Data cell")
-        self._add_data_btn.setFlat(True)
-        self._add_data_btn.setStyleSheet(_btn_style)
-        self._add_data_btn.clicked.connect(lambda: self.add_data_cell())
-        add_row.addWidget(self._add_data_btn)
+        self._add_folder_btn = QPushButton("+ Folder")
+        self._add_folder_btn.setFlat(True)
+        self._add_folder_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._add_folder_btn.setStyleSheet(_btn_style)
+        self._add_folder_btn.clicked.connect(lambda: self.add_folder(after_id=self._focused_cell_id()))
+        add_row.addWidget(self._add_folder_btn)
 
         outer.addLayout(add_row)
+
+    # ------------------------------------------------------------------
+    # Folder helpers
+    # ------------------------------------------------------------------
+
+    def _folder_members(self, folder_id: str) -> list:
+        """Return all member cells of folder_id in visual order."""
+        return [c for c in self._cells if self._cell_folder.get(c.cell_id) == folder_id]
+
+    def _infer_folder(self, insert_idx: int) -> str | None:
+        """Infer folder membership from the cell immediately above insert_idx."""
+        from pringle.folder_cell_widget import FolderCellWidget
+        if insert_idx <= 0 or not self._cells:
+            return None
+        prev = self._cells[insert_idx - 1]
+        if isinstance(prev, FolderCellWidget):
+            return prev.cell_id
+        return self._cell_folder.get(prev.cell_id)
+
+    def _assign_folder(self, cell, folder_id: str | None) -> None:
+        """Set a cell's folder membership and apply visual effects."""
+        from pringle.folder_cell_widget import FolderCellWidget
+        if isinstance(cell, FolderCellWidget):
+            return  # folders cannot be nested
+        self._cell_folder[cell.cell_id] = folder_id
+        self._apply_indent(cell, folder_id is not None)
+        if folder_id and self._folder_collapsed.get(folder_id, False):
+            cell.setVisible(False)
+        else:
+            cell.setVisible(True)
+
+    def _apply_indent(self, cell, indented: bool) -> None:
+        m = cell.contentsMargins()
+        left = 16 if indented else 0
+        cell.setContentsMargins(left, m.top(), m.right(), m.bottom())
+
+    def _is_render_visible(self, cell) -> bool:
+        """True iff the cell should appear in the 3-D viewport."""
+        if not cell.is_visible_cell():
+            return False
+        folder_id = self._cell_folder.get(cell.cell_id)
+        if folder_id is not None and not self._folder_visible.get(folder_id, True):
+            return False
+        return True
 
     # ------------------------------------------------------------------
     # Cell management
@@ -181,6 +235,8 @@ class CellListWidget(QWidget):
             if idx >= 0:
                 self._cells.insert(idx + 1, cell)
                 self._layout.insertWidget(idx + 1, cell)
+                if not self._skip_folder_inference:
+                    self._assign_folder(cell, self._infer_folder(idx + 1))
                 if source and not is_sl:
                     cell.set_source(source)
                 cell.focus()
@@ -193,6 +249,8 @@ class CellListWidget(QWidget):
         stretch_pos = self._layout.count() - 1
         self._layout.insertWidget(stretch_pos, cell)
         self._cells.append(cell)
+        if not self._skip_folder_inference:
+            self._assign_folder(cell, self._infer_folder(len(self._cells) - 1))
 
         if source and not is_sl:
             cell.set_source(source)
@@ -229,6 +287,8 @@ class CellListWidget(QWidget):
             if idx >= 0:
                 self._cells.insert(idx + 1, cell)
                 self._layout.insertWidget(idx + 1, cell)
+                if not self._skip_folder_inference:
+                    self._assign_folder(cell, self._infer_folder(idx + 1))
                 if source:
                     cell.set_source(source)
                 cell.focus()
@@ -238,6 +298,8 @@ class CellListWidget(QWidget):
         stretch_pos = self._layout.count() - 1
         self._layout.insertWidget(stretch_pos, cell)
         self._cells.append(cell)
+        if not self._skip_folder_inference:
+            self._assign_folder(cell, self._infer_folder(len(self._cells) - 1))
         if source:
             cell.set_source(source)
         cell.focus()
@@ -268,6 +330,8 @@ class CellListWidget(QWidget):
             if idx >= 0:
                 self._cells.insert(idx + 1, cell)
                 self._layout.insertWidget(idx + 1, cell)
+                if not self._skip_folder_inference:
+                    self._assign_folder(cell, self._infer_folder(idx + 1))
                 cell.focus()
                 self._update_placeholder()
                 return cell
@@ -275,6 +339,8 @@ class CellListWidget(QWidget):
         stretch_pos = self._layout.count() - 1
         self._layout.insertWidget(stretch_pos, cell)
         self._cells.append(cell)
+        if not self._skip_folder_inference:
+            self._assign_folder(cell, self._infer_folder(len(self._cells) - 1))
         cell.focus()
         self._update_placeholder()
         return cell
@@ -296,6 +362,9 @@ class CellListWidget(QWidget):
         folder.drag_started.connect(self._on_drag_started)
         folder.drag_moved.connect(self._on_drag_moved)
         folder.drag_ended.connect(self._on_drag_ended)
+        folder.collapse_changed.connect(self._on_folder_collapse_changed)
+        folder.folder_visibility_changed.connect(self._on_folder_visibility_changed)
+        self._folder_visible[folder.cell_id] = True
 
         if after_id is not None:
             idx = self._index_of(after_id)
@@ -312,11 +381,23 @@ class CellListWidget(QWidget):
         return folder
 
     def remove_cell(self, cell_id: str) -> None:
+        from pringle.folder_cell_widget import FolderCellWidget
         idx = self._index_of(cell_id)
         if idx < 0:
             return
         self._push_undo()
-        cell = self._cells.pop(idx)
+        cell = self._cells[idx]
+        if isinstance(cell, FolderCellWidget):
+            # Detach members: make them visible and top-level before removing folder
+            for member in self._folder_members(cell_id):
+                self._cell_folder.pop(member.cell_id, None)
+                self._apply_indent(member, False)
+                member.setVisible(True)
+            self._folder_collapsed.pop(cell_id, None)
+            self._folder_visible.pop(cell_id, None)
+        else:
+            self._cell_folder.pop(cell_id, None)
+        self._cells.pop(idx)
         self._layout.removeWidget(cell)
         cell.deleteLater()
         # Focus the cell above (or below if first)
@@ -403,7 +484,7 @@ class CellListWidget(QWidget):
 
         cell._last_result = result
         if result.render_type:
-            if cell.is_visible_cell():
+            if self._is_render_visible(cell):
                 self._on_cell_result(cell.cell_id, result, cell.style)
             else:
                 self._on_cell_result(cell.cell_id, CellResult(), cell.style)
@@ -416,7 +497,7 @@ class CellListWidget(QWidget):
         if self._in_undo_restore:
             return
         from pringle.session import cell_to_dict
-        snapshot = [cell_to_dict(c) for c in self._cells]
+        snapshot = [cell_to_dict(c, self._cell_folder.get(c.cell_id)) for c in self._cells]
         self._undo_history.append(snapshot)
         self._redo_history.clear()
 
@@ -424,7 +505,9 @@ class CellListWidget(QWidget):
         if not self._undo_history:
             return
         from pringle.session import cell_to_dict, restore_cell_list
-        self._redo_history.append([cell_to_dict(c) for c in self._cells])
+        self._redo_history.append(
+            [cell_to_dict(c, self._cell_folder.get(c.cell_id)) for c in self._cells]
+        )
         state = self._undo_history.pop()
         self._in_undo_restore = True
         restore_cell_list(self, state)
@@ -434,7 +517,9 @@ class CellListWidget(QWidget):
         if not self._redo_history:
             return
         from pringle.session import cell_to_dict, restore_cell_list
-        self._undo_history.append([cell_to_dict(c) for c in self._cells])
+        self._undo_history.append(
+            [cell_to_dict(c, self._cell_folder.get(c.cell_id)) for c in self._cells]
+        )
         state = self._redo_history.pop()
         self._in_undo_restore = True
         restore_cell_list(self, state)
@@ -443,6 +528,17 @@ class CellListWidget(QWidget):
     # ------------------------------------------------------------------
     # Copy / paste
     # ------------------------------------------------------------------
+
+    def _focused_cell_id(self) -> str | None:
+        """Return the cell_id of the cell that currently contains keyboard focus, or None."""
+        cell_map = {id(c): c.cell_id for c in self._cells}
+        w = QApplication.focusWidget()
+        while w is not None:
+            cid = cell_map.get(id(w))
+            if cid is not None:
+                return cid
+            w = w.parent() if hasattr(w, "parent") else None
+        return None
 
     def copy_focused_cell(self) -> bool:
         """Copy the source of the currently focused cell to the clipboard.
@@ -527,7 +623,7 @@ class CellListWidget(QWidget):
                     cell.set_warning(extra)
 
             shared.update(result.exports)
-            if cell.is_visible_cell():
+            if self._is_render_visible(cell):
                 self._on_cell_result(cell.cell_id, result, cell.style)
             else:
                 self._on_cell_result(cell.cell_id, CellResult(), cell.style)
@@ -580,7 +676,7 @@ class CellListWidget(QWidget):
             return
         cell = self._cells[idx]
         last = getattr(cell, "_last_result", None)
-        if is_visible and last is not None and last.render_type:
+        if self._is_render_visible(cell) and last is not None and last.render_type:
             self._on_cell_result(cell_id, last, cell.style)
         else:
             self._on_cell_result(cell_id, CellResult(), cell.style)
@@ -592,8 +688,28 @@ class CellListWidget(QWidget):
             return
         cell = self._cells[idx]
         last = getattr(cell, "_last_result", None)
-        if last is not None and last.render_type and cell.is_visible_cell():
+        if last is not None and last.render_type and self._is_render_visible(cell):
             self._on_cell_result(cell_id, last, cell.style)
+
+    def _on_folder_collapse_changed(self, folder_id: str, collapsed: bool) -> None:
+        """Hide or show all member cells when a folder is collapsed/expanded."""
+        self._folder_collapsed[folder_id] = collapsed
+        for member in self._folder_members(folder_id):
+            member.setVisible(not collapsed)
+
+    def _on_folder_visibility_changed(self, folder_id: str, visible: bool) -> None:
+        """Update renderer visibility for all member cells when folder eye is toggled."""
+        from pringle.data_cell_widget import DataCellWidget
+        self._folder_visible[folder_id] = visible
+        # Handle data cells (they have cached results, not re-evaluated by _rebuild_namespace)
+        for member in self._folder_members(folder_id):
+            if isinstance(member, DataCellWidget):
+                last = getattr(member, "_last_result", None)
+                if self._is_render_visible(member) and last and last.render_type:
+                    self._on_cell_result(member.cell_id, last, member.style)
+                else:
+                    self._on_cell_result(member.cell_id, CellResult(), member.style)
+        self._rebuild_namespace()
 
     def _on_cell_changed(self, cell_id: str) -> None:
         self._maybe_morph_to_comment(cell_id)
@@ -706,7 +822,7 @@ class CellListWidget(QWidget):
                 continue
             result = self._eval_cell(cell, shared)
             shared.update(result.exports)
-            if cell.is_visible_cell():
+            if self._is_render_visible(cell):
                 self._on_cell_result(cell.cell_id, result, cell.style)
             else:
                 self._on_cell_result(cell.cell_id, CellResult(), cell.style)
@@ -798,6 +914,12 @@ class CellListWidget(QWidget):
         for i, c in enumerate(self._cells):
             self._layout.insertWidget(i + 1, c)  # +1 skips placeholder at index 0
         self._container.setUpdatesEnabled(True)
+        # Reassign folder membership based on new position (only for non-folder cells)
+        from pringle.folder_cell_widget import FolderCellWidget
+        if not isinstance(cell, FolderCellWidget):
+            new_folder = self._infer_folder(self._index_of(cell.cell_id))
+            if new_folder != self._cell_folder.get(cell.cell_id):
+                self._assign_folder(cell, new_folder)
         self._rebuild_namespace()
 
     # ------------------------------------------------------------------

@@ -6,6 +6,17 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-029 — Insert new cell below the currently focused cell
+**Status:** Closed (implemented 2026-05-18)  
+**Description:** When the user has a cursor active in a cell, clicking "+ Equation" or "+ Folder" inserts the new cell immediately below that cell rather than appending to the bottom of the panel.
+
+**Implementation:**
+- `cell_list.py` — added `_focused_cell_id()` helper: builds `{id(widget): cell_id}` from `_cells`, then walks up from `QApplication.focusWidget()` via `.parent()` until a match is found. Returns `None` if no cell is focused (falls back to append behavior).
+- Both add buttons gain `setFocusPolicy(Qt.FocusPolicy.NoFocus)` so clicking them does not steal keyboard focus from the active cell before the `clicked` signal fires.
+- Button connections updated to `lambda: self.add_cell(after_id=self._focused_cell_id())` and `lambda: self.add_folder(after_id=self._focused_cell_id())`. The `after_id=None` fallback preserves existing append behavior when no cell is focused.
+
+---
+
 ### FEAT-019 — "Fit to data" for axis bounds
 **Status:** Closed (implemented 2026-05-18)  
 **Description:** Added a "Fit to Data" button to `ViewSettingsWidget` (alongside "Equalize Axes") wired to a new `fit_requested` signal. `PringleWindow._on_fit_to_data` iterates `renderer._objects` (cell objects only, not overlays), unions their `get_world_bounding_box()` AABBs (skipping any with non-finite values), computes a uniform enclosing cube with 5% padding and a minimum half-span of 0.5, then updates both the spinboxes and the grid/overlay via `_on_bounds_changed`. Empty scene and degenerate data are handled as no-ops.

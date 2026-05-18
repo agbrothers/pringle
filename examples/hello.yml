@@ -8,7 +8,7 @@ grid:
   z_max: 5.0
   n: 256
 cells:
-- id: 0c7defd1-f665-46c7-a74e-98ebdc93457b
+- id: 77e140ec-9d6c-48ce-8643-f5917fe7ac12
   style:
     color:
     - 0.22
@@ -25,7 +25,7 @@ cells:
   source: z = sin(x) * a * cos(y)
   visible: false
   sub_cells: []
-- id: 50bd309c-cbc3-4be5-a5e6-6c100d22aa24
+- id: 58d390f4-8270-414d-9ec5-fb0f488e4969
   style:
     color:
     - 0.85
@@ -48,7 +48,7 @@ cells:
   is_playing: false
   anim_mode: pingpong
   sub_cells: []
-- id: 39282470-7021-4065-982a-4b04a8acd7be
+- id: 4fdf7cfb-8b31-4773-9dd1-ee155bff496a
   style:
     color:
     - 0.2
@@ -65,7 +65,7 @@ cells:
   source: y=b*x
   visible: false
   sub_cells: []
-- id: 6b505f6a-305c-4a9b-8af5-cc1b90f4b306
+- id: 7d590926-9b29-45b6-83c1-cd3d2256bcb9
   style:
     color:
     - 0.85
@@ -84,7 +84,7 @@ cells:
   sub_cells:
   - type: constraint
     source: (x-2)**2+y**2 < 1
-- id: 4c864c68-f70b-4320-99c7-5865d0e5f316
+- id: 2e55c290-6be6-4312-943a-7a824a1aabdd
   style:
     color:
     - 0.9
@@ -107,7 +107,7 @@ cells:
   is_playing: false
   anim_mode: pingpong
   sub_cells: []
-- id: 07b13f7d-3a6a-4e8a-861e-e8fd125b6624
+- id: b4efc093-7e64-4c5f-bcf1-36ed8814886b
   style:
     color:
     - 0.9
@@ -130,7 +130,7 @@ cells:
   is_playing: false
   anim_mode: pingpong
   sub_cells: []
-- id: ec265406-4abe-49a3-85a6-0f8805a9c559
+- id: 039a26e8-66d9-462d-b448-9e687a752c2c
   style:
     color:
     - 0.2196078431372549
@@ -147,7 +147,7 @@ cells:
   source: p = array([[0, 0, 0]])
   visible: true
   sub_cells: []
-- id: 2f246ff9-a1fd-425e-a5a0-146faeb23840
+- id: 3e0232cf-93aa-4b4c-8044-847c8b60df2b
   style:
     color:
     - 0.2
@@ -168,12 +168,14 @@ view:
   show_axes: true
   show_bbox: true
   show_crosshair: true
-  show_light_bg: false
+  show_light_bg: true
+  show_shadow: true
+  shadow_opacity: 0.5
   camera_position:
-  - -6.476007153646483
-  - -9.97472944459754
-  - 4.385552080365246
+  - -20.165893193967186
+  - -22.821369386948263
+  - 6.01028400428894
   orbit_target:
   - 0.0
   - 0.0
-  - 0.0
+  - 0.18303576111793518

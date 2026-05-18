@@ -1,15 +1,19 @@
 """
 FolderCellWidget — a collapsible section header inside the equation panel.
 
-A folder cell acts as a visual group divider.  It does not participate in
-expression evaluation; the DAG and namespace builder skip it.
+A folder cell acts as a visual group divider.  Member cells are tracked
+by CellListWidget via an explicit folder_id mapping on each cell.
 
 Layout:
-  [▶/▼] [name label/edit] [edit] [✕]
+  [drag handle] [▶/▼] [name (clickable)] [👁] [✕]
 
-The body (content area) below the header can hold other widgets when
-drag-and-drop grouping is implemented in a future phase.  For now it is
-always empty — the folder is purely a collapsible banner.
+Signals
+-------
+collapse_changed(cell_id, collapsed)
+    Emitted whenever the folder is toggled open or closed.
+folder_visibility_changed(cell_id, visible)
+    Emitted when the 👁 button is toggled — controls whether member
+    cells render in the 3-D viewport.
 """
 
 from __future__ import annotations
@@ -18,7 +22,7 @@ import uuid
 
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout,
-    QPushButton, QLabel, QLineEdit, QFrame, QSizePolicy,
+    QPushButton, QLineEdit, QFrame, QSizePolicy,
 )
 from PyQt6.QtCore import pyqtSignal, Qt
 
@@ -29,11 +33,13 @@ from pringle.cell_widget import DragHandle
 class FolderCellWidget(QWidget):
     """Collapsible section header — can be added to CellListWidget like any cell."""
 
-    delete_requested = pyqtSignal(str)   # cell_id
-    content_changed = pyqtSignal(str)    # cell_id (name change)
-    drag_started = pyqtSignal(str)       # cell_id
-    drag_moved = pyqtSignal(str, int)    # cell_id, global_y
-    drag_ended = pyqtSignal(str)         # cell_id
+    delete_requested = pyqtSignal(str)          # cell_id
+    content_changed = pyqtSignal(str)           # cell_id (name change)
+    drag_started = pyqtSignal(str)              # cell_id
+    drag_moved = pyqtSignal(str, int)           # cell_id, global_y
+    drag_ended = pyqtSignal(str)               # cell_id
+    collapse_changed = pyqtSignal(str, bool)    # cell_id, collapsed
+    folder_visibility_changed = pyqtSignal(str, bool)  # cell_id, visible
 
     def __init__(
         self,
@@ -47,6 +53,7 @@ class FolderCellWidget(QWidget):
         self.style: CellStyle = style or CellStyle(color=(0.55, 0.55, 0.55, 1.0))
         self._name: str = name
         self._collapsed: bool = False
+        self._folder_visible: bool = True
         self._build_ui()
 
     # ------------------------------------------------------------------
@@ -54,7 +61,6 @@ class FolderCellWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _build_ui(self):
-        # Outer: drag handle strip (left) + content area (right)
         outer_h = QHBoxLayout(self)
         outer_h.setContentsMargins(0, 2, 0, 0)
         outer_h.setSpacing(0)
@@ -74,7 +80,7 @@ class FolderCellWidget(QWidget):
         # Header row
         header = QWidget()
         header.setStyleSheet(
-            "background: #f0f0f0; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc;"
+            "background: #252525; border-top: 1px solid #3a3a3a; border-bottom: 1px solid #3a3a3a;"
         )
         row = QHBoxLayout(header)
         row.setContentsMargins(6, 2, 6, 2)
@@ -83,49 +89,62 @@ class FolderCellWidget(QWidget):
         self._toggle_btn = QPushButton("▼")
         self._toggle_btn.setFixedSize(20, 20)
         self._toggle_btn.setFlat(True)
+        self._toggle_btn.setStyleSheet("QPushButton { color: #888; } QPushButton:hover { color: #ccc; }")
         self._toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._toggle_btn.clicked.connect(self._on_toggle)
         row.addWidget(self._toggle_btn)
 
-        self._name_label = QLabel(self._name)
-        self._name_label.setStyleSheet("font-weight: bold; font-size: 12px; color: #444;")
+        self._name_label = QPushButton(self._name)
+        self._name_label.setFlat(True)
+        self._name_label.setCursor(Qt.CursorShape.IBeamCursor)
+        self._name_label.setToolTip("Click to rename group")
+        self._name_label.setStyleSheet(
+            "QPushButton { font-weight: bold; font-size: 12px; color: #ccc;"
+            " text-align: left; padding: 0; border: none; }"
+            "QPushButton:hover { color: #fff; }"
+        )
+        self._name_label.clicked.connect(self._on_edit_clicked)
         row.addWidget(self._name_label, 1)
 
         self._name_edit = QLineEdit(self._name)
         self._name_edit.setStyleSheet(
-            "font-weight: bold; font-size: 12px; border: 1px solid #bbb; border-radius: 2px;"
+            "font-weight: bold; font-size: 12px; border: 1px solid #555;"
+            "border-radius: 2px; background: #1e1e1e; color: #eee;"
         )
         self._name_edit.setVisible(False)
         self._name_edit.returnPressed.connect(self._commit_rename)
         self._name_edit.editingFinished.connect(self._commit_rename)
+        self._committing = False
         row.addWidget(self._name_edit, 1)
 
-        edit_btn = QPushButton("✏")
-        edit_btn.setFixedSize(22, 22)
-        edit_btn.setFlat(True)
-        edit_btn.setToolTip("Rename group")
-        edit_btn.clicked.connect(self._on_edit_clicked)
-        row.addWidget(edit_btn)
+        self._eye_btn = QPushButton("👁")
+        self._eye_btn.setFixedSize(22, 22)
+        self._eye_btn.setFlat(True)
+        self._eye_btn.setCheckable(True)
+        self._eye_btn.setChecked(True)
+        self._eye_btn.setToolTip("Toggle folder visibility in viewport")
+        self._eye_btn.toggled.connect(self._on_eye_toggled)
+        row.addWidget(self._eye_btn)
 
         del_btn = QPushButton("✕")
         del_btn.setFixedSize(22, 22)
         del_btn.setFlat(True)
-        del_btn.setToolTip("Delete group")
+        del_btn.setStyleSheet("QPushButton { color: #555; } QPushButton:hover { color: #ccc; }")
+        del_btn.setToolTip("Delete group (members are kept)")
         del_btn.clicked.connect(lambda: self.delete_requested.emit(self.cell_id))
         row.addWidget(del_btn)
 
         outer.addWidget(header)
 
-        # Collapsible body (empty — placeholder for drag-drop in a future phase)
+        # Collapsible body — empty placeholder; shown/hidden on toggle
         self._body = QWidget()
         self._body.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-        self._body.setVisible(True)
         outer.addWidget(self._body)
 
         # Separator
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet("color: #ddd;")
+        sep.setStyleSheet("color: #333;")
         outer.addWidget(sep)
 
     # ------------------------------------------------------------------
@@ -162,14 +181,21 @@ class FolderCellWidget(QWidget):
     def is_collapsed(self) -> bool:
         return self._collapsed
 
+    @property
+    def is_folder_visible(self) -> bool:
+        return self._folder_visible
+
     # ------------------------------------------------------------------
     # Collapse / expand
     # ------------------------------------------------------------------
 
     def set_collapsed(self, collapsed: bool) -> None:
+        if self._collapsed == collapsed:
+            return
         self._collapsed = collapsed
         self._toggle_btn.setText("▶" if collapsed else "▼")
         self._body.setVisible(not collapsed)
+        self.collapse_changed.emit(self.cell_id, collapsed)
 
     def toggle(self) -> None:
         self.set_collapsed(not self._collapsed)
@@ -181,6 +207,10 @@ class FolderCellWidget(QWidget):
     def _on_toggle(self):
         self.toggle()
 
+    def _on_eye_toggled(self, checked: bool) -> None:
+        self._folder_visible = checked
+        self.folder_visibility_changed.emit(self.cell_id, checked)
+
     def _on_edit_clicked(self):
         self._name_label.setVisible(False)
         self._name_edit.setVisible(True)
@@ -189,9 +219,13 @@ class FolderCellWidget(QWidget):
         self._name_edit.setFocus()
 
     def _commit_rename(self):
+        if self._committing:
+            return
+        self._committing = True
         new_name = self._name_edit.text().strip() or self._name
         self._name = new_name
         self._name_label.setText(new_name)
         self._name_label.setVisible(True)
         self._name_edit.setVisible(False)
         self.content_changed.emit(self.cell_id)
+        self._committing = False
