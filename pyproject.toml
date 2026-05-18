@@ -34,6 +34,7 @@ dependencies = [
 
 [project.scripts]
 pringle = "pringle.app:launch"
+crunch  = "pringle.app:launch"
 
 [project.urls]
 Homepage = "https://github.com/agbrothers/pringle"

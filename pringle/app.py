@@ -317,6 +317,7 @@ class PringleWindow(QMainWindow):
         for keys, slot in [
             (QKeySequence.StandardKey.New,    self._on_new),
             (QKeySequence.StandardKey.Open,   self._on_open),
+            (QKeySequence("Ctrl+P"),          self._on_open),
             (QKeySequence.StandardKey.Save,   self._on_save),
             (QKeySequence("Ctrl+Shift+S"),    self._on_save_as),
             (QKeySequence.StandardKey.Undo,   self._on_undo),
