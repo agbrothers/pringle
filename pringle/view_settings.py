@@ -33,6 +33,7 @@ class ViewSettingsWidget(QWidget):
     bbox_visibility_changed = pyqtSignal(bool)
     crosshair_visibility_changed = pyqtSignal(bool)
     equalize_requested = pyqtSignal()
+    fit_requested = pyqtSignal()          # fit all axis bounds to rendered data
 
     def __init__(self, config: GridConfig | None = None, parent=None):
         super().__init__(parent)
@@ -88,6 +89,14 @@ class ViewSettingsWidget(QWidget):
         eq_btn.setToolTip("Set X and Y bounds to match the current Z data range")
         eq_btn.clicked.connect(self.equalize_requested)
         btn_row.addWidget(eq_btn)
+
+        fit_btn = QPushButton("Fit to Data")
+        fit_btn.setObjectName("fit_to_data_btn")
+        fit_btn.setFixedHeight(24)
+        fit_btn.setToolTip("Set all axis bounds to a cube that encloses all rendered objects")
+        fit_btn.clicked.connect(self.fit_requested)
+        btn_row.addWidget(fit_btn)
+
         bl.addLayout(btn_row)
 
         # Overlay toggles
