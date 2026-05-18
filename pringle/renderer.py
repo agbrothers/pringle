@@ -189,7 +189,7 @@ def make_surface_mesh(
 def make_line_mesh(
     points: np.ndarray,
     color: tuple = (0.9, 0.4, 0.2, 1.0),
-    thickness: float = 2.0,
+    thickness: float = 0.05,
 ) -> gfx.Line:
     """
     Build a pygfx Line from an (N, 3) or (N, 2) array of points.
@@ -204,19 +204,19 @@ def make_line_mesh(
     if len(pts) == 0:
         pts = np.zeros((1, 3), dtype=np.float32)
         geo = gfx.Geometry(positions=pts)
-        mat = gfx.LineMaterial(color=color, thickness=thickness)
+        mat = gfx.LineMaterial(color=color, thickness=thickness, thickness_space="world")
         mat.opacity = 0.0
         return gfx.Line(geo, mat)
 
     geo = gfx.Geometry(positions=pts)
-    mat = gfx.LineMaterial(color=color, thickness=thickness)
+    mat = gfx.LineMaterial(color=color, thickness=thickness, thickness_space="world")
     return gfx.Line(geo, mat)
 
 
 def make_scatter_mesh(
     points: np.ndarray,
     color: tuple = (0.9, 0.6, 0.1, 1.0),
-    size: float = 6.0,
+    size: float = 0.1,
 ) -> gfx.Points:
     """
     Build a pygfx Points object from an (N, 3) or (N, 2) array.
@@ -230,12 +230,12 @@ def make_scatter_mesh(
     if len(pts) == 0:
         pts = np.zeros((1, 3), dtype=np.float32)
         geo = gfx.Geometry(positions=pts)
-        mat = gfx.PointsMaterial(color=color, size=size)
+        mat = gfx.PointsMaterial(color=color, size=size, size_space="world")
         mat.opacity = 0.0
         return gfx.Points(geo, mat)
 
     geo = gfx.Geometry(positions=pts)
-    mat = gfx.PointsMaterial(color=color, size=size)
+    mat = gfx.PointsMaterial(color=color, size=size, size_space="world")
     return gfx.Points(geo, mat)
 
 

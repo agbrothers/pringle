@@ -49,11 +49,11 @@ class TestStylePopoverWidget:
     def test_creates_with_style(self, qapp):
         from pringle.style import CellStyle
         from pringle.style_popover import StylePopoverWidget
-        style = CellStyle(color=(0.2, 0.4, 0.8, 1.0), opacity=0.8, line_width=3.0)
+        style = CellStyle(color=(0.2, 0.4, 0.8, 1.0), opacity=0.8, line_width=1.0)
         w = StylePopoverWidget(style)
         assert w._hex_edit.text() == "#3366cc"
         assert w._opacity_spin.value() == pytest.approx(0.8)
-        assert w._lw_spin.value() == pytest.approx(3.0)
+        assert w._lw_spin.value() == pytest.approx(1.0)
 
     def test_hex_edit_emits_style_changed(self, qapp):
         from pringle.style import CellStyle
@@ -85,8 +85,8 @@ class TestStylePopoverWidget:
         w = StylePopoverWidget(style)
         received = []
         w.style_changed.connect(received.append)
-        w._lw_spin.setValue(5.0)
-        assert any(s.line_width == pytest.approx(5.0) for s in received)
+        w._lw_spin.setValue(0.5)
+        assert any(s.line_width == pytest.approx(0.5) for s in received)
 
     def test_invalid_hex_ignored(self, qapp):
         from pringle.style import CellStyle
