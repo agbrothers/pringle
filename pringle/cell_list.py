@@ -59,10 +59,12 @@ class CellListWidget(QWidget):
         self,
         on_cell_result: Callable[[str, CellResult, CellStyle], None],
         grid: Grid | None = None,
+        on_cell_deleted: Callable[[str], None] | None = None,
         parent=None,
     ):
         super().__init__(parent)
         self._on_cell_result = on_cell_result
+        self._on_cell_deleted = on_cell_deleted
         self._grid = grid or make_grid()
         self._cells: list[CellWidget] = []
         self._shared_ns: dict = {}
@@ -215,6 +217,7 @@ class CellListWidget(QWidget):
         cell.run_requested.connect(self._run_data_cell)
         cell.delete_requested.connect(self._on_delete_requested)
         cell.visibility_toggled.connect(self._on_data_cell_visibility_toggled)
+        cell.render_mode_changed.connect(self._on_data_cell_render_mode_changed)
         cell.drag_started.connect(self._on_drag_started)
         cell.drag_moved.connect(self._on_drag_moved)
         cell.drag_ended.connect(self._on_drag_ended)
@@ -283,8 +286,11 @@ class CellListWidget(QWidget):
         if self._cells:
             target_idx = max(0, idx - 1)
             self._cells[target_idx].focus()
-        # Remove from viewport
+        # Remove from viewport and forget the cell so the next render for
+        # that id (if a new cell is later added) correctly re-fits the camera
         self._on_cell_result(cell_id, CellResult(), cell.style)
+        if self._on_cell_deleted is not None:
+            self._on_cell_deleted(cell_id)
         self._rebuild_namespace()
         self._update_placeholder()
 
@@ -537,6 +543,16 @@ class CellListWidget(QWidget):
             self._on_cell_result(cell_id, last, cell.style)
         else:
             self._on_cell_result(cell_id, CellResult(), cell.style)
+
+    def _on_data_cell_render_mode_changed(self, cell_id: str) -> None:
+        """Re-apply the cached result when scatter_as_line is toggled — no re-eval needed."""
+        idx = self._index_of(cell_id)
+        if idx < 0:
+            return
+        cell = self._cells[idx]
+        last = getattr(cell, "_last_result", None)
+        if last is not None and last.render_type and cell.is_visible_cell():
+            self._on_cell_result(cell_id, last, cell.style)
 
     def _on_cell_changed(self, cell_id: str) -> None:
         self._maybe_morph_to_slider(cell_id)

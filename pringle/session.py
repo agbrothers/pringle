@@ -53,7 +53,13 @@ def cell_to_dict(cell) -> dict:
 
     base = {
         "id": cell.cell_id,
-        "style": {"color": list(cell.style.color)},
+        "style": {
+            "color":           list(cell.style.color),
+            "opacity":         cell.style.opacity,
+            "line_width":      cell.style.line_width,
+            "point_size":      cell.style.point_size,
+            "scatter_as_line": cell.style.scatter_as_line,
+        },
     }
 
     if isinstance(cell, FolderCellWidget):
@@ -70,6 +76,8 @@ def cell_to_dict(cell) -> dict:
         base["min_val"] = float(cell._min)
         base["max_val"] = float(cell._max)
         base["step"] = float(cell._step_box.value())
+        base["is_playing"] = cell._play_btn.isChecked()
+        base["anim_mode"] = cell._anim_mode
         base["sub_cells"] = []
 
     elif isinstance(cell, DataCellWidget):
@@ -167,12 +175,21 @@ def restore_cell_list(
     for cell in list(cell_list._cells):
         cell_list.remove_cell(cell.cell_id)
 
+    sliders_to_play: list = []
+
     for data in cells_data:
         cell_type = data.get("type", "equation")
         source = data.get("source", "")
-        raw_color = data.get("style", {}).get("color", [0.22, 0.40, 0.88, 1.0])
+        style_data = data.get("style", {})
+        raw_color = style_data.get("color", [0.22, 0.40, 0.88, 1.0])
         color = tuple(float(v) for v in raw_color)
-        style = CellStyle(color=color)
+        style = CellStyle(
+            color=color,
+            opacity=float(style_data.get("opacity", 1.0)),
+            line_width=float(style_data.get("line_width", 0.05)),
+            point_size=float(style_data.get("point_size", 0.1)),
+            scatter_as_line=style_data.get("scatter_as_line", False),
+        )
 
         if cell_type == "folder":
             from pringle.folder_cell_widget import FolderCellWidget
@@ -198,6 +215,10 @@ def restore_cell_list(
                 cell._step_box.setValue(float(data["step"]))
             cell._spinbox.setRange(cell._min, cell._max)
             cell.set_value(float(data.get("value", cell.value)), emit=False)
+            if "anim_mode" in data:
+                cell.set_anim_mode(data["anim_mode"])
+            if data.get("is_playing", False):
+                sliders_to_play.append(cell)
 
         # Restore equation cell state
         elif cell_type == "equation":
@@ -217,5 +238,11 @@ def restore_cell_list(
                 for sub_data in data.get("sub_cells", []):
                     sub = cell.add_sub_cell(sub_data.get("type", "initial_condition"))
                     sub._edit.setText(sub_data.get("source", ""))
+
+    # Start any sliders that were playing when saved (must happen after full restore
+    # so the shared namespace is populated before the first animation tick fires)
+    for cell in sliders_to_play:
+        cell._play_btn.setChecked(True)
+        cell._on_play_toggled(True)
 
 

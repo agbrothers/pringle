@@ -17,8 +17,9 @@ import PyQt6  # must be imported before rendercanvas.qt  # noqa: F401
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QSplitter,
     QVBoxLayout, QLabel, QFrame, QFileDialog, QMessageBox,
+    QPushButton, QDialog,
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeySequence, QShortcut, QKeyEvent
 from rendercanvas.qt import QRenderWidget
 
@@ -58,6 +59,7 @@ class PringleViewport(QRenderWidget):
         self._pr = PringleRenderer(self)
         self.request_draw(self._pr.render)
         self._held_keys: set[int] = set()
+        self._seen_cell_ids: set[str] = set()
         self._draw_timer = QTimer(self)
         self._draw_timer.setInterval(16)  # ~60fps
         self._draw_timer.timeout.connect(self._tick)
@@ -102,12 +104,17 @@ class PringleViewport(QRenderWidget):
         return self._pr
 
     def add_object(self, cell_id: str, obj: gfx.WorldObject) -> None:
-        is_new = self._pr.add_object(cell_id, obj)
-        if is_new:
+        self._pr.add_object(cell_id, obj)
+        if cell_id not in self._seen_cell_ids:
+            self._seen_cell_ids.add(cell_id)
             self._pr.fit_camera()
 
     def remove_object(self, cell_id: str) -> None:
         self._pr.remove_object(cell_id)
+
+    def forget_cell(self, cell_id: str) -> None:
+        """Remove cell_id from the seen-set so the next render for that id re-fits."""
+        self._seen_cell_ids.discard(cell_id)
 
     def set_visible(self, cell_id: str, visible: bool) -> None:
         self._pr.set_visible(cell_id, visible)
@@ -117,12 +124,94 @@ class PringleViewport(QRenderWidget):
         cam = self._pr._camera
         positions = {
             "iso":   (6, -8, 6),
-            "top":   (0, 0, 12),
+            # Slight X offset on top view avoids the controller singularity that
+            # occurs when the view direction is exactly parallel to world-Z and
+            # the cross product used to compute the orbit axis goes to zero.
+            "top":   (0.001, 0, 12),
             "front": (0, -12, 0),
         }
         if name in positions:
             cam.local.position = positions[name]
             cam.look_at((0, 0, 0))
+            # Re-sync the orbit controller's internal state so that subsequent
+            # orbit operations start from the new camera position rather than
+            # from wherever the controller's cached spherical coords last left it.
+            self._pr._controller.target = (0.0, 0.0, 0.0)
+
+
+class _ViewportContainer(QWidget):
+    """
+    Wraps PringleViewport and absolutely-positions a ⚙ button in the top-right
+    corner that stays pinned on resize.  Emits settings_toggled(checked) when clicked.
+    """
+
+    settings_toggled = pyqtSignal(bool)
+
+    _BTN_SIZE = 30
+    _MARGIN = 10
+
+    def __init__(self, viewport: PringleViewport, parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(viewport)
+
+        self._btn = QPushButton("⚙", self)
+        self._btn.setFixedSize(self._BTN_SIZE, self._BTN_SIZE)
+        self._btn.setFlat(True)
+        self._btn.setCheckable(True)
+        self._btn.setToolTip("Axis & view settings")
+        self._btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn.setStyleSheet(
+            "QPushButton {"
+            "  color: #555; font-size: 16px;"
+            "  background: rgba(255,255,255,0.75);"
+            "  border-radius: 5px; border: 1px solid rgba(0,0,0,0.18);"
+            "}"
+            "QPushButton:hover { background: rgba(255,255,255,0.95); color: #222; }"
+            "QPushButton:checked {"
+            "  background: rgba(74,158,255,0.85); color: #fff;"
+            "  border-color: rgba(74,158,255,0.6);"
+            "}"
+        )
+        self._btn.clicked.connect(self.settings_toggled)
+        self._reposition_btn()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._reposition_btn()
+
+    def _reposition_btn(self):
+        self._btn.move(
+            self.width() - self._BTN_SIZE - self._MARGIN,
+            self._MARGIN,
+        )
+        self._btn.raise_()
+
+    def set_btn_checked(self, checked: bool) -> None:
+        self._btn.blockSignals(True)
+        self._btn.setChecked(checked)
+        self._btn.blockSignals(False)
+
+
+class AxisSettingsDialog(QDialog):
+    """
+    Non-modal floating tool window containing ViewSettingsWidget.
+    Uses Qt.Tool so it stays above the main window without blocking it.
+    Emitting finished() (via the title-bar close button) is the normal hide path.
+    """
+
+    def __init__(self, view_settings, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Axis Settings")
+        self.setWindowFlags(Qt.WindowType.Tool)
+        self.setModal(False)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(view_settings)
+        self.adjustSize()
 
 
 class PringleWindow(QMainWindow):
@@ -138,7 +227,7 @@ class PringleWindow(QMainWindow):
     """
 
     DEFAULT_SIZE = (1400, 900)
-    LEFT_PANEL_WIDTH = 340
+    LEFT_PANEL_WIDTH = 320
 
     def __init__(self, grid: Grid | None = None):
         super().__init__()
@@ -150,26 +239,17 @@ class PringleWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Horizontal, self)
         self.setCentralWidget(splitter)
 
-        # 3D viewport
-        self._viewport = PringleViewport(splitter)
+        # 3D viewport + overlay ⚙ button
+        self._viewport = PringleViewport()
         cfg = self._grid.config
         z_half = max(abs(cfg.x_min), abs(cfg.x_max), abs(cfg.y_min), abs(cfg.y_max))
         self._viewport.renderer.set_overlay_bounds(
             cfg.x_min, cfg.x_max, cfg.y_min, cfg.y_max, -z_half, z_half
         )
+        self._vp_container = _ViewportContainer(self._viewport)
+        self._vp_container.settings_toggled.connect(self._on_settings_toggled)
 
-        # Left panel: unified cell list + view settings
-        left = QWidget()
-        left_layout = QVBoxLayout(left)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(0)
-
-        self._cell_list = CellListWidget(
-            on_cell_result=self._on_cell_result,
-            grid=self._grid,
-        )
-        left_layout.addWidget(self._cell_list, 1)
-
+        # Floating axis settings dialog (non-modal Qt.Tool window)
         self._view_settings = ViewSettingsWidget(config=self._grid.config)
         self._view_settings.bounds_changed.connect(self._on_bounds_changed)
         self._view_settings.resolution_changed.connect(self._on_resolution_changed)
@@ -185,10 +265,29 @@ class PringleWindow(QMainWindow):
             self._viewport.renderer.set_crosshair_visible
         )
         self._view_settings.equalize_requested.connect(self._on_equalize)
-        left_layout.addWidget(self._view_settings)
+        self._view_settings.fit_requested.connect(self._on_fit_to_data)
+
+        self._settings_dialog = AxisSettingsDialog(self._view_settings, parent=self)
+        # When user closes dialog via title-bar X, uncheck the ⚙ button
+        self._settings_dialog.finished.connect(
+            lambda _: self._vp_container.set_btn_checked(False)
+        )
+
+        # Left panel: cell list only (view settings moved to floating dialog)
+        left = QWidget()
+        left_layout = QVBoxLayout(left)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(0)
+
+        self._cell_list = CellListWidget(
+            on_cell_result=self._on_cell_result,
+            on_cell_deleted=self._viewport.forget_cell,
+            grid=self._grid,
+        )
+        left_layout.addWidget(self._cell_list, 1)
 
         splitter.insertWidget(0, left)
-        splitter.addWidget(self._viewport)
+        splitter.addWidget(self._vp_container)
 
         # Initial split proportions
         splitter.setSizes([self.LEFT_PANEL_WIDTH, self.DEFAULT_SIZE[0] - self.LEFT_PANEL_WIDTH])
@@ -269,6 +368,11 @@ class PringleWindow(QMainWindow):
             QMessageBox.critical(self, "Load error", str(exc))
             return
         restore_cell_list(self._cell_list, data.get("cells", []))
+        # Auto-run data cells so they render on load without requiring manual ▷ clicks
+        from pringle.data_cell_widget import DataCellWidget
+        for cell in self._cell_list._cells:
+            if isinstance(cell, DataCellWidget) and cell.source().strip():
+                self._cell_list._run_data_cell(cell.cell_id)
         if data.get("grid"):
             from pringle.session import grid_config_from_dict
             cfg = grid_config_from_dict(data["grid"])
@@ -393,8 +497,12 @@ class PringleWindow(QMainWindow):
                 vp.remove_object(cell_id)
 
         elif result.render_type in ("scatter", "scatter_2d"):
-            scatter = make_scatter_mesh(result.data, color=style.color, size=style.point_size)
-            vp.add_object(cell_id, scatter)
+            if style.scatter_as_line:
+                line = make_line_mesh(result.data, color=style.color, thickness=style.line_width)
+                vp.add_object(cell_id, line)
+            else:
+                scatter = make_scatter_mesh(result.data, color=style.color, size=style.point_size)
+                vp.add_object(cell_id, scatter)
 
         else:
             # No renderable output (comment, slider, error, or hidden) — clear
@@ -420,6 +528,21 @@ class PringleWindow(QMainWindow):
         self._cell_list.update_grid(self._grid)
         self._viewport.renderer.set_overlay_bounds(x_min, x_max, y_min, y_max, z_min, z_max)
 
+    def _on_settings_toggled(self, checked: bool) -> None:
+        """Show or hide the floating axis settings dialog."""
+        if checked:
+            self._settings_dialog.adjustSize()
+            # Position the dialog just below and left-aligned with the ⚙ button
+            btn = self._vp_container._btn
+            btn_br = btn.mapToGlobal(btn.rect().bottomRight())
+            dlg_x = btn_br.x() - self._settings_dialog.width()
+            dlg_y = btn_br.y() + 4
+            self._settings_dialog.move(dlg_x, dlg_y)
+            self._settings_dialog.show()
+            self._settings_dialog.raise_()
+        else:
+            self._settings_dialog.hide()
+
     def _on_equalize(self) -> None:
         """Set x/y span equal to the current z span, centered at zero."""
         z_min = self._view_settings._z_min.value()
@@ -430,6 +553,33 @@ class PringleWindow(QMainWindow):
         half = z_span / 2
         self._view_settings.set_bounds(-half, half, -half, half)
         self._on_bounds_changed(-half, half, -half, half, z_min, z_max)
+
+    def _on_fit_to_data(self) -> None:
+        """Set all three axis bounds to a cube that snugly encloses all rendered objects."""
+        lo = np.full(3, np.inf)
+        hi = np.full(3, -np.inf)
+        for obj in self._viewport.renderer._objects.values():
+            bb = obj.get_world_bounding_box()
+            if bb is not None and np.all(np.isfinite(bb)):
+                lo = np.minimum(lo, bb[0])
+                hi = np.maximum(hi, bb[1])
+        if not np.all(np.isfinite(lo)):
+            return  # no renderable objects (or all have degenerate/inf bounds)
+        # Uniform cube with 5% padding; minimum half-span of 0.5 guards flat/point data
+        half_span = max(float(np.max((hi - lo) / 2)) * 1.05, 0.5)
+        center = (lo + hi) / 2.0
+        new_min = center - half_span
+        new_max = center + half_span
+        self._view_settings.set_bounds(
+            float(new_min[0]), float(new_max[0]),
+            float(new_min[1]), float(new_max[1]),
+            float(new_min[2]), float(new_max[2]),
+        )
+        self._on_bounds_changed(
+            float(new_min[0]), float(new_max[0]),
+            float(new_min[1]), float(new_max[1]),
+            float(new_min[2]), float(new_max[2]),
+        )
 
     def _on_resolution_changed(self, n: int) -> None:
         cfg = self._grid.config
