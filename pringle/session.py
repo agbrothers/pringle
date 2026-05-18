@@ -85,6 +85,7 @@ def cell_to_dict(cell) -> dict:
     elif isinstance(cell, DataCellWidget):
         base["type"] = "data"
         base["source"] = cell.source()
+        base["visible"] = cell.is_visible_cell()
         base["sub_cells"] = [
             {"type": s.sub_type(), "source": s.source()}
             for s in cell._sub_cells
@@ -238,13 +239,16 @@ def restore_cell_list(
                     sub = cell.add_sub_cell(sub_data.get("type", "constraint"))
                     sub._edit.setText(sub_data.get("source", ""))
 
-        # Restore data cell sub-cells
+        # Restore data cell sub-cells and visibility
         elif cell_type == "data":
             from pringle.data_cell_widget import DataCellWidget
             if isinstance(cell, DataCellWidget):
                 for sub_data in data.get("sub_cells", []):
                     sub = cell.add_sub_cell(sub_data.get("type", "initial_condition"))
                     sub._edit.setText(sub_data.get("source", ""))
+                if not data.get("visible", True):
+                    cell._eye_btn.setChecked(False)
+                    cell._on_visibility_toggled(False)
 
     # Start any sliders that were playing when saved (must happen after full restore
     # so the shared namespace is populated before the first animation tick fires)

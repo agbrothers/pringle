@@ -248,6 +248,7 @@ class DataCellWidget(QWidget):
 
     def _on_visibility_toggled(self, checked: bool) -> None:
         self._visible = checked
+        self._update_color_dot()
         self.visibility_toggled.emit(self.cell_id, checked)
 
     def _mark_stale(self) -> None:
