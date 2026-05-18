@@ -74,6 +74,13 @@ class _CommentEdit(QPlainTextEdit):
         h = line_count * line_h + 2 * dm + m.top() + m.bottom()
         self.setFixedHeight(max(h, 30))
 
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._adjust_height()
+
+    def wheelEvent(self, event) -> None:
+        event.ignore()
+
 
 class CommentCellWidget(QWidget):
     """Free-text annotation — not evaluated, not rendered."""
@@ -103,7 +110,7 @@ class CommentCellWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
-        self.setStyleSheet("background: #1e1e1e;")
+        self.setStyleSheet("background: #171717;")
 
         outer_h = QHBoxLayout(self)
         outer_h.setContentsMargins(0, 2, 4, 2)

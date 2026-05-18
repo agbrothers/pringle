@@ -7,6 +7,46 @@ See [16-closed-bugs.md](16-closed-bugs.md) for resolved bugs.
 
 ---
 
+### BUG-017 — Multi-line comment cells load at single-line height; content requires scrolling
+**Status:** Open  
+**Logged:** 2026-05-18  
+**Related:** FEAT-027 (comment cells)
+
+**Description:**  
+When a session file is loaded, comment cells that contain multiple lines of text are rendered at a single-line height. The full content is hidden and only accessible by scrolling inside the cell. Comment cells created interactively auto-grow correctly as the user types. This is a load-only regression.
+
+The user also reports that scrolling inside a comment cell should be disabled entirely — the cell should always grow to show all content statically, with no scrollable overflow.
+
+**Reproduction:**  
+1. Add a comment cell with 3+ lines of text.  
+2. Save the session.  
+3. Close and reopen. The comment cell appears clipped to one line; scrolling inside it reveals the rest.
+
+**Root cause — two separate sub-issues:**
+
+1. **Height not recomputed after layout width is known (the load bug):**  
+   `_CommentEdit.__init__` calls `_adjust_height()` immediately, before the widget has been inserted into a layout. At that point the viewport width is 0 (or the Qt default), so `QPlainTextDocumentLayout` cannot wrap text and reports a height of 1 line regardless of content length. Shortly after, `set_source` calls `setPlainText`, which emits `documentSizeChanged` — but the same problem applies: the widget still has no real width. The widget is inserted into the layout with a 1-line height, and when it finally gets its real width from the layout engine, the document reflowing updates the layout but does **not** re-emit `documentSizeChanged` (text content hasn't changed). The `setFixedHeight` call therefore never fires with the correct line count on load.
+
+   **Fix:** Override `resizeEvent` on `_CommentEdit` to call `_adjust_height()` whenever the widget is resized, including the initial layout pass that assigns the real width:
+   ```python
+   def resizeEvent(self, event) -> None:
+       super().resizeEvent(event)
+       self._adjust_height()
+   ```
+   This ensures correct height at initial layout time (session load) and also handles panel resizes correctly.
+
+2. **Scrolling not fully suppressed:**  
+   `ScrollBarAlwaysOff` hides the scroll bars but does not prevent the content from scrolling via keyboard or mouse wheel. Once the height is fixed correctly (fix 1), this is moot for well-behaved cases — but if the widget ever gets a fixed height that is slightly short (rounding, margins), the user can still scroll a pixel or two. The policy `QSizePolicy.Policy.Fixed` combined with the `setFixedHeight` approach already prevents dynamic resizing after layout, but does not block scroll events on the widget itself.
+
+   **Fix:** Override `wheelEvent` (and optionally `keyPressEvent` for scroll keys like PageUp/PageDown) in `_CommentEdit` to ignore scroll input, delegating to the parent instead:
+   ```python
+   def wheelEvent(self, event) -> None:
+       event.ignore()   # pass scroll to the outer QScrollArea
+   ```
+   This ensures the outer panel scrolls rather than the text edit itself, regardless of height.
+
+---
+
 ### BUG-009 — Hard crash (`Abort trap: 6`) when data cell produces NaN or Inf
 **Status:** Open  
 **Logged:** 2026-05-16  
