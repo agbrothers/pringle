@@ -182,42 +182,56 @@ Additionally, for all equations and/or data that return an array, we should prin
 
 
 * Color picker
-* App icon
-* Dark mode
-* Better UI overall
+* Application icon
+* Dark mode vs Light mode
+* Better UI overall -> Manual iteration via jupyter notebook 
 * Adding a slider with a value above the default max (10) caps it at 10
-* Re-arrange expressions
 * Mute colors of axes
-* Print metadata about data objects (shape, first few values?)
 * Disconnect when panning and rotating. This might actually be useful for moving the thingy?
-* Undefined warning in piecewise while actually defined. 
 * Top view doesn't work
 
-* Crash on typing abs(z) < 5
 
-Traceback (most recent call last):
-  File "/Users/greysonbrothers/code/pringle/pringle/cell_list.py", line 361, in _on_cell_changed
-    self._rebuild_namespace()
-    ~~~~~~~~~~~~~~~~~~~~~~~^^
-  File "/Users/greysonbrothers/code/pringle/pringle/cell_list.py", line 330, in _rebuild_namespace
-    self._on_cell_result(cell.cell_id, result, cell.style)
-    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/greysonbrothers/code/pringle/pringle/app.py", line 349, in _on_cell_result
-    mesh = make_surface_mesh(
-        result.x, result.y, result.data, color=style.color,
-        constraint_mask=result.constraint_mask,
-        z_raw=result.data_unmasked,
-    )
-  File "/Users/greysonbrothers/code/pringle/pringle/renderer.py", line 172, in make_surface_mesh
-    positions, indices, normals = _clip_mesh_to_mask(positions, indices, normals, inside)
-                                  ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/greysonbrothers/code/pringle/pringle/renderer.py", line 101, in _clip_mesh_to_mask
-    ia, ib, ic = bool(inside[a]), bool(inside[b]), bool(inside[c])
-                                       ~~~~~~^^^
-IndexError: index 1 is out of bounds for axis 0 with size 1
-Abort trap: 6
+-------------------------------
 
+Regarding the "ambiguity between scatter and data arrays": we simply resolve this by saying that there is no longer a difference. We treat both the same and auto render a them a single initial time as a scatter plot by default. We afford both the option of adding recursion rules and initial conditions. The data cell format is applied to both, providing the run key that allows the user to manually force an update after the initial auto render. With this approach, assuming we detect the return of a data array, we probably want to prevent per-step updates until after the initial render, which would be triggered when the user hits enter or clicks/navigates outside of the cell. 
 
+Would this be difficult or trigger a large overhaul? 
 
+Also, clearing with a warning about invalid subcells seems like a good choice to me. 
 
+-------------------------------
 
+``` CONSTANT SLIDER (reference)
+[●] [name]  [value ] [✕]
+[▷]  [min] [──●────────────────] [max]  · step [step]
+```
+
+``` DATA (to change)
+[●] [name]  [value ] [•] [▷] [↻] [✕]
+
+becomes 
+
+[●] [name]  [value ] [👁️] [+] [✕]
+[→] [•] 
+```
+
+``` EQUATION (to change)
+[●] [name]  [value ] [👁️] [⊂] [✕]
+
+becomes 
+
+[●] [name]  [value ] [👁️] [+] [✕]
+```
+
+For the subcells, we can keep: 
+```
+⊂ constraint
+☰ condition
+↻ recursion
+Ø initial condition
+```
+
+Line size
+save sizes not holding
+loop vs ping-pong
+Size and opacity visual settings don't save (or possibly load). 
