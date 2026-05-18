@@ -32,6 +32,9 @@ dependencies = [
     "scipy>=1.13",
 ]
 
+[project.scripts]
+pringle = "pringle.app:launch"
+
 [project.urls]
 Homepage = "https://github.com/agbrothers/pringle"
 Issues = "https://github.com/agbrothers/pringle/issues"
