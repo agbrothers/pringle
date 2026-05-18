@@ -35,7 +35,14 @@ _HASH_RE = re.compile(r"^#\s?")
 
 
 class _CommentEdit(QPlainTextEdit):
-    """Auto-growing QPlainTextEdit — identical mechanics to AutoGrowEdit."""
+    """
+    Auto-growing QPlainTextEdit for comment cells.
+
+    QPlainTextDocumentLayout.documentSize().height() returns a visual
+    line count (not pixels).  documentSizeChanged fires after layout so
+    we multiply line_count × fontMetrics().lineSpacing() to get the
+    correct pixel height for word-wrapped content.
+    """
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -44,13 +51,27 @@ class _CommentEdit(QPlainTextEdit):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-        self.document().contentsChanged.connect(self._adjust_height)
+        self.document().documentLayout().documentSizeChanged.connect(
+            self._on_document_size_changed
+        )
         self._adjust_height()
 
-    def _adjust_height(self) -> None:
-        doc_h = int(self.document().size().height())
+    def _on_document_size_changed(self, new_size) -> None:
+        line_count = max(1, int(new_size.height()))
+        line_h = self.fontMetrics().lineSpacing()
+        dm = int(self.document().documentMargin())
         m = self.contentsMargins()
-        h = doc_h + m.top() + m.bottom() + 6
+        h = line_count * line_h + 2 * dm + m.top() + m.bottom()
+        self.setFixedHeight(max(h, 30))
+        self.updateGeometry()
+
+    def _adjust_height(self) -> None:
+        """Initial sizing before documentSizeChanged has fired."""
+        line_count = max(1, int(self.document().size().height()))
+        line_h = self.fontMetrics().lineSpacing()
+        dm = int(self.document().documentMargin())
+        m = self.contentsMargins()
+        h = line_count * line_h + 2 * dm + m.top() + m.bottom()
         self.setFixedHeight(max(h, 30))
 
 
