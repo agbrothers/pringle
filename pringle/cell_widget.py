@@ -25,9 +25,9 @@ from PyQt6.QtWidgets import (
     QLabel, QPlainTextEdit, QLineEdit, QSizePolicy, QFrame,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QKeyEvent, QColor, QPalette
+from PyQt6.QtGui import QKeyEvent
 
-from pringle.style import CellStyle, palette_color
+from pringle.style import CellStyle
 
 
 # ---------------------------------------------------------------------------
@@ -102,7 +102,7 @@ class ConstraintSubCell(QWidget):
 
     _ICONS = {
         "constraint":         "⊂",
-        "condition":          "≡",
+        "condition":          "☰",
         "initial_condition":  "∅",
         "recursion":          "↺",
     }
@@ -284,13 +284,6 @@ class CellWidget(QWidget):
         self._text_edit.backspace_on_empty.connect(lambda: self.delete_requested.emit(self.cell_id))
         row.addWidget(self._text_edit, 1)
 
-        self._run_btn = QPushButton("▷")
-        self._run_btn.setFixedSize(28, 24)
-        self._run_btn.setToolTip("Re-run cell")
-        self._run_btn.setVisible(False)
-        self._run_btn.clicked.connect(lambda: self.run_requested.emit(self.cell_id))
-        row.addWidget(self._run_btn)
-
         self._eye_btn = QPushButton("👁")
         self._eye_btn.setFixedSize(24, 24)
         self._eye_btn.setFlat(True)
@@ -300,7 +293,7 @@ class CellWidget(QWidget):
         self._eye_btn.clicked.connect(self._on_visibility_toggled)
         row.addWidget(self._eye_btn)
 
-        self._add_sub_btn = QPushButton("⊂")
+        self._add_sub_btn = QPushButton("+")
         self._add_sub_btn.setFixedSize(24, 24)
         self._add_sub_btn.setFlat(True)
         self._add_sub_btn.setToolTip("Add sub-cell")
@@ -315,6 +308,27 @@ class CellWidget(QWidget):
         row.addWidget(self._delete_btn)
 
         outer.addLayout(row)
+
+        # Data row: run arrow + status dot (hidden until data mode is active)
+        self._data_row = QWidget()
+        data_rl = QHBoxLayout(self._data_row)
+        data_rl.setContentsMargins(4, 0, 6, 2)
+        data_rl.setSpacing(4)
+
+        self._run_btn = QPushButton("→")
+        self._run_btn.setFixedSize(28, 22)
+        self._run_btn.setToolTip("Re-run cell")
+        self._run_btn.clicked.connect(lambda: self.run_requested.emit(self.cell_id))
+        data_rl.addWidget(self._run_btn)
+
+        self._status_dot = QLabel("●")
+        self._status_dot.setStyleSheet("color: #bbb; font-size: 12px;")
+        self._status_dot.setToolTip("Cell status")
+        data_rl.addWidget(self._status_dot)
+        data_rl.addStretch(1)
+
+        self._data_row.setVisible(False)
+        outer.addWidget(self._data_row)
 
         # Sub-cell container (empty initially)
         self._sub_container = QWidget()
@@ -376,10 +390,25 @@ class CellWidget(QWidget):
     def set_source(self, text: str) -> None:
         self._text_edit.setPlainText(text)
 
+    _DATA_DOT = {
+        "idle":  "color: #bbb; font-size: 12px;",
+        "ok":    "color: #2a8a2a; font-size: 12px; font-weight: bold;",
+        "stale": "color: #cc7700; font-size: 12px;",
+        "error": "color: #cc2222; font-size: 12px; font-weight: bold;",
+    }
+
+    def _set_data_status(self, state: str) -> None:
+        if self._data_mode:
+            self._status_dot.setStyleSheet(self._DATA_DOT.get(state, self._DATA_DOT["idle"]))
+
+    def _mark_data_stale(self) -> None:
+        self._set_data_status("stale")
+
     def set_error(self, msg: str | None) -> None:
         if msg:
             self._error_label.setText(f"⚠ {msg}")
             self._error_label.setVisible(True)
+            self._set_data_status("error")
         else:
             self._error_label.setVisible(False)
 
@@ -387,6 +416,7 @@ class CellWidget(QWidget):
         if msg:
             self._warning_label.setText(f"⚠ {msg}")
             self._warning_label.setVisible(True)
+            self._set_data_status("stale")
         else:
             self._warning_label.setVisible(False)
 
@@ -407,6 +437,7 @@ class CellWidget(QWidget):
         self.set_error(None)
         self.set_warning(None)
         self.set_preview(None, None)
+        self._set_data_status("ok")
 
     def add_sub_cell(self, sub_type: str = "constraint") -> ConstraintSubCell:
         """Append a constraint or condition sub-cell below this cell."""
@@ -457,16 +488,19 @@ class CellWidget(QWidget):
                 self._remove_sub_cell(sub)
 
         self._data_mode = enabled
-        self._run_btn.setVisible(enabled)
+        self._data_row.setVisible(enabled)
 
         if enabled and self._debounce_connected:
             self._text_edit.textChanged.disconnect(self._on_text_changed)
+            self._text_edit.textChanged.connect(self._mark_data_stale)
             self._text_edit.focus_lost.connect(self._emit_changed)
             self._debounce_connected = False
         elif not enabled and not self._debounce_connected:
+            self._text_edit.textChanged.disconnect(self._mark_data_stale)
             self._text_edit.textChanged.connect(self._on_text_changed)
             self._text_edit.focus_lost.disconnect(self._emit_changed)
             self._debounce_connected = True
+            self._status_dot.setStyleSheet("color: #bbb; font-size: 12px;")
 
     def is_data_mode(self) -> bool:
         return self._data_mode

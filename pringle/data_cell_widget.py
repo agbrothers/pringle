@@ -27,11 +27,12 @@ from pringle.style import CellStyle
 class DataCellWidget(QWidget):
     """A single data panel cell."""
 
-    run_requested = pyqtSignal(str)     # cell_id
-    delete_requested = pyqtSignal(str)  # cell_id
-    drag_started = pyqtSignal(str)      # cell_id
-    drag_moved = pyqtSignal(str, int)   # cell_id, global_y
-    drag_ended = pyqtSignal(str)        # cell_id
+    run_requested = pyqtSignal(str)          # cell_id
+    delete_requested = pyqtSignal(str)       # cell_id
+    visibility_toggled = pyqtSignal(str, bool)  # cell_id, is_visible
+    drag_started = pyqtSignal(str)           # cell_id
+    drag_moved = pyqtSignal(str, int)        # cell_id, global_y
+    drag_ended = pyqtSignal(str)             # cell_id
 
     _STATUS_STYLES = {
         "idle":  "color: #bbb;",
@@ -50,6 +51,8 @@ class DataCellWidget(QWidget):
         self.cell_id: str = cell_id or str(uuid.uuid4())
         self.style: CellStyle = style or CellStyle()
         self._sub_cells: list[ConstraintSubCell] = []
+        self._visible: bool = True
+        self._last_result = None  # cached for visibility toggle
         self._build_ui()
 
     def _build_ui(self):
@@ -70,6 +73,7 @@ class DataCellWidget(QWidget):
         outer.setSpacing(2)
         outer_h.addWidget(content, 1)
 
+        # Main row: [●] [text] [👁] [+] [✕]
         row = QHBoxLayout()
         row.setContentsMargins(4, 0, 6, 0)
         row.setSpacing(4)
@@ -86,21 +90,19 @@ class DataCellWidget(QWidget):
         self._text_edit.textChanged.connect(self._on_text_changed)
         row.addWidget(self._text_edit, 1)
 
-        self._status_dot = QLabel("●")
-        self._status_dot.setStyleSheet(self._STATUS_STYLES["idle"])
-        self._status_dot.setToolTip("Cell status")
-        row.addWidget(self._status_dot)
+        self._eye_btn = QPushButton("👁")
+        self._eye_btn.setFixedSize(24, 24)
+        self._eye_btn.setFlat(True)
+        self._eye_btn.setCheckable(True)
+        self._eye_btn.setChecked(True)
+        self._eye_btn.setToolTip("Toggle visibility")
+        self._eye_btn.clicked.connect(self._on_visibility_toggled)
+        row.addWidget(self._eye_btn)
 
-        self._run_btn = QPushButton("▷")
-        self._run_btn.setFixedSize(28, 24)
-        self._run_btn.setToolTip("Run cell")
-        self._run_btn.clicked.connect(lambda: self.run_requested.emit(self.cell_id))
-        row.addWidget(self._run_btn)
-
-        self._add_sub_btn = QPushButton("↺")
+        self._add_sub_btn = QPushButton("+")
         self._add_sub_btn.setFixedSize(24, 24)
         self._add_sub_btn.setFlat(True)
-        self._add_sub_btn.setToolTip("Add recurrence sub-cell")
+        self._add_sub_btn.setToolTip("Add sub-cell")
         self._add_sub_btn.clicked.connect(self._on_add_sub_clicked)
         row.addWidget(self._add_sub_btn)
 
@@ -111,6 +113,25 @@ class DataCellWidget(QWidget):
         row.addWidget(self._delete_btn)
 
         outer.addLayout(row)
+
+        # Data row: [→ run] [● status] [stretch]
+        data_row = QHBoxLayout()
+        data_row.setContentsMargins(4, 0, 6, 2)
+        data_row.setSpacing(4)
+
+        self._run_btn = QPushButton("→")
+        self._run_btn.setFixedSize(28, 22)
+        self._run_btn.setToolTip("Run cell")
+        self._run_btn.clicked.connect(lambda: self.run_requested.emit(self.cell_id))
+        data_row.addWidget(self._run_btn)
+
+        self._status_dot = QLabel("●")
+        self._status_dot.setStyleSheet(self._STATUS_STYLES["idle"])
+        self._status_dot.setToolTip("Cell status")
+        data_row.addWidget(self._status_dot)
+        data_row.addStretch(1)
+
+        outer.addLayout(data_row)
 
         self._sub_container = QWidget()
         self._sub_layout = QVBoxLayout(self._sub_container)
@@ -176,6 +197,9 @@ class DataCellWidget(QWidget):
         else:
             self._msg_label.setVisible(False)
 
+    def is_visible_cell(self) -> bool:
+        return self._visible
+
     def focus(self) -> None:
         self._text_edit.setFocus()
 
@@ -204,6 +228,10 @@ class DataCellWidget(QWidget):
         from dataclasses import replace
         self.style = replace(new_style)
         self._update_color_dot()
+
+    def _on_visibility_toggled(self, checked: bool) -> None:
+        self._visible = checked
+        self.visibility_toggled.emit(self.cell_id, checked)
 
     def _mark_stale(self) -> None:
         self._status_dot.setStyleSheet(self._STATUS_STYLES["stale"])

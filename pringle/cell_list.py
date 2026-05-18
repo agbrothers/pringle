@@ -214,6 +214,7 @@ class CellListWidget(QWidget):
         cell = DataCellWidget(style=style)
         cell.run_requested.connect(self._run_data_cell)
         cell.delete_requested.connect(self._on_delete_requested)
+        cell.visibility_toggled.connect(self._on_data_cell_visibility_toggled)
         cell.drag_started.connect(self._on_drag_started)
         cell.drag_moved.connect(self._on_drag_moved)
         cell.drag_ended.connect(self._on_drag_ended)
@@ -357,8 +358,12 @@ class CellListWidget(QWidget):
         self._data_cell_ns.update(result.exports)
         self._rebuild_namespace()
 
+        cell._last_result = result
         if result.render_type:
-            self._on_cell_result(cell.cell_id, result, CellStyle())
+            if cell.is_visible_cell():
+                self._on_cell_result(cell.cell_id, result, cell.style)
+            else:
+                self._on_cell_result(cell.cell_id, CellResult(), cell.style)
 
     # ------------------------------------------------------------------
     # Undo / redo (structural: add / remove cell)
@@ -518,8 +523,20 @@ class CellListWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _on_run_requested(self, cell_id: str) -> None:
-        """Force re-evaluate a data-mode CellWidget (▷ button or focus-out)."""
+        """Force re-evaluate a data-mode CellWidget (→ button or focus-out)."""
         self._rebuild_namespace()
+
+    def _on_data_cell_visibility_toggled(self, cell_id: str, is_visible: bool) -> None:
+        """Show or clear a DataCellWidget's render when the 👁 is toggled."""
+        idx = self._index_of(cell_id)
+        if idx < 0:
+            return
+        cell = self._cells[idx]
+        last = getattr(cell, "_last_result", None)
+        if is_visible and last is not None and last.render_type:
+            self._on_cell_result(cell_id, last, cell.style)
+        else:
+            self._on_cell_result(cell_id, CellResult(), cell.style)
 
     def _on_cell_changed(self, cell_id: str) -> None:
         self._maybe_morph_to_slider(cell_id)
