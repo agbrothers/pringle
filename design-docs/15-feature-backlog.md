@@ -61,6 +61,8 @@ When a user types `#` as the first character in any cell, the cell automatically
 
 - **Limitations:** none significant. `QPlainTextEdit` handles multi-line text and word wrap natively. The auto-grow pattern is well-established in Qt. The morph/de-morph logic is the same as the existing slider morph and carries the same caveats (cell_id is preserved; undo history may need updating if undo is tracked at the cell level).
 
+- **Polish fixes applied 2026-05-18:** (1) `#` label pinned to `AlignTop` with `padding-top: 5px` to align with the first text line. (2) Auto-grow implemented via `_CommentEdit` subclass (same pattern as `AutoGrowEdit`) — `setFixedHeight` called on self inside the subclass rather than from the outer widget. (3) `comment.focus()` called in `_maybe_morph_to_comment` immediately after the layout swap so the cursor returns automatically.
+
 **Desmos reference:** see `01-desmos-3d-overview.md` — Organization Features → Comment Cells, updated 2026-05-18.
 
 ---

@@ -34,6 +34,26 @@ from pringle.cell_widget import DragHandle
 _HASH_RE = re.compile(r"^#\s?")
 
 
+class _CommentEdit(QPlainTextEdit):
+    """Auto-growing QPlainTextEdit — identical mechanics to AutoGrowEdit."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        self.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.document().contentsChanged.connect(self._adjust_height)
+        self._adjust_height()
+
+    def _adjust_height(self) -> None:
+        doc_h = int(self.document().size().height())
+        m = self.contentsMargins()
+        h = doc_h + m.top() + m.bottom() + 6
+        self.setFixedHeight(max(h, 30))
+
+
 class CommentCellWidget(QWidget):
     """Free-text annotation — not evaluated, not rendered."""
 
@@ -75,25 +95,19 @@ class CommentCellWidget(QWidget):
         self._drag_handle.drag_ended.connect(lambda: self.drag_ended.emit(self.cell_id))
         outer_h.addWidget(self._drag_handle)
 
-        # '#' decoration in place of color dot
+        # '#' decoration — pinned to top to align with the first text line
         hash_lbl = QLabel("#")
         hash_lbl.setFixedWidth(18)
-        hash_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hash_lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
         hash_lbl.setStyleSheet(
             "color: #4a7c59; font-size: 13px; font-family: monospace; font-weight: bold;"
-            "padding-top: 4px;"
+            "padding-top: 5px;"
         )
-        outer_h.addWidget(hash_lbl)
+        outer_h.addWidget(hash_lbl, 0, Qt.AlignmentFlag.AlignTop)
 
         # Auto-grow text area
-        self._edit = QPlainTextEdit()
+        self._edit = _CommentEdit()
         self._edit.setPlaceholderText("comment…")
-        self._edit.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
-        self._edit.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
-        self._edit.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._edit.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-        self._edit.setFixedHeight(30)
         self._edit.setStyleSheet(
             "QPlainTextEdit {"
             "  background: transparent;"
@@ -104,7 +118,6 @@ class CommentCellWidget(QWidget):
             "  padding: 2px 0;"
             "}"
         )
-        self._edit.document().contentsChanged.connect(self._adjust_height)
         self._edit.document().contentsChanged.connect(
             lambda: self.content_changed.emit(self.cell_id)
         )
@@ -119,12 +132,6 @@ class CommentCellWidget(QWidget):
         )
         del_btn.clicked.connect(lambda: self.delete_requested.emit(self.cell_id))
         outer_h.addWidget(del_btn)
-
-    def _adjust_height(self) -> None:
-        doc_h = self._edit.document().size().height()
-        m = self._edit.contentsMargins()
-        h = int(doc_h) + m.top() + m.bottom() + 6
-        self._edit.setFixedHeight(max(h, 30))
 
     # ------------------------------------------------------------------
     # CellWidget-compatible interface

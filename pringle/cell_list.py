@@ -628,6 +628,7 @@ class CellListWidget(QWidget):
         self._layout.replaceWidget(cell, comment)
         self._cells[idx] = comment
         cell.deleteLater()
+        comment.focus()
 
     def _maybe_morph_to_slider(self, cell_id: str) -> None:
         """
