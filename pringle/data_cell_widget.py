@@ -18,7 +18,7 @@ import uuid
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QMenu, QFrame,
 )
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import pyqtSignal, Qt
 
 from pringle.cell_widget import CellTextEdit, ConstraintSubCell, DragHandle
 from pringle.style import CellStyle
@@ -73,6 +73,14 @@ class DataCellWidget(QWidget):
         row = QHBoxLayout()
         row.setContentsMargins(4, 0, 6, 0)
         row.setSpacing(4)
+
+        self._color_dot = QPushButton()
+        self._color_dot.setFixedSize(18, 18)
+        self._color_dot.setFlat(True)
+        self._color_dot.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._update_color_dot()
+        self._color_dot.clicked.connect(self._on_color_dot_clicked)
+        row.addWidget(self._color_dot)
 
         self._text_edit = CellTextEdit(self)
         self._text_edit.textChanged.connect(self._on_text_changed)
@@ -174,6 +182,28 @@ class DataCellWidget(QWidget):
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
+
+    def _update_color_dot(self) -> None:
+        r, g, b, _ = self.style.color
+        hex_color = "#{:02x}{:02x}{:02x}".format(int(r * 255), int(g * 255), int(b * 255))
+        self._color_dot.setStyleSheet(
+            f"QPushButton {{ background-color: {hex_color}; "
+            f"border-radius: 9px; border: 1px solid rgba(0,0,0,0.15); }}"
+            f"QPushButton:hover {{ border: 1px solid rgba(0,0,0,0.35); }}"
+        )
+
+    def _on_color_dot_clicked(self) -> None:
+        from pringle.style_popover import StylePopoverWidget
+        popover = StylePopoverWidget(self.style, parent=self)
+        popover.style_changed.connect(self._on_style_changed)
+        pos = self._color_dot.mapToGlobal(self._color_dot.rect().bottomLeft())
+        popover.move(pos)
+        popover.show()
+
+    def _on_style_changed(self, new_style) -> None:
+        from dataclasses import replace
+        self.style = replace(new_style)
+        self._update_color_dot()
 
     def _mark_stale(self) -> None:
         self._status_dot.setStyleSheet(self._STATUS_STYLES["stale"])

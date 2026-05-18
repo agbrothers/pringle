@@ -162,9 +162,11 @@ class CellTextEdit(QPlainTextEdit):
     - Expands vertically to fit content (no scrollbars)
     - Emits enter_at_end() when Enter is pressed at the end of text
     - Emits backspace_on_empty() when Backspace is pressed in an empty cell
+    - Emits focus_lost() when keyboard focus leaves (used by data-mode cells)
     """
     enter_at_end = pyqtSignal()
     backspace_on_empty = pyqtSignal()
+    focus_lost = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -180,6 +182,10 @@ class CellTextEdit(QPlainTextEdit):
         margins = self.contentsMargins()
         h = doc_height + margins.top() + margins.bottom() + 6
         self.setFixedHeight(max(h, 32))
+
+    def focusOutEvent(self, event):
+        self.focus_lost.emit()
+        super().focusOutEvent(event)
 
     def keyPressEvent(self, event: QKeyEvent):
         key = event.key()
@@ -213,6 +219,7 @@ class CellWidget(QWidget):
     content_changed = pyqtSignal(str)      # cell_id
     delete_requested = pyqtSignal(str)     # cell_id
     enter_pressed = pyqtSignal(str)        # cell_id
+    run_requested = pyqtSignal(str)        # cell_id (data-mode forced re-eval)
     drag_started = pyqtSignal(str)         # cell_id
     drag_moved = pyqtSignal(str, int)      # cell_id, global_y
     drag_ended = pyqtSignal(str)           # cell_id
@@ -225,6 +232,8 @@ class CellWidget(QWidget):
         self.style: CellStyle = style or CellStyle()
         self._visible: bool = True
         self._sub_cells: list[ConstraintSubCell] = []
+        self._data_mode: bool = False
+        self._debounce_connected: bool = True  # textChanged → debounce connected
 
         self._build_ui()
         self._debounce = QTimer(self)
@@ -274,6 +283,13 @@ class CellWidget(QWidget):
         self._text_edit.enter_at_end.connect(lambda: self.enter_pressed.emit(self.cell_id))
         self._text_edit.backspace_on_empty.connect(lambda: self.delete_requested.emit(self.cell_id))
         row.addWidget(self._text_edit, 1)
+
+        self._run_btn = QPushButton("▷")
+        self._run_btn.setFixedSize(28, 24)
+        self._run_btn.setToolTip("Re-run cell")
+        self._run_btn.setVisible(False)
+        self._run_btn.clicked.connect(lambda: self.run_requested.emit(self.cell_id))
+        row.addWidget(self._run_btn)
 
         self._eye_btn = QPushButton("👁")
         self._eye_btn.setFixedSize(24, 24)
@@ -415,6 +431,46 @@ class CellWidget(QWidget):
     def condition_exprs(self) -> list[str]:
         return [s.source() for s in self._sub_cells if s.sub_type() == "condition" and s.source().strip()]
 
+    def set_data_mode(self, enabled: bool) -> None:
+        """Switch cell between expression mode (auto-eval) and data-array mode (manual re-run)."""
+        if self._data_mode == enabled:
+            return
+
+        # Warn about incompatible sub-cells before switching
+        if enabled:
+            incompatible = [s for s in self._sub_cells if s.sub_type() in ("constraint", "condition")]
+        else:
+            incompatible = [s for s in self._sub_cells if s.sub_type() in ("recursion", "initial_condition")]
+
+        if incompatible:
+            from PyQt6.QtWidgets import QMessageBox
+            mode_label = "data array" if enabled else "spatial expression"
+            reply = QMessageBox.question(
+                self,
+                "Clear sub-cells?",
+                f"This cell now returns a {mode_label}. "
+                f"{len(incompatible)} sub-cell(s) of the wrong type will be removed. Continue?",
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+            for sub in incompatible[:]:
+                self._remove_sub_cell(sub)
+
+        self._data_mode = enabled
+        self._run_btn.setVisible(enabled)
+
+        if enabled and self._debounce_connected:
+            self._text_edit.textChanged.disconnect(self._on_text_changed)
+            self._text_edit.focus_lost.connect(self._emit_changed)
+            self._debounce_connected = False
+        elif not enabled and not self._debounce_connected:
+            self._text_edit.textChanged.connect(self._on_text_changed)
+            self._text_edit.focus_lost.disconnect(self._emit_changed)
+            self._debounce_connected = True
+
+    def is_data_mode(self) -> bool:
+        return self._data_mode
+
     def set_style(self, style: CellStyle) -> None:
         self.style = style
         self._update_color_dot()
@@ -443,8 +499,12 @@ class CellWidget(QWidget):
 
     def _on_add_sub_clicked(self):
         menu = QMenu(self)
-        menu.addAction("Add Constraint (filter surface)", lambda: self.add_sub_cell("constraint"))
-        menu.addAction("Add Condition (piecewise branch)", lambda: self.add_sub_cell("condition"))
+        if self._data_mode:
+            menu.addAction("Add Recursion Rule", lambda: self.add_sub_cell("recursion"))
+            menu.addAction("Add Initial Condition", lambda: self.add_sub_cell("initial_condition"))
+        else:
+            menu.addAction("Add Constraint (filter surface)", lambda: self.add_sub_cell("constraint"))
+            menu.addAction("Add Condition (piecewise branch)", lambda: self.add_sub_cell("condition"))
         menu.exec(self._add_sub_btn.mapToGlobal(
             self._add_sub_btn.rect().bottomLeft()
         ))

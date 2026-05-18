@@ -166,6 +166,7 @@ class CellListWidget(QWidget):
             cell.content_changed.connect(self._on_cell_changed)
             cell.delete_requested.connect(self._on_delete_requested)
             cell.enter_pressed.connect(self._on_enter_pressed)
+            cell.run_requested.connect(self._on_run_requested)
 
         cell.drag_started.connect(self._on_drag_started)
         cell.drag_moved.connect(self._on_drag_moved)
@@ -500,11 +501,25 @@ class CellListWidget(QWidget):
             cell.set_warning(result.warning)
         if hasattr(cell, "set_preview"):
             cell.set_preview(result.preview, result.shape_preview)
+
+        # Auto-switch cell between expression mode and data-array mode based on return type
+        if hasattr(cell, "set_data_mode"):
+            should_be_data = (
+                result.from_shape_inference
+                and result.render_type in ("scatter", "scatter_2d")
+            )
+            if should_be_data != cell.is_data_mode():
+                cell.set_data_mode(should_be_data)
+
         return result
 
     # ------------------------------------------------------------------
     # Signal handlers
     # ------------------------------------------------------------------
+
+    def _on_run_requested(self, cell_id: str) -> None:
+        """Force re-evaluate a data-mode CellWidget (▷ button or focus-out)."""
+        self._rebuild_namespace()
 
     def _on_cell_changed(self, cell_id: str) -> None:
         self._maybe_morph_to_slider(cell_id)

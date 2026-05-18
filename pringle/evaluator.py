@@ -49,6 +49,7 @@ class CellResult:
     free_names: set = field(default_factory=set)  # names this cell reads
     preview: str | None = None        # value preview: scalar value or 1D array elements
     shape_preview: str | None = None  # shape string shown in bottom-right for array outputs
+    from_shape_inference: bool = False  # True when scatter was inferred from shape, not explicit magic name
 
 
 # ---------------------------------------------------------------------------
@@ -372,6 +373,10 @@ def run_cell(
 
     # --- Output detection ---
     render_type, data = _detect_magic(local_ns, grid, user_stores)
+    # Scatter detected via shape (not explicit `points = ...`) → data-array mode
+    result.from_shape_inference = (
+        render_type in ("scatter", "scatter_2d") and "points" not in user_stores
+    )
 
     # Auto-render for function definitions: f(x,y) = expr → evaluate as surface
     if render_type is None and func_name is not None:
