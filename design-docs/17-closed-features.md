@@ -6,6 +6,27 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-028 — Functional folder cells with containment, collapse, and session persistence
+**Status:** Closed (implemented 2026-05-18)
+
+**Implementation:**
+- `cell_list.py` — added `_cell_folder: dict[str, str | None]`, `_folder_collapsed`, `_folder_visible` dicts and `_skip_folder_inference` flag. New helpers: `_folder_members`, `_infer_folder`, `_assign_folder`, `_apply_indent`, `_is_render_visible`. Drag-and-drop infers new folder membership from drop position. Folder collapse/expand, visibility signals connected and handled.
+- `folder_cell_widget.py` — added `collapse_changed` and `folder_visibility_changed` signals; eye button for viewport visibility; folder name is now a click-to-edit `QPushButton` (✏ button removed for UI uniformity). Two-state `_committing` guard prevents `editingFinished` double-fire.
+- `session.py` — `cell_to_dict` accepts `folder_id` kwarg; folder dicts include `visible`. `restore_cell_list` uses two-pass approach: Pass 1 creates all cells with `_skip_folder_inference=True`; Pass 2 applies memberships, indentation, and collapsed/visible states.
+- `+ Data cell` button replaced with `+ Folder`.
+
+---
+
+### FEAT-027 — Comment cells triggered by `#`
+**Status:** Closed (implemented 2026-05-18)
+
+**Implementation:**
+- `comment_cell_widget.py` — new `CommentCellWidget` with `_CommentEdit` subclass of `QPlainTextEdit`. Auto-grow via `documentSizeChanged` signal (post-layout, correct for word-wrap); `resizeEvent` override recomputes height on initial layout pass (fixes load-time single-line height — BUG-017). `wheelEvent` overridden to `ignore()` so scroll falls through to outer panel. Layout: `[DragHandle] [# label AlignTop] [_CommentEdit] [✕]`.
+- `cell_list.py` — `_maybe_morph_to_comment` / `_maybe_morph_from_comment` swap cell widget on `#` prefix change, preserving `cell_id` and calling `focus()` post-swap to restore cursor.
+- Session: `type: comment`, `source` includes leading `# `.
+
+---
+
 ### FEAT-029 — Insert new cell below the currently focused cell
 **Status:** Closed (implemented 2026-05-18)  
 **Description:** When the user has a cursor active in a cell, clicking "+ Equation" or "+ Folder" inserts the new cell immediately below that cell rather than appending to the bottom of the panel.

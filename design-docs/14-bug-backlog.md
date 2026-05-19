@@ -7,45 +7,74 @@ See [16-closed-bugs.md](16-closed-bugs.md) for resolved bugs.
 
 ---
 
-### BUG-017 — Multi-line comment cells load at single-line height; content requires scrolling
+### BUG-019 — Loading a second session merges its scene with the first session's objects
 **Status:** Open  
 **Logged:** 2026-05-18  
-**Related:** FEAT-027 (comment cells)
+**Severity:** High — scene content from a prior session persists and contaminates every subsequent load
 
 **Description:**  
-When a session file is loaded, comment cells that contain multiple lines of text are rendered at a single-line height. The full content is hidden and only accessible by scrolling inside the cell. Comment cells created interactively auto-grow correctly as the user types. This is a load-only regression.
-
-The user also reports that scrolling inside a comment cell should be disabled entirely — the cell should always grow to show all content statically, with no scrollable overflow.
+When two session files are opened back to back without restarting the app, the second session's plot appears merged with the first. Surfaces, scatter points, or curves from the first session remain visible alongside the content of the second. There is no visible contamination when only one session is loaded from a cold start.
 
 **Reproduction:**  
-1. Add a comment cell with 3+ lines of text.  
-2. Save the session.  
-3. Close and reopen. The comment cell appears clipped to one line; scrolling inside it reveals the rest.
+1. Launch the app (or start from a clean state).  
+2. Open `sessions/sinusoid.yml`. Plots render correctly.  
+3. Open `sessions/hello.yml`. The sinusoidal surface from the first session remains visible alongside hello.yml's content.
 
-**Root cause — two separate sub-issues:**
+**Root cause — orphaned renderer objects caused by cell ID reassignment after the initial namespace rebuild:**
 
-1. **Height not recomputed after layout width is known (the load bug):**  
-   `_CommentEdit.__init__` calls `_adjust_height()` immediately, before the widget has been inserted into a layout. At that point the viewport width is 0 (or the Qt default), so `QPlainTextDocumentLayout` cannot wrap text and reports a height of 1 line regardless of content length. Shortly after, `set_source` calls `setPlainText`, which emits `documentSizeChanged` — but the same problem applies: the widget still has no real width. The widget is inserted into the layout with a 1-line height, and when it finally gets its real width from the layout engine, the document reflowing updates the layout but does **not** re-emit `documentSizeChanged` (text content hasn't changed). The `setFixedHeight` call therefore never fires with the correct line count on load.
+`restore_cell_list` (`session.py:184`) follows this sequence for each saved cell:
 
-   **Fix:** Override `resizeEvent` on `_CommentEdit` to call `_adjust_height()` whenever the widget is resized, including the initial layout pass that assigns the real width:
-   ```python
-   def resizeEvent(self, event) -> None:
-       super().resizeEvent(event)
-       self._adjust_height()
-   ```
-   This ensures correct height at initial layout time (session load) and also handles panel resizes correctly.
+```
+cell = cell_list.add_cell(source=source, style=style)   # (1) cell created with a new temp UUID
+if cell_id:
+    cell.cell_id = cell_id                              # (2) ID reassigned to the saved ID
+for sub_data in data.get("sub_cells", []):              # (3) sub-cells added later
+    sub = cell.add_sub_cell(...)
+    sub._edit.setText(...)
+```
 
-2. **Scrolling not fully suppressed:**  
-   `ScrollBarAlwaysOff` hides the scroll bars but does not prevent the content from scrolling via keyboard or mouse wheel. Once the height is fixed correctly (fix 1), this is moot for well-behaved cases — but if the widget ever gets a fixed height that is slightly short (rounding, margins), the user can still scroll a pixel or two. The policy `QSizePolicy.Policy.Fixed` combined with the `setFixedHeight` approach already prevents dynamic resizing after layout, but does not block scroll events on the widget itself.
+Inside `add_cell` (step 1), when a non-empty `source` is provided, `cell.set_source(source)` is called and then `self._rebuild_namespace()` is called unconditionally (line 258–259 of `cell_list.py`). At this point the cell still has its **temp UUID**. `_rebuild_namespace` evaluates the cell and calls `vp.add_object(TEMP_UUID, mesh)`, storing the rendered mesh in the renderer's `_objects` dict under the temp UUID.
 
-   **Fix:** Override `wheelEvent` (and optionally `keyPressEvent` for scroll keys like PageUp/PageDown) in `_CommentEdit` to ignore scroll input, delegating to the parent instead:
-   ```python
-   def wheelEvent(self, event) -> None:
-       event.ignore()   # pass scroll to the outer QScrollArea
-   ```
-   This ensures the outer panel scrolls rather than the text edit itself, regardless of height.
+Immediately after `add_cell` returns, `cell.cell_id` is overwritten with the **saved ID** (step 2). Any later event that triggers `_rebuild_namespace` (e.g. a sub-cell `setText` firing `content_changed`, or a subsequent `add_cell` for another cell) re-evaluates this cell under the saved ID and calls `vp.add_object(SAVED_ID, mesh)`.
+
+Now two renderer entries exist for the same cell:
+- `TEMP_UUID → mesh` — **orphaned**: no cell in `_cells` has this ID
+- `SAVED_ID → mesh` — active
+
+The orphaned entry can never be removed. `remove_cell` and `remove_object` both operate on `SAVED_ID`; `TEMP_UUID` is unknown to them.
+
+When the second session is loaded, `restore_cell_list` removes the first session's cells by saved ID — orphaned temp UUID objects remain in the renderer's `_objects` dict and the pygfx scene. The second session's objects are then added on top, producing the merged visual.
+
+This is not visible on first load because the orphaned duplicate objects sit at exactly the same position as the active ones (same source, same grid) and are indistinguishable.
+
+**Fix:**
+
+Suppress `_rebuild_namespace` during bulk cell restoration using a flag (mirroring the existing `_skip_folder_inference` pattern). After all cells have been added and IDs have been assigned, do a single rebuild:
+
+```python
+# session.py — restore_cell_list, before Pass 1 loop:
+cell_list._skip_rebuild = True
+
+# ...add all cells, reassign IDs...
+
+# after Pass 2:
+cell_list._skip_rebuild = False
+cell_list._rebuild_namespace()
+```
+
+```python
+# cell_list.py — add_cell (lines 243–244 and 258–259), guard the rebuild:
+if source:
+    if not getattr(self, '_skip_rebuild', False):
+        self._rebuild_namespace()
+```
+
+This eliminates intermediate rebuilds under temp UUIDs entirely. Every cell is fully constructed with its final saved ID before any rebuild occurs, so no orphaned objects are produced.
+
+**Alternative (targeted) fix:** Pass `cell_id` as a parameter to `add_cell` so the cell's ID can be set before `set_source` and `_rebuild_namespace` are called. This avoids adding a new flag but requires changing `add_cell`'s signature and all call sites.
 
 ---
+
 
 ### BUG-009 — Hard crash (`Abort trap: 6`) when data cell produces NaN or Inf
 **Status:** Open  

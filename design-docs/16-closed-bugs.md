@@ -6,6 +6,26 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-018 — Opacity setting has no visual effect on surfaces, lines, or scatter
+**Status:** Closed (fixed 2026-05-18)  
+**Severity:** Medium
+
+**Root cause:** Two compounding failures: (1) `style.opacity` was stored in `CellStyle` but never forwarded to `make_surface_mesh`, `make_line_mesh`, or `make_scatter_mesh` — all three always constructed materials with `opacity=1.0`. (2) Even with opacity forwarded, pygfx's default `alpha_mode="auto"` leaves `depth_write=True`, so a transparent surface writes to the z-buffer and occludes geometry behind it entirely.
+
+**Fix:** Added `opacity: float = 1.0` parameter to all three mesh builders (`renderer.py`). When `opacity < 1.0`, `mat.alpha_mode = "blend"` is set (disables depth write for correct layering). All seven call sites in `app.py:_on_cell_result` now pass `opacity=style.opacity`.
+
+---
+
+### BUG-017 — Multi-line comment cells load at single-line height; content requires scrolling
+**Status:** Closed (fixed 2026-05-18)  
+**Related:** FEAT-027
+
+**Root cause:** `_CommentEdit._adjust_height()` ran in `__init__` before the widget had a real layout width, so word-wrap produced 1 line and `setFixedHeight` was called with a single-line height. The subsequent `resizeEvent` when the layout assigned the real width did not re-trigger height adjustment.
+
+**Fix:** Override `resizeEvent` on `_CommentEdit` to call `_adjust_height()` on every resize, including the initial layout pass. Override `wheelEvent` to `event.ignore()` so scroll events fall through to the outer panel instead of scrolling inside the cell.
+
+---
+
 ### BUG-016 — Scene geometry occluded by circular near-clip artifact when zooming in
 **Status:** Closed (fixed 2026-05-18)  
 **Severity:** Medium — reproducible with any scene when the camera gets within ~1 world unit of geometry

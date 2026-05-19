@@ -7,65 +7,115 @@ See [17-closed-features.md](17-closed-features.md) for implemented features.
 
 ---
 
-### FEAT-028 — Folder cells with actual containment, indentation, and collapse
+### FEAT-032 — 3D sphere mode for scatter points
 **Status:** Open  
 **Logged:** 2026-05-18
 
 **Description:**  
-`FolderCellWidget` exists and renders a collapsible header banner, but it is a purely visual divider — it has no cell membership tracking, no indentation, and collapsing it does nothing to the cells below it. This feature makes folders functional: cells explicitly belong to a folder, expanding/collapsing the folder shows/hides its members, and members are visually indented.
+Add a toggle in the per-cell style popover to switch scatter point rendering from flat 2D billboard circles (`gfx.Points` + `PointsMaterial`) to shaded 3D spheres (`gfx.InstancedMesh` + `sphere_geometry`). The toggle is opt-in because the performance characteristics differ significantly at large point counts.
 
-**What's already implemented (`folder_cell_widget.py`):**  
-- Header row with ▶/▼ toggle, editable name, rename (✏), delete (✕), drag handle.  
-- `set_collapsed(bool)` / `toggle()` — updates the arrow and hides/shows `_body`, which is currently always empty.  
-- Session serialization (`cell_to_dict` / `restore_cell_list`) handles `type: folder` in the YAML.  
-- `CellListWidget` skips `FolderCellWidget` during DAG evaluation.
-
-**What needs to be built:**
-
-1. **Explicit cell membership:** Each non-folder cell needs a `folder_id: str | None` field (default `None` = top level). `CellListWidget` maintains a `_folder_members(folder_id) → [cell_ids]` lookup. Session YAML adds a `folder_id` key to each cell dict. Positional inference (cells between folder banners belong to the one above) is simpler but breaks on drag-reorder; explicit IDs are the correct approach (matching Desmos's internal `folderId` field).
-
-2. **Collapse/expand hides member cells:** `FolderCellWidget.set_collapsed` emits a new `collapse_changed(cell_id, collapsed)` signal. `CellListWidget` handles it by calling `cell.setVisible(not collapsed)` on all member widgets. Cells continue to evaluate and render when their folder is collapsed — this is panel-only, not visibility in the renderer sense.
-
-3. **Visual indentation:** Member cells get a left margin (`setContentsMargins(indent, ...)`) or a left-border decoration when inside an open folder. `CellListWidget` applies/removes this margin when folder membership changes or when a cell is added to a folder.
-
-4. **Folder visibility eye icon:** Add an eye button to the folder header row. Toggling it calls `renderer.set_visible(cell_id, folder_visible and cell_visible)` for all members. This is additive — a cell renders only if both its own eye and its folder's eye are on. The folder eye state persists in the YAML.
-
-5. **Drag cells into/out of folders:** When a cell is dragged and dropped, the drop position determines folder membership. Dropping between two member cells assigns the dragged cell to that folder; dropping before the folder header or after the last member removes it from the folder. A visual "drop zone" highlight should indicate folder membership as the user drags.
-
-6. **No nesting:** Folders cannot contain other folders. If a folder is dragged inside another folder, it is placed at the top level adjacent to the target folder.
-
-**Desmos reference:** see `01-desmos-3d-overview.md` — Organization Features → Folders, updated 2026-05-18.
-
----
-
-### FEAT-027 — Comment cells triggered by `#`
-**Status:** Open  
-**Logged:** 2026-05-18
-
-**Description:**  
-When a user types `#` as the first character in any cell, the cell automatically morphs into a comment cell — free text, never evaluated, no namespace contribution, no color dot, no eye icon. The cell wraps text and grows vertically as content is added. Removing the `#` from the start reverts it to a normal equation cell.
-
-**Design decision — trigger character:** `#` only. Single/double-quoted strings and `"""` docstrings are not triggers; they evaluate as Python string literals in equation cells. Design doc `07-cell-types-and-blocks.md` has been updated to reflect this.
+**Performance assessment:**  
+- `gfx.Points` (current): all N points in one draw call; essentially free at any practical count.  
+- `gfx.InstancedMesh` with spheres: also one draw call (GPU instancing), but vertex cost scales as `N × triangles_per_sphere`. At 8-wide × 6-high segments (≈96 triangles/sphere): N=1K → 96K triangles (trivial), N=10K → 960K (fine), N=100K → 9.6M (may strain slower GPUs). The toggle is the right default: 2D circles unless the user opts in.
 
 **Implementation:**
 
-- **`CommentCellWidget`**: a new thin widget class (similar in structure to `FolderCellWidget` — no evaluation, no sub-cells). Contains a `QPlainTextEdit` in word-wrap mode with auto-grow behavior, a drag handle, and a delete (✕) button. No color dot, no eye icon, no sub-cell (+) button.
+- **`CellStyle`** (`style.py`): add `scatter_as_spheres: bool = False`. Serialised in YAML style block alongside existing `scatter_as_line`.
 
-- **Auto-grow height:** connect `document().contentsChanged` to a slot that sets the widget height to `document().size().toSize().height() + vertical_margins`. `QPlainTextEdit` with `setVerticalScrollBarPolicy(ScrollBarAlwaysOff)` and `setSizePolicy(Expanding, Preferred)` is the standard Qt pattern for this.
+- **Style popover** (`style_popover.py`): add a "Spheres" checkbox in the scatter render-mode section (visible only when the cell is in scatter mode). Sits alongside the existing "Line" checkbox.
 
-- **Auto-morph detection** (`cell_list.py` — `_on_cell_changed`): if the source of a `CellWidget` starts with `#`, replace it in `_cells` and the layout with a `CommentCellWidget`, preserving `cell_id` and position. The inverse: if a `CommentCellWidget`'s text no longer starts with `#`, replace it with a `CellWidget`.
+- **`make_scatter_mesh`** (`renderer.py`): add `as_spheres: bool = False` parameter. When `True`, build an `InstancedMesh` instead of `Points`:
+  ```python
+  def make_scatter_mesh(..., as_spheres=False):
+      ...
+      if as_spheres:
+          sphere_geo = gfx.sphere_geometry(
+              radius=size / 2,
+              width_segments=8,
+              height_segments=6,
+          )
+          mat = gfx.MeshPhongMaterial(color=color)
+          mesh = gfx.InstancedMesh(sphere_geo, mat, len(pts))
+          for i, pos in enumerate(pts):
+              mesh.set_matrix_at(i, la.mat_from_translation(pos))
+          return mesh
+      # existing Points path ...
+  ```
+  `la.mat_from_translation` is from `pylinalg`, already a pygfx dependency. The sphere radius equals `size / 2` so a sphere's visible diameter matches the world-space size of the equivalent billboard circle.
 
-- **Appearance:** gray or muted styling to distinguish from active cells — e.g. slightly lighter background, italic or regular-weight text, no status indicator row. The `#` is stripped from the displayed text and shown as a small fixed `#` decoration on the left margin of the cell (similar to how the color dot occupies that position on equation cells), so the user's free text fills the edit area cleanly.
+- **Colormap compatibility:** `InstancedMesh` supports `color_mode="vertex"` on `MeshPhongMaterial` when the geometry has per-vertex colours. For the colormap path, assign per-instance colours instead via the instance buffer, or fall back to a per-instance `colors` attribute on the geometry if supported. This is a secondary concern — plain-colour sphere mode is the primary target.
 
-- **Session format:** serialized as `type: comment` with a `source` field containing the full text (including the leading `#`). `restore_cell_list` reconstructs a `CommentCellWidget` for these entries.
+- **Call sites** (`app.py`): the two `make_scatter_mesh` call sites (one for `scatter`, one for `scatter_2d`) pass `as_spheres=style.scatter_as_spheres`.
 
-- **Limitations:** none significant. `QPlainTextEdit` handles multi-line text and word wrap natively. The auto-grow pattern is well-established in Qt. The morph/de-morph logic is the same as the existing slider morph and carries the same caveats (cell_id is preserved; undo history may need updating if undo is tracked at the cell level).
+- **Session persistence** (`session.py`): `cell_to_dict` saves `scatter_as_spheres`; `restore_cell_list` reads it with a `False` default.
 
-- **Polish fixes applied 2026-05-18:** (1) `#` label pinned to `AlignTop` with `padding-top: 5px` to align with the first text line. (2) Auto-grow implemented via `_CommentEdit` subclass (same pattern as `AutoGrowEdit`) — `setFixedHeight` called on self inside the subclass rather than from the outer widget. (3) `comment.focus()` called in `_maybe_morph_to_comment` immediately after the layout swap so the cursor returns automatically.
-
-**Desmos reference:** see `01-desmos-3d-overview.md` — Organization Features → Comment Cells, updated 2026-05-18.
+**Open question:** The sphere radius is derived from `style.point_size` (world units). The existing `PointsMaterial(size_space="world")` treats `size` as diameter; the sphere should use `radius = size / 2` to match visual footprint. Verify this looks consistent at default size (0.1 world units → sphere radius 0.05).
 
 ---
+
+### FEAT-031 — Halve the crosshair arm length
+**Status:** Open  
+**Logged:** 2026-05-18
+
+**Description:**  
+The orbit-target crosshair arms are visually prominent and obscure nearby geometry. Reduce each arm to half its current length.
+
+**Implementation:** `renderer.py:445` — change the multiplier from `0.025` to `0.0125`:
+```python
+arm = max(xx - xn, yx - yn, zx - zn) * 0.0125
+```
+
+---
+
+### FEAT-030 — Camera inertia: orbit continues spinning after mouse release
+**Status:** Open  
+**Logged:** 2026-05-18
+
+**Description:**  
+When the user releases the mouse after rotating the viewport, the scene should continue spinning at the release velocity and gradually decelerate to a stop — matching the behavior in Desmos 3D. Slow deliberate releases produce a gentle glide; fast flicks produce a prolonged spin. Any new mouse-down immediately cancels the coast.
+
+**Desmos reference:** see `01-desmos-3d-overview.md` — Camera Inertia section, updated 2026-05-18.
+
+**Why pygfx's built-in `damping` is not sufficient:**  
+`gfx.OrbitController` is constructed with `damping=4` (default). This parameter smooths the camera response *during* active drag (so fast pointer jerks don't cause instantaneous jumps). It does not produce any rotation after `pointerup` — once the mouse is released and the drag action ends, the controller stops updating the camera entirely. Post-release inertia requires a separate "coast" state that must be driven by the application's own render loop.
+
+**Implementation approach:**
+
+The coast state needs to live outside `OrbitController` since there is no hook for it inside pygfx. The natural place is `PringleViewport._tick()` (or the equivalent per-frame callback), which already drives WASD movement.
+
+1. **Intercept pointer events from wgpu canvas.** The wgpu canvas (`rendercanvas`) delivers `pointer_up` and `pointer_move` events to registered handlers. Register a secondary handler (alongside the controller's handler) that:
+   - On each `pointer_move` while the primary mouse button is held: records `(Δazimuth, Δelevation, timestamp)` into a fixed-length deque (e.g. capacity 10 samples, ~100 ms window). Δazimuth and Δelevation are computed the same way the `OrbitController` does: `dx / viewport_width * π` and `dy / viewport_height * π` (approximate; exact formula in `_orbit.py`).
+   - On `pointer_up`: reads the deque, computes time-weighted average velocity `(ω_az, ω_el)` in rad/s, stores it as `_coast_velocity`. If the deque is empty or the release was stationary, sets velocity to zero (no coast).
+
+2. **Coast loop in `_tick()`.** Each frame while `|_coast_velocity| > threshold`:
+   ```python
+   DECAY = 0.88          # fraction of velocity retained per second
+   STOP_RAD_S = 0.005    # stop threshold
+
+   dt = elapsed_since_last_tick()
+   if _coast_velocity and magnitude(_coast_velocity) > STOP_RAD_S:
+       daz, del_ = _coast_velocity[0] * dt, _coast_velocity[1] * dt
+       controller.rotate(daz, del_)     # pygfx public API
+       _coast_velocity = (
+           _coast_velocity[0] * DECAY ** dt,
+           _coast_velocity[1] * DECAY ** dt,
+       )
+   else:
+       _coast_velocity = None
+   ```
+   `controller.rotate()` is the same method the OrbitController uses internally and is part of the public API.
+
+3. **Cancel coast on new drag.** The `pointer_down` handler sets `_coast_velocity = None` before the OrbitController's handler takes over. This ensures the user always gets direct control immediately.
+
+4. **Interaction with WASD pan (BUG-013 context).** The coast loop and the WASD loop both write to the camera via the controller. The existing BUG-013 notes that simultaneous WASD + mouse drag causes conflicts; coasting after release does not conflict with WASD (no mouse button is held), so this is a safe combination.
+
+**Tuning parameters to expose:**  
+- `DECAY` (0.0 = instant stop, 1.0 = never stops) — reasonable default ~0.88 per second  
+- `STOP_RAD_S` threshold — default 0.005 rad/s  
+- These can be hardcoded initially; a UI slider in the axis settings panel could expose them later if users want control.
+
+---
+
 
 ### FEAT-026 — Drop shadow projected onto bottom plane of bounding box
 **Status:** Open  
