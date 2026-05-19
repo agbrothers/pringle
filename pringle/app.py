@@ -540,6 +540,7 @@ class PringleWindow(QMainWindow):
             if pts.ndim == 2 and pts.shape[1] in (2, 3):
                 scatter = make_scatter_mesh(pts, color=style.color, opacity=style.opacity,
                                             size=style.point_size,
+                                            as_spheres=style.scatter_as_spheres,
                                             colormap=cmap, colormap_reversed=cmap_rev)
                 vp.add_object(cell_id, scatter)
             else:
@@ -554,6 +555,7 @@ class PringleWindow(QMainWindow):
             else:
                 scatter = make_scatter_mesh(result.data, color=style.color, opacity=style.opacity,
                                             size=style.point_size,
+                                            as_spheres=style.scatter_as_spheres,
                                             colormap=cmap, colormap_reversed=cmap_rev)
                 vp.add_object(cell_id, scatter)
 

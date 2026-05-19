@@ -61,6 +61,7 @@ def cell_to_dict(cell, folder_id: str | None = None) -> dict:
             "line_width":         cell.style.line_width,
             "point_size":         cell.style.point_size,
             "scatter_as_line":    cell.style.scatter_as_line,
+            "scatter_as_spheres": cell.style.scatter_as_spheres,
             "colormap":           cell.style.colormap,
             "colormap_reversed":  cell.style.colormap_reversed,
         },
@@ -222,6 +223,7 @@ def restore_cell_list(
             line_width=float(style_data.get("line_width", 0.05)),
             point_size=float(style_data.get("point_size", 0.1)),
             scatter_as_line=style_data.get("scatter_as_line", False),
+            scatter_as_spheres=style_data.get("scatter_as_spheres", False),
             colormap=style_data.get("colormap", None),
             colormap_reversed=bool(style_data.get("colormap_reversed", False)),
         )

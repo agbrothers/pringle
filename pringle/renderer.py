@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import numpy as np
 import pygfx as gfx
+import pylinalg as la
 
 
 # ---------------------------------------------------------------------------
@@ -262,9 +263,10 @@ def make_scatter_mesh(
     color: tuple = (0.9, 0.6, 0.1, 1.0),
     opacity: float = 1.0,
     size: float = 0.1,
+    as_spheres: bool = False,
     colormap: str | None = None,
     colormap_reversed: bool = False,
-) -> gfx.Points:
+) -> gfx.Points | gfx.InstancedMesh:
     """
     Build a pygfx Points object from an (N, 3) or (N, 2) array.
     """
@@ -280,6 +282,21 @@ def make_scatter_mesh(
         mat = gfx.PointsMaterial(color=color, size=size, size_space="world")
         mat.opacity = 0.0
         return gfx.Points(geo, mat)
+
+    if as_spheres:
+        sphere_geo = gfx.sphere_geometry(
+            radius=size / 2,
+            width_segments=8,
+            height_segments=6,
+        )
+        mat = gfx.MeshPhongMaterial(color=color, side="front")
+        if opacity < 1.0:
+            mat.opacity = opacity
+            mat.alpha_mode = "blend"
+        mesh = gfx.InstancedMesh(sphere_geo, mat, len(pts))
+        for i, pos in enumerate(pts):
+            mesh.set_matrix_at(i, la.mat_from_translation(pos))
+        return mesh
 
     if colormap is not None:
         idx_vals = np.linspace(0.0, 1.0, len(pts), dtype=np.float32)

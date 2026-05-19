@@ -124,6 +124,11 @@ class StylePopoverWidget(QFrame):
             self._line_check.setStyleSheet("QCheckBox { color: #ccc; font-size: 12px; }")
             self._line_check.toggled.connect(self._on_render_mode_changed)
             rm_row.addWidget(self._line_check)
+            self._spheres_check = QCheckBox("Spheres")
+            self._spheres_check.setChecked(self._style.scatter_as_spheres)
+            self._spheres_check.setStyleSheet("QCheckBox { color: #ccc; font-size: 12px; }")
+            self._spheres_check.toggled.connect(self._on_spheres_changed)
+            rm_row.addWidget(self._spheres_check)
             rm_row.addStretch()
             layout.addLayout(rm_row)
 
@@ -204,6 +209,10 @@ class StylePopoverWidget(QFrame):
 
     def _on_render_mode_changed(self, checked: bool):
         self._style = replace(self._style, scatter_as_line=checked)
+        self.style_changed.emit(self._style)
+
+    def _on_spheres_changed(self, checked: bool):
+        self._style = replace(self._style, scatter_as_spheres=checked)
         self.style_changed.emit(self._style)
 
     def _on_cmap_selected(self, name: str):
