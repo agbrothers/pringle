@@ -202,6 +202,7 @@ def restore_cell_list(
         cell_list.remove_cell(cell.cell_id)
 
     cell_list._skip_folder_inference = True
+    cell_list._skip_rebuild = True
     sliders_to_play: list = []
     # Track (restored_cell_id, folder_id) for pass 2
     pending_folder_assignments: list[tuple[str, str]] = []
@@ -295,6 +296,7 @@ def restore_cell_list(
                     cell._on_visibility_toggled(False)
 
     cell_list._skip_folder_inference = False
+    cell_list._skip_rebuild = False
 
     # ------------------------------------------------------------------
     # Pass 2: apply folder memberships, indentation, collapse, visibility
@@ -324,6 +326,9 @@ def restore_cell_list(
             if hasattr(folder, "_toggle_btn"):
                 folder._toggle_btn.setText("▶")
                 folder._collapsed = True
+
+    # Single rebuild now that all cells have their final IDs
+    cell_list._rebuild_namespace()
 
     # Start sliders that were playing when saved
     for cell in sliders_to_play:

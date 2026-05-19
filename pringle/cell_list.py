@@ -84,6 +84,8 @@ class CellListWidget(QWidget):
         self._folder_visible: dict[str, bool] = {}
         # Suppress position-based folder inference during bulk restores
         self._skip_folder_inference: bool = False
+        # Suppress intermediate namespace rebuilds during bulk restores
+        self._skip_rebuild: bool = False
 
         self._build_ui()
 
@@ -240,7 +242,7 @@ class CellListWidget(QWidget):
                 if source and not is_sl:
                     cell.set_source(source)
                 cell.focus()
-                if source:
+                if source and not self._skip_rebuild:
                     self._rebuild_namespace()
                 self._update_placeholder()
                 return cell
@@ -255,7 +257,7 @@ class CellListWidget(QWidget):
         if source and not is_sl:
             cell.set_source(source)
         cell.focus()
-        if source:
+        if source and not self._skip_rebuild:
             self._rebuild_namespace()
         self._update_placeholder()
         return cell
