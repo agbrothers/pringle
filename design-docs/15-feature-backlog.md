@@ -7,7 +7,6 @@ See [17-closed-features.md](17-closed-features.md) for implemented features.
 
 ---
 
-
 ### FEAT-031 — Halve the crosshair arm length
 **Status:** Open  
 **Logged:** 2026-05-18

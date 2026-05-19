@@ -137,18 +137,24 @@ def _clip_mesh_to_mask(
     return out_pos, out_idx, out_nor
 
 
-def _apply_colormap(values: np.ndarray, cmap_name: str, reverse: bool = False) -> np.ndarray:
+def _apply_colormap(
+    values: np.ndarray,
+    cmap_name: str,
+    reverse: bool = False,
+    v_min: float | None = None,
+    v_max: float | None = None,
+) -> np.ndarray:
     """Map scalar values to RGBA colors via matplotlib. Returns (N, 4) float32."""
     import matplotlib
     cmap = matplotlib.colormaps[cmap_name]
     if reverse:
         cmap = cmap.reversed()
-    v_min = float(np.nanmin(values))
-    v_max = float(np.nanmax(values))
-    if v_max - v_min < 1e-10:
+    _min = v_min if v_min is not None else float(np.nanmin(values))
+    _max = v_max if v_max is not None else float(np.nanmax(values))
+    if _max - _min < 1e-10:
         norm = np.full(len(values), 0.5, dtype=np.float32)
     else:
-        norm = ((values - v_min) / (v_max - v_min)).astype(np.float32)
+        norm = ((values - _min) / (_max - _min)).astype(np.float32)
     np.clip(norm, 0.0, 1.0, out=norm)
     return cmap(norm).astype(np.float32)
 
@@ -207,7 +213,13 @@ def make_surface_mesh(
         return gfx.Mesh(geo, mat)
 
     if colormap is not None:
-        colors = _apply_colormap(positions[:, 2], colormap, colormap_reversed)
+        if constraint_mask is not None:
+            cmap_min = float(np.nanmin(z))
+            cmap_max = float(np.nanmax(z))
+        else:
+            cmap_min = cmap_max = None
+        colors = _apply_colormap(positions[:, 2], colormap, colormap_reversed,
+                                 v_min=cmap_min, v_max=cmap_max)
         geo = gfx.Geometry(positions=positions, indices=indices, normals=normals, colors=colors)
         mat = gfx.MeshBasicMaterial(color_mode="vertex", side="both")
     else:
@@ -245,8 +257,12 @@ def make_line_mesh(
         return gfx.Line(geo, mat)
 
     if colormap is not None:
-        idx_vals = np.linspace(0.0, 1.0, len(pts), dtype=np.float32)
-        colors = _apply_colormap(idx_vals, colormap, colormap_reversed)
+        valid = ~np.any(np.isnan(pts), axis=1)
+        n_valid = int(valid.sum())
+        colors = np.zeros((len(pts), 4), dtype=np.float32)
+        if n_valid > 0:
+            idx_vals = np.linspace(0.0, 1.0, n_valid, dtype=np.float32)
+            colors[valid] = _apply_colormap(idx_vals, colormap, colormap_reversed)
         geo = gfx.Geometry(positions=pts, colors=colors)
         mat = gfx.LineMaterial(color_mode="vertex", thickness=thickness, thickness_space="world")
     else:
@@ -286,8 +302,8 @@ def make_scatter_mesh(
     if as_spheres:
         sphere_geo = gfx.sphere_geometry(
             radius=size / 2,
-            width_segments=8,
-            height_segments=6,
+            width_segments=16,
+            height_segments=16,
         )
         mat = gfx.MeshPhongMaterial(color=color, side="front")
         if opacity < 1.0:

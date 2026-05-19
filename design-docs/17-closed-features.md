@@ -6,6 +6,13 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-034 — Colormap normalization uses visible (constrained) data range
+**Status:** Closed (implemented 2026-05-18)
+
+**Implementation:** Added `v_min`/`v_max` override params to `_apply_colormap` in `renderer.py`. In `make_surface_mesh`, when `constraint_mask` is active, computes `cmap_min/max` from the masked `z` array (NaN outside constraint) rather than from clipped vertex positions — bypasses boundary vertex inflation from `_clip_mesh_to_mask`. In `make_line_mesh`, builds a `valid` mask over non-NaN points, constructs `linspace(0, 1, n_valid)` only over those points, and places the resulting colors at the valid positions in a full-length colors array — the visible portion of a constrained curve now maps to the full [0, 1] gradient.
+
+---
+
 ### FEAT-033 — Replace scatter render-mode checkboxes with mutually exclusive radio selector
 **Status:** Closed (implemented 2026-05-18)
 
