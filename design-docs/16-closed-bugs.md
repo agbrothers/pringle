@@ -6,6 +6,15 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-015 — Visibility toggle and style changes trigger full namespace rebuild, causing random cells to re-sample
+**Status:** Closed (fixed 2026-05-18)
+
+**Root cause:** `CellWidget._on_visibility_toggled` and `_on_style_changed` both emitted `content_changed` → `_on_cell_changed` → `_rebuild_namespace`, re-evaluating every equation cell. Cells with stochastic expressions (e.g. `random.randn(...)`) produced a new sample on every toggle or color/opacity/size change. Also affected: folder eye toggle called `_rebuild_namespace()` to update equation cell members.
+
+**Fix:** Added `visibility_toggled(str, bool)` and `style_updated(str)` signals to `CellWidget`. Both handlers now emit their dedicated signals instead of `content_changed`. `_rebuild_namespace` caches `cell._last_result` on every equation cell evaluation (mirroring `DataCellWidget`). New handlers `_on_equation_cell_visibility_toggled` and `_on_equation_cell_style_updated` in `CellListWidget` re-apply the cached result directly — no rebuild. `_on_folder_visibility_changed` likewise re-applies cached results for all member cells instead of calling `_rebuild_namespace`.
+
+---
+
 ### BUG-019 — Loading a second session merges its scene with the first session's objects
 **Status:** Closed (fixed 2026-05-18)  
 **Severity:** High

@@ -223,6 +223,8 @@ class CellWidget(QWidget):
     drag_started = pyqtSignal(str)         # cell_id
     drag_moved = pyqtSignal(str, int)      # cell_id, global_y
     drag_ended = pyqtSignal(str)           # cell_id
+    visibility_toggled = pyqtSignal(str, bool)  # cell_id, is_visible
+    style_updated = pyqtSignal(str)        # cell_id — color/opacity/size changed, no re-eval needed
 
     _DEBOUNCE_MS = 300
 
@@ -567,7 +569,7 @@ class CellWidget(QWidget):
         opacity = "1.0" if checked else "0.4"
         self._text_edit.setStyleSheet(f"opacity: {opacity};")
         self._update_color_dot()
-        self.content_changed.emit(self.cell_id)  # re-render with new visibility
+        self.visibility_toggled.emit(self.cell_id, checked)
 
     def _on_color_dot_clicked(self):
         from pringle.style_popover import StylePopoverWidget
@@ -581,4 +583,4 @@ class CellWidget(QWidget):
         from dataclasses import replace
         self.style = replace(new_style)
         self._update_color_dot()
-        self.content_changed.emit(self.cell_id)
+        self.style_updated.emit(self.cell_id)

@@ -224,6 +224,8 @@ class CellListWidget(QWidget):
         else:
             cell = CellWidget(style=style)
             cell.content_changed.connect(self._on_cell_changed)
+            cell.visibility_toggled.connect(self._on_equation_cell_visibility_toggled)
+            cell.style_updated.connect(self._on_equation_cell_style_updated)
             cell.delete_requested.connect(self._on_delete_requested)
             cell.enter_pressed.connect(self._on_enter_pressed)
             cell.run_requested.connect(self._on_run_requested)
@@ -616,6 +618,7 @@ class CellListWidget(QWidget):
                 continue
 
             result = self._eval_cell(cell, shared)
+            cell._last_result = result
 
             # Augment with undefined-name warning if eval succeeded
             if not result.error and cell.cell_id in undef:
@@ -671,6 +674,28 @@ class CellListWidget(QWidget):
         """Force re-evaluate a data-mode CellWidget (→ button or focus-out)."""
         self._rebuild_namespace()
 
+    def _on_equation_cell_visibility_toggled(self, cell_id: str, _is_visible: bool) -> None:
+        """Show or clear an equation cell's render when the 👁 is toggled — no re-eval."""
+        idx = self._index_of(cell_id)
+        if idx < 0:
+            return
+        cell = self._cells[idx]
+        last = getattr(cell, "_last_result", None)
+        if self._is_render_visible(cell) and last is not None and last.render_type:
+            self._on_cell_result(cell_id, last, cell.style)
+        else:
+            self._on_cell_result(cell_id, CellResult(), cell.style)
+
+    def _on_equation_cell_style_updated(self, cell_id: str) -> None:
+        """Re-apply the cached result when color/opacity/size changes — no re-eval."""
+        idx = self._index_of(cell_id)
+        if idx < 0:
+            return
+        cell = self._cells[idx]
+        last = getattr(cell, "_last_result", None)
+        if last is not None and last.render_type and self._is_render_visible(cell):
+            self._on_cell_result(cell_id, last, cell.style)
+
     def _on_data_cell_visibility_toggled(self, cell_id: str, is_visible: bool) -> None:
         """Show or clear a DataCellWidget's render when the 👁 is toggled."""
         idx = self._index_of(cell_id)
@@ -701,17 +726,13 @@ class CellListWidget(QWidget):
 
     def _on_folder_visibility_changed(self, folder_id: str, visible: bool) -> None:
         """Update renderer visibility for all member cells when folder eye is toggled."""
-        from pringle.data_cell_widget import DataCellWidget
         self._folder_visible[folder_id] = visible
-        # Handle data cells (they have cached results, not re-evaluated by _rebuild_namespace)
         for member in self._folder_members(folder_id):
-            if isinstance(member, DataCellWidget):
-                last = getattr(member, "_last_result", None)
-                if self._is_render_visible(member) and last and last.render_type:
-                    self._on_cell_result(member.cell_id, last, member.style)
-                else:
-                    self._on_cell_result(member.cell_id, CellResult(), member.style)
-        self._rebuild_namespace()
+            last = getattr(member, "_last_result", None)
+            if self._is_render_visible(member) and last is not None and last.render_type:
+                self._on_cell_result(member.cell_id, last, member.style)
+            else:
+                self._on_cell_result(member.cell_id, CellResult(), member.style)
 
     def _on_cell_changed(self, cell_id: str) -> None:
         self._maybe_morph_to_comment(cell_id)
