@@ -51,13 +51,12 @@ def _grid_indices(rows: int, cols: int) -> np.ndarray:
     Build triangle indices for a rows×cols grid of vertices.
     Returns shape (2*(rows-1)*(cols-1), 3) int32.
     """
-    triangles = []
-    for r in range(rows - 1):
-        for c in range(cols - 1):
-            i = r * cols + c
-            triangles.append([i,       i + 1,     i + cols])
-            triangles.append([i + 1,   i + cols + 1, i + cols])
-    return np.array(triangles, dtype=np.int32)
+    r = np.arange(rows - 1, dtype=np.int32)[:, None]
+    c = np.arange(cols - 1, dtype=np.int32)[None, :]
+    i = (r * cols + c).ravel()
+    t1 = np.column_stack([i,     i + 1,        i + cols])
+    t2 = np.column_stack([i + 1, i + cols + 1, i + cols])
+    return np.vstack([t1, t2])
 
 
 def _clip_mesh_to_mask(
