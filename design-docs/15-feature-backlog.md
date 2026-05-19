@@ -7,51 +7,6 @@ See [17-closed-features.md](17-closed-features.md) for implemented features.
 
 ---
 
-### FEAT-032 — 3D sphere mode for scatter points
-**Status:** Open  
-**Logged:** 2026-05-18
-
-**Description:**  
-Add a toggle in the per-cell style popover to switch scatter point rendering from flat 2D billboard circles (`gfx.Points` + `PointsMaterial`) to shaded 3D spheres (`gfx.InstancedMesh` + `sphere_geometry`). The toggle is opt-in because the performance characteristics differ significantly at large point counts.
-
-**Performance assessment:**  
-- `gfx.Points` (current): all N points in one draw call; essentially free at any practical count.  
-- `gfx.InstancedMesh` with spheres: also one draw call (GPU instancing), but vertex cost scales as `N × triangles_per_sphere`. At 8-wide × 6-high segments (≈96 triangles/sphere): N=1K → 96K triangles (trivial), N=10K → 960K (fine), N=100K → 9.6M (may strain slower GPUs). The toggle is the right default: 2D circles unless the user opts in.
-
-**Implementation:**
-
-- **`CellStyle`** (`style.py`): add `scatter_as_spheres: bool = False`. Serialised in YAML style block alongside existing `scatter_as_line`.
-
-- **Style popover** (`style_popover.py`): add a "Spheres" checkbox in the scatter render-mode section (visible only when the cell is in scatter mode). Sits alongside the existing "Line" checkbox.
-
-- **`make_scatter_mesh`** (`renderer.py`): add `as_spheres: bool = False` parameter. When `True`, build an `InstancedMesh` instead of `Points`:
-  ```python
-  def make_scatter_mesh(..., as_spheres=False):
-      ...
-      if as_spheres:
-          sphere_geo = gfx.sphere_geometry(
-              radius=size / 2,
-              width_segments=8,
-              height_segments=6,
-          )
-          mat = gfx.MeshPhongMaterial(color=color)
-          mesh = gfx.InstancedMesh(sphere_geo, mat, len(pts))
-          for i, pos in enumerate(pts):
-              mesh.set_matrix_at(i, la.mat_from_translation(pos))
-          return mesh
-      # existing Points path ...
-  ```
-  `la.mat_from_translation` is from `pylinalg`, already a pygfx dependency. The sphere radius equals `size / 2` so a sphere's visible diameter matches the world-space size of the equivalent billboard circle.
-
-- **Colormap compatibility:** `InstancedMesh` supports `color_mode="vertex"` on `MeshPhongMaterial` when the geometry has per-vertex colours. For the colormap path, assign per-instance colours instead via the instance buffer, or fall back to a per-instance `colors` attribute on the geometry if supported. This is a secondary concern — plain-colour sphere mode is the primary target.
-
-- **Call sites** (`app.py`): the two `make_scatter_mesh` call sites (one for `scatter`, one for `scatter_2d`) pass `as_spheres=style.scatter_as_spheres`.
-
-- **Session persistence** (`session.py`): `cell_to_dict` saves `scatter_as_spheres`; `restore_cell_list` reads it with a `False` default.
-
-**Open question:** The sphere radius is derived from `style.point_size` (world units). The existing `PointsMaterial(size_space="world")` treats `size` as diameter; the sphere should use `radius = size / 2` to match visual footprint. Verify this looks consistent at default size (0.1 world units → sphere radius 0.05).
-
----
 
 ### FEAT-031 — Halve the crosshair arm length
 **Status:** Open  

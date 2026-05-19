@@ -6,6 +6,16 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-019 — Loading a second session merges its scene with the first session's objects
+**Status:** Closed (fixed 2026-05-18)  
+**Severity:** High
+
+**Root cause:** `add_cell` called `_rebuild_namespace()` immediately when given a non-empty `source`, before `restore_cell_list` could overwrite `cell.cell_id` with the saved ID. The rebuild registered the mesh under a temporary UUID. After `cell_id` was reassigned, the next rebuild registered a second copy under the saved ID. The temp-UUID copy was permanently orphaned — `remove_cell` only knows the saved ID — so it survived into subsequent session loads and merged with their scene.
+
+**Fix:** Added `_skip_rebuild: bool = False` to `CellListWidget` (mirrors `_skip_folder_inference`). `restore_cell_list` sets it `True` before Pass 1, clears it after Pass 2, then calls `_rebuild_namespace()` once with all cells at their final saved IDs. No orphaned objects are produced.
+
+---
+
 ### BUG-018 — Opacity setting has no visual effect on surfaces, lines, or scatter
 **Status:** Closed (fixed 2026-05-18)  
 **Severity:** Medium

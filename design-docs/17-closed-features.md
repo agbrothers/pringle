@@ -6,6 +6,13 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-032 — 3D sphere render mode for scatter points
+**Status:** Closed (implemented 2026-05-18)
+
+**Implementation:** Added `scatter_as_spheres: bool = False` to `CellStyle` and persisted in YAML. `make_scatter_mesh` gains `as_spheres` parameter; when True, builds a `gfx.InstancedMesh` with `gfx.sphere_geometry(radius=size/2, width_segments=8, height_segments=6)` and sets per-instance transforms via `pylinalg.mat_from_translation`. Opacity and `alpha_mode="blend"` applied the same as the flat-point path. Style popover adds a "Spheres" checkbox alongside the existing "Line" checkbox in the render-mode row.
+
+---
+
 ### FEAT-028 — Functional folder cells with containment, collapse, and session persistence
 **Status:** Closed (implemented 2026-05-18)
 
