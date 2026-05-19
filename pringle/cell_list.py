@@ -684,7 +684,7 @@ class CellListWidget(QWidget):
             self._on_cell_result(cell_id, CellResult(), cell.style)
 
     def _on_data_cell_render_mode_changed(self, cell_id: str) -> None:
-        """Re-apply the cached result when scatter_as_line is toggled — no re-eval needed."""
+        """Re-apply the cached result when scatter render mode changes — no re-eval needed."""
         idx = self._index_of(cell_id)
         if idx < 0:
             return

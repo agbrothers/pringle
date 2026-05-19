@@ -6,6 +6,13 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-033 — Replace scatter render-mode checkboxes with mutually exclusive radio selector
+**Status:** Closed (implemented 2026-05-18)
+
+**Implementation:** Replaced `scatter_as_line: bool` and `scatter_as_spheres: bool` in `CellStyle` with `scatter_render_mode: str = "circles"` ("circles" | "line" | "spheres"). Style popover restructured to two-column layout when `show_render_mode=True`: left column holds Color/Opacity/Size spinboxes, right column holds a `QButtonGroup` of three `QRadioButton` items. `_on_render_mode_changed(btn_id, checked)` maps button ID to mode string. `app.py` dispatch replaced with a single `mode = style.scatter_render_mode` branch. Session YAML writes `scatter_render_mode`; `_load_scatter_mode()` helper in `session.py` provides backward-compat fallback for old files with boolean flags.
+
+---
+
 ### FEAT-032 — 3D sphere render mode for scatter points
 **Status:** Closed (implemented 2026-05-18)
 

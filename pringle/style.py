@@ -38,8 +38,7 @@ class CellStyle:
     line_style: str = "solid"         # "solid" | "dashed" | "dotted"
     display_mode: str = "filled"      # "filled" | "wireframe" | "both"
     show_label: bool = True
-    scatter_as_line: bool = False      # render (N,2)/(N,3) arrays as connected line
-    scatter_as_spheres: bool = False   # render scatter points as shaded 3D spheres
+    scatter_render_mode: str = "circles"  # "circles" | "line" | "spheres"
     colormap: str | None = None       # None = uniform color; one of COLORMAPS for gradient
     colormap_reversed: bool = False   # reverse colormap direction
 

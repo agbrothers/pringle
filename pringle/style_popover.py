@@ -11,7 +11,7 @@ import numpy as np
 from dataclasses import replace
 from PyQt6.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QLabel,
-    QDoubleSpinBox, QLineEdit, QPushButton, QCheckBox,
+    QDoubleSpinBox, QLineEdit, QPushButton, QButtonGroup, QRadioButton,
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap, QIcon
@@ -62,10 +62,28 @@ class StylePopoverWidget(QFrame):
         )
         self._build_ui()
 
+    _RENDER_MODES = ["circles", "line", "spheres"]
+
     def _build_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 8, 10, 10)
         layout.setSpacing(6)
+
+        if self._show_render_mode:
+            # Two-column top section: spinboxes left, radio buttons right
+            top_row = QHBoxLayout()
+            top_row.setSpacing(12)
+            left_col = QVBoxLayout()
+            left_col.setSpacing(6)
+        else:
+            layout_target = layout
+            left_col = None
+
+        def _add_to(row):
+            if self._show_render_mode:
+                left_col.addLayout(row)
+            else:
+                layout.addLayout(row)
 
         # --- Color row ---
         color_row = QHBoxLayout()
@@ -85,7 +103,7 @@ class StylePopoverWidget(QFrame):
         self._refresh_swatch()
         color_row.addWidget(self._swatch)
         color_row.addStretch()
-        layout.addLayout(color_row)
+        _add_to(color_row)
 
         # --- Opacity row ---
         op_row = QHBoxLayout()
@@ -99,7 +117,7 @@ class StylePopoverWidget(QFrame):
         self._opacity_spin.valueChanged.connect(self._on_opacity_changed)
         op_row.addWidget(self._opacity_spin)
         op_row.addStretch()
-        layout.addLayout(op_row)
+        _add_to(op_row)
 
         # --- Size row (controls both line width and scatter dot size) ---
         lw_row = QHBoxLayout()
@@ -113,24 +131,28 @@ class StylePopoverWidget(QFrame):
         self._lw_spin.valueChanged.connect(self._on_lw_changed)
         lw_row.addWidget(self._lw_spin)
         lw_row.addStretch()
-        layout.addLayout(lw_row)
+        _add_to(lw_row)
 
-        # --- Render mode row (scatter vs line) — only for data-array cells ---
+        # --- Render mode radio buttons — only for data-array cells ---
         if self._show_render_mode:
-            rm_row = QHBoxLayout()
-            rm_row.addWidget(QLabel("Render:"))
-            self._line_check = QCheckBox("Line")
-            self._line_check.setChecked(self._style.scatter_as_line)
-            self._line_check.setStyleSheet("QCheckBox { color: #ccc; font-size: 12px; }")
-            self._line_check.toggled.connect(self._on_render_mode_changed)
-            rm_row.addWidget(self._line_check)
-            self._spheres_check = QCheckBox("Spheres")
-            self._spheres_check.setChecked(self._style.scatter_as_spheres)
-            self._spheres_check.setStyleSheet("QCheckBox { color: #ccc; font-size: 12px; }")
-            self._spheres_check.toggled.connect(self._on_spheres_changed)
-            rm_row.addWidget(self._spheres_check)
-            rm_row.addStretch()
-            layout.addLayout(rm_row)
+            right_col = QVBoxLayout()
+            right_col.setSpacing(4)
+            right_col.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+            self._render_group = QButtonGroup(self)
+            _rb_style = "QRadioButton { color: #ccc; font-size: 12px; }"
+            for i, (label, mode) in enumerate([
+                ("Circles", "circles"), ("Line", "line"), ("Spheres", "spheres")
+            ]):
+                btn = QRadioButton(label)
+                btn.setChecked(self._style.scatter_render_mode == mode)
+                btn.setStyleSheet(_rb_style)
+                self._render_group.addButton(btn, i)
+                right_col.addWidget(btn)
+            self._render_group.idToggled.connect(self._on_render_mode_changed)
+
+            top_row.addLayout(left_col)
+            top_row.addLayout(right_col)
+            layout.addLayout(top_row)
 
         # --- Colormap section ---
         cmap_label_row = QHBoxLayout()
@@ -207,13 +229,10 @@ class StylePopoverWidget(QFrame):
         self._style = replace(self._style, line_width=v, point_size=v)
         self.style_changed.emit(self._style)
 
-    def _on_render_mode_changed(self, checked: bool):
-        self._style = replace(self._style, scatter_as_line=checked)
-        self.style_changed.emit(self._style)
-
-    def _on_spheres_changed(self, checked: bool):
-        self._style = replace(self._style, scatter_as_spheres=checked)
-        self.style_changed.emit(self._style)
+    def _on_render_mode_changed(self, btn_id: int, checked: bool) -> None:
+        if checked:
+            self._style = replace(self._style, scatter_render_mode=self._RENDER_MODES[btn_id])
+            self.style_changed.emit(self._style)
 
     def _on_cmap_selected(self, name: str):
         new_cmap = None if self._style.colormap == name else name
