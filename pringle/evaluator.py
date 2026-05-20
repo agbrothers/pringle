@@ -68,9 +68,15 @@ def _detect_magic(local_ns: dict, grid: Grid, user_stores: set[str]) -> tuple[st
     Returns (render_type, data) or (None, None).
     """
     if "z" in user_stores:
-        return "surface", local_ns.get("z")
+        val = local_ns.get("z")
+        if callable(val) and not isinstance(val, np.ndarray):
+            return None, None
+        return "surface", val
     if "xyz" in user_stores:
-        return "parametric", local_ns.get("xyz")
+        val = local_ns.get("xyz")
+        if callable(val) and not isinstance(val, np.ndarray):
+            return None, None
+        return "parametric", val
     if "y" in user_stores:
         val = local_ns.get("y")
         if isinstance(val, np.ndarray) and val.ndim == 1:
@@ -460,7 +466,11 @@ def run_cell(
 
     # --- Normalize surface data ---
     if render_type == "surface":
-        data = np.asarray(data, dtype=np.float32)
+        try:
+            data = np.asarray(data, dtype=np.float32)
+        except (TypeError, ValueError):
+            result.error = f"Surface data must be numeric (got {type(data).__name__})"
+            return result
         # Apply constraints — keep raw z for smooth boundary clipping in renderer
         if constraint_exprs:
             z_raw = data.copy()
@@ -471,13 +481,25 @@ def run_cell(
         result.y = grid.y
 
     elif render_type == "curve":
-        data = np.asarray(data, dtype=np.float32)
+        try:
+            data = np.asarray(data, dtype=np.float32)
+        except (TypeError, ValueError):
+            result.error = f"Curve data must be numeric (got {type(data).__name__})"
+            return result
 
     elif render_type in ("scatter", "scatter_2d"):
-        data = np.asarray(data, dtype=np.float32)
+        try:
+            data = np.asarray(data, dtype=np.float32)
+        except (TypeError, ValueError):
+            result.error = f"Scatter data must be numeric (got {type(data).__name__})"
+            return result
 
     elif render_type == "parametric":
-        data = np.asarray(data, dtype=np.float32)
+        try:
+            data = np.asarray(data, dtype=np.float32)
+        except (TypeError, ValueError):
+            result.error = f"Parametric data must be numeric (got {type(data).__name__})"
+            return result
 
     # --- Shape validation ---
     warn = validate_shape(render_type, data, grid)

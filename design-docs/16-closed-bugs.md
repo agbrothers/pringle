@@ -6,6 +6,19 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-020 — Hard crash when a callable is assigned to a magic variable (`z`, `xyz`, etc.)
+**Status:** Closed (fixed 2026-05-20)  
+**Severity:** Critical
+
+**Root cause:** `_detect_magic` returned `("surface", val)` unconditionally when `"z"` was in `user_stores`, without checking that `val` is numeric. A callable (ufunc, lambda, function) was passed as `data` into `np.asarray(data, dtype=np.float32)`, which raised `TypeError` — uncaught, aborting the process.
+
+**Fix:**
+- `_detect_magic` (`evaluator.py`) — callable guard on the `z` and `xyz` branches: if the value is callable and not an ndarray, return `(None, None)` so the func-auto-render path handles it normally.
+- `run_cell` (`evaluator.py`) — `try/except (TypeError, ValueError)` around all four `np.asarray(data, ...)` normalization calls (surface, curve, scatter, parametric); type failures produce a cell error message instead of an exception.
+- `_eval_cell` (`cell_list.py`) — already wrapped by the BUG-009 fix; any remaining unanticipated evaluator exception becomes a cell error rather than a crash.
+
+---
+
 ### BUG-009 — Hard crash (`Abort trap: 6`) when data cell produces NaN or Inf
 **Status:** Closed (fixed 2026-05-20)  
 **Severity:** Critical
