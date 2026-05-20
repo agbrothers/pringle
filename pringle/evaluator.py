@@ -11,6 +11,7 @@ Returns a CellResult describing what (if anything) should be rendered.
 from __future__ import annotations
 
 import ast
+import math
 import traceback
 from dataclasses import dataclass, field
 from typing import Any
@@ -115,6 +116,8 @@ def _detect_shape(val: Any) -> tuple[str | None, Any]:
 
 def _fmt_scalar(x) -> str:
     f = float(x)
+    if not math.isfinite(f):
+        return str(f)
     return str(int(f)) if f == int(f) and abs(f) < 1e15 else f"{f:g}"
 
 
@@ -426,7 +429,10 @@ def run_cell(
     for name in user_stores:
         if name in MAGIC_NAMES or name in SPATIAL_NAMES:
             continue
-        preview = _make_preview(local_ns.get(name))
+        try:
+            preview = _make_preview(local_ns.get(name))
+        except Exception:
+            preview = None
         if preview is not None:
             result.preview = preview
             break

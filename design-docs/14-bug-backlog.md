@@ -7,71 +7,77 @@ See [16-closed-bugs.md](16-closed-bugs.md) for resolved bugs.
 
 ---
 
-
-
-### BUG-009 — Hard crash (`Abort trap: 6`) when data cell produces NaN or Inf
+### BUG-020 — Hard crash (`Abort trap: 6`) when a callable is assigned to a magic variable (`z`, `xyz`, etc.)
 **Status:** Open  
-**Logged:** 2026-05-16  
-**Severity:** Critical — process terminates, all unsaved work lost
+**Logged:** 2026-05-18  
+**Severity:** Critical — process terminates, all unsaved work lost  
+**Related:** BUG-009 (same crash pattern: uncaught exception in `run_cell`)
 
 **Description:**  
-When a recursive data cell produces NaN or Inf values (e.g. because a numerical integration diverges at a large time step), the app crashes hard with `Abort trap: 6`. The crash originates in `_fmt_scalar` in `evaluator.py`, which calls `int()` on a NaN float — an operation Python does not allow. The unhandled `ValueError` propagates all the way through the call stack and aborts the process.
+Assigning a callable (function, lambda, ufunc) to a magic render variable like `z` causes an unhandled `TypeError` that crashes the process. The most common trigger is typing a partially complete expression mid-keystroke — for example `z = sin` (forgetting the call parentheses) or `z = f` where `f` is a user-defined function. Because the evaluator fires on every keystroke, the crash can occur before the user has finished typing.
 
 **Reproduction:**  
-1. Load `sessions/rossler.yml`.
-2. Change `dt` from `0.01` to `0.1` (via the slider spinbox or source edit).
-3. Press ▷ on the `path = np.zeros((k+1, 3))` data cell.
-4. App crashes immediately.
+Type `z = sin` in an equation cell (no parentheses — assigns the ufunc itself rather than calling it). The evaluator fires immediately and crashes the process.
 
 **Full error trace:**
 ```
-/Users/greysonbrothers/code/pringle/pringle/cell_list.py:345: RuntimeWarning: overflow encountered in cast
-  result.data = arr.astype(np.float32)
 Traceback (most recent call last):
-  File ".../cell_list.py", line 357, in _run_data_cell
+  File ".../cell_list.py", line 740, in _on_cell_changed
     self._rebuild_namespace()
-  File ".../cell_list.py", line 467, in _rebuild_namespace
+  File ".../cell_list.py", line 620, in _rebuild_namespace
     result = self._eval_cell(cell, shared)
-  File ".../cell_list.py", line 493, in _eval_cell
-    result = run_cell(...)
-  File ".../evaluator.py", line 424, in run_cell
-    preview = _make_preview(local_ns.get(name))
-  File ".../evaluator.py", line 129, in _make_preview
-    parts = [_fmt_scalar(x) for x in val]
-  File ".../evaluator.py", line 117, in _fmt_scalar
-    return str(int(f)) if f == int(f) and abs(f) < 1e15 else f"{f:g}"
-ValueError: cannot convert float NaN to integer
+  File ".../cell_list.py", line 647, in _eval_cell
+    result = run_cell(source, shared, self._grid, ...)
+  File ".../evaluator.py", line 457, in run_cell
+    data = np.asarray(data, dtype=np.float32)
+TypeError: float() argument must be a string or a real number, not 'function'
 Abort trap: 6
 ```
 
-**Root cause — layered failure with three contributing factors:**
+**Root cause — two independent failures that compound each other:**
 
-1. **Numerical divergence** (`recurrence.py` / `execute_recurrence`): The Rössler attractor's forward Euler scheme is only stable for `dt ≲ 0.05` with the session's parameters (`a = 0.1, b = 0.1, c = 14`). At `dt = 0.1` with `k = 5000` steps, the integration diverges and the `path` array fills with float64 values that grow without bound.
+1. **`_detect_magic` does not type-check the value of `z`** (`evaluator.py:69–70`):  
+   When the user assigns anything to `z`, `_detect_magic` returns `("surface", local_ns.get("z"))` unconditionally — it only checks that `"z"` is in `user_stores`, not that the value is a numeric array. If `z` holds a Python callable, it is returned as `data` with `render_type = "surface"`.
 
-2. **float32 overflow** (`cell_list.py:345`): After `execute_recurrence` returns, `arr.astype(np.float32)` silently clamps out-of-range float64 values to `inf` (numpy emits a `RuntimeWarning` but execution continues). The resulting `path` array exported to `_data_cell_ns` and `_shared_ns` contains `inf` and, after subsequent arithmetic (e.g. `anim = path[time]` slicing an `inf` row), `NaN`.
+2. **`np.asarray(data, dtype=np.float32)` is not guarded against non-numeric types** (`evaluator.py:457`):  
+   The surface-data normalization block calls `np.asarray` without a `try/except`. numpy internally calls `float()` on the function object, which raises `TypeError`. This exception propagates uncaught through `run_cell` → `_eval_cell` → `_rebuild_namespace` → `_on_cell_changed` and aborts the process.
 
-3. **`_fmt_scalar` crashes on non-finite floats** (`evaluator.py:117`): The preview system calls `_fmt_scalar` for each element of 1D arrays. The guard `f == int(f)` is evaluated before `int(f)` is called in the return expression — but Python short-circuits `if` conditions left-to-right, and `float('nan') == int(float('nan'))` itself raises `ValueError: cannot convert float NaN to integer`. The exception is caught nowhere in the stack, propagating through `_make_preview → run_cell → _eval_cell → _rebuild_namespace → _run_data_cell` until the process aborts.
+   This is the same crash pattern as BUG-009 (unhandled exception propagating from inside `run_cell`); in both cases a data-type assumption fails at `np.asarray` and there is no safety net in the call stack above.
 
-**Possible fixes:**
+**Fix — three complementary layers:**
 
-- **Immediate / minimal fix** (`evaluator.py:117`): Guard `_fmt_scalar` against non-finite values before any integer conversion:
+- **Layer 1 — type guard in `_detect_magic`** (`evaluator.py:69–70`): Before returning a surface render type, confirm the value is not a bare callable. Callable values should yield `(None, None)` so the func-auto-render path (lines 382–405) can handle them normally:
   ```python
-  def _fmt_scalar(x) -> str:
-      f = float(x)
-      if not math.isfinite(f):
-          return str(f)          # yields "nan", "inf", "-inf"
-      return str(int(f)) if f == int(f) and abs(f) < 1e15 else f"{f:g}"
+  if "z" in user_stores:
+      val = local_ns.get("z")
+      if callable(val) and not isinstance(val, np.ndarray):
+          return None, None   # z is a function; func-auto-render handles this case
+      return "surface", val
   ```
-  Import `math` at the top of `evaluator.py`. This is a one-line fix that prevents the crash and renders non-finite values legibly in the preview.
+  Apply the same guard to the `"xyz"` branch (line 72) for consistency.
 
-- **Defense in depth** (`evaluator.py` — `_make_preview` or the preview block in `run_cell`): Wrap the entire preview-generation block in `try/except Exception` so any unexpected formatting error degrades to `None` (no preview shown) rather than propagating. The preview is cosmetic — it should never crash the app.
+- **Layer 2 — try/except around each `np.asarray` call** (`evaluator.py:456–474`): Wrap each conversion to turn type failures into a cell error instead of a crash:
+  ```python
+  if render_type == "surface":
+      try:
+          data = np.asarray(data, dtype=np.float32)
+      except (TypeError, ValueError):
+          result.error = f"Surface data must be numeric (got {type(data).__name__})"
+          return result
+  ```
+  Apply to the `curve`, `scatter`, and `parametric` branches at lines 468–474 as well.
 
-- **Surface overflow as a cell warning** (`cell_list.py:~345`): Detect the numpy overflow before it silently corrupts downstream state. Use `np.errstate` or `warnings.catch_warnings` around the `astype(np.float32)` call; if overflow is detected, set the cell status to a warning ("Overflow: values exceed float32 range — integration may have diverged") and optionally skip the `_rebuild_namespace` call. This gives the user actionable feedback.
-
-- **Longer-term**: Evaluate whether the float32 cast at `cell_list.py:345` is actually necessary for the render pipeline, or whether float64 arrays could be passed through to avoid lossy downcasting for large-valued simulations.
+- **Layer 3 — defense in depth in `_eval_cell`** (`cell_list.py:647`): Wrap the `run_cell` call so any unanticipated evaluator exception becomes a cell error rather than a process crash:
+  ```python
+  try:
+      result = run_cell(source, shared, self._grid,
+                        constraint_exprs=c_exprs, condition_exprs=d_exprs)
+  except Exception as exc:
+      result = CellResult()
+      result.error = f"Internal evaluator error: {type(exc).__name__}: {exc}"
+  ```
 
 ---
-
 
 ### BUG-014 — `RuntimeError: CallerHelper has been deleted` on app close
 **Status:** Open  

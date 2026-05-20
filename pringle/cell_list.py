@@ -18,6 +18,7 @@ Slider changes trigger incremental re-evaluation of only their downstream cells.
 from __future__ import annotations
 
 import time
+import warnings
 from collections import deque
 from typing import Callable
 import numpy as np
@@ -472,7 +473,11 @@ class CellListWidget(QWidget):
                         cell.set_status("ok")
                     if arr.ndim == 2 and arr.shape[1] in (2, 3):
                         result.render_type = "scatter"
-                        result.data = arr.astype(np.float32)
+                        with warnings.catch_warnings(record=True) as _w:
+                            warnings.simplefilter("always")
+                            result.data = arr.astype(np.float32)
+                        if _w:
+                            cell.set_status("warn", "Overflow: values exceed float32 range — integration may have diverged")
                 else:
                     cell.set_status("error", f"'{arr_name}' is not an array")
                     return
@@ -644,10 +649,14 @@ class CellListWidget(QWidget):
             return CellResult()
         c_exprs = cell.constraint_exprs() if hasattr(cell, "constraint_exprs") else []
         d_exprs = cell.condition_exprs() if hasattr(cell, "condition_exprs") else []
-        result = run_cell(
-            source, shared, self._grid,
-            constraint_exprs=c_exprs, condition_exprs=d_exprs,
-        )
+        try:
+            result = run_cell(
+                source, shared, self._grid,
+                constraint_exprs=c_exprs, condition_exprs=d_exprs,
+            )
+        except Exception as exc:
+            result = CellResult()
+            result.error = f"{type(exc).__name__}: {exc}"
         if result.error:
             cell.set_error(result.error)
         elif result.warning:

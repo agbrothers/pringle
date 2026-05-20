@@ -6,6 +6,20 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-009 — Hard crash (`Abort trap: 6`) when data cell produces NaN or Inf
+**Status:** Closed (fixed 2026-05-20)  
+**Severity:** Critical
+
+**Root cause:** Three-layer failure: (1) forward Euler integration diverges to float64 infinity; (2) `arr.astype(np.float32)` silently converts those to `inf`/`NaN` with only a RuntimeWarning; (3) `_fmt_scalar` called `int(f)` on a NaN float — `f == int(f)` raises `ValueError` before the return expression fires. The exception propagated uncaught through the entire call stack and aborted the process.
+
+**Fix — three complementary layers:**
+- `evaluator.py:_fmt_scalar` — `math.isfinite(f)` guard before any integer conversion; returns `"nan"`, `"inf"`, or `"-inf"` for non-finite values. Added `import math`.
+- `evaluator.py:run_cell` — wrapped the value-preview loop in `try/except Exception` so any formatting error degrades to no preview rather than propagating.
+- `cell_list.py:_eval_cell` — wrapped the `run_cell()` call in `try/except Exception`; any unanticipated evaluator exception becomes a cell error instead of a process crash.
+- `cell_list.py:_run_data_cell` — `warnings.catch_warnings(record=True)` around `arr.astype(np.float32)`; surfaces a "Overflow: values exceed float32 range" status warning if numpy emits a RuntimeWarning.
+
+---
+
 ### BUG-015 — Visibility toggle and style changes trigger full namespace rebuild, causing random cells to re-sample
 **Status:** Closed (fixed 2026-05-18)
 
