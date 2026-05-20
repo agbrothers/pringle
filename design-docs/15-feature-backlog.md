@@ -7,6 +7,407 @@ See [17-closed-features.md](17-closed-features.md) for implemented features.
 
 ---
 
+### FEAT-037 — GPU-accelerated expression evaluation (design decision log)
+**Status:** Open — decision pending  
+**Logged:** 2026-05-20  
+**Related:** PERF-002, PERF-003, PERF-004 in [18-performance-backlog.md](18-performance-backlog.md)
+
+**Background:**  
+The expression evaluation pipeline (numpy CPU → numpy arrays → wgpu GPU upload) has three distinct cost layers: the expression computation itself, the Python-loop geometry construction, and the GPU buffer upload. PERF-003/004 address the geometry loops. This entry documents the options for accelerating the computation layer and reducing the GPU upload cost, and records why each option was or was not selected.
+
+**The core constraint: GPU-to-GPU transfer is not free.**  
+Moving expression evaluation to a GPU-accelerated library (JAX, PyTorch, CuPy) does not automatically enable sharing data with wgpu. Each library exposes tensors backed by GPU memory (CUDA or Metal), but wgpu's buffer API accepts numpy arrays or raw bytes — not foreign GPU tensors. The practical path for all of these libraries is still `tensor.cpu().numpy()` → `gfx.Geometry` → wgpu upload. At n=128 the CPU roundtrip costs ~0.5ms; this is a real overhead but small compared to the compute savings.
+
+True zero-copy GPU-to-GPU transfer would require either DLPack interop (not currently implemented in pygfx/wgpu-py) or writing compute shaders inside wgpu itself (see option G below).
+
+---
+
+**Option A — JAX**  
+`jax.numpy` is nearly API-compatible with numpy. Supports JIT compilation, GPU via XLA (CUDA or Metal via `jax-metal`), and full autodiff via `jax.grad`.
+
+*Advantages:* Near-identical API; autograd opens new mathematical capabilities (parameter-space gradients, implicit surface finding); JIT compilation can speed expression evaluation by 5–50×.
+
+*Blockers for Pringle:*  
+- **Immutability.** JAX arrays are immutable; in-place operations (`arr[n] = f(arr[n-1])`) silently fail or raise. The recurrence relation engine (`recurrence.py`) is built around mutable numpy arrays — rewriting it for `jax.lax.scan` would be a major redesign.  
+- **Cross-platform uncertainty.** `jax-metal` (macOS) is an experimental backend with inconsistent coverage of JAX ops. Linux/Windows CUDA installs require matching driver versions.  
+- **Dependency weight.** JAX adds ~500MB of compiled XLA binaries. Current pringle install is trivially lightweight.
+
+*Verdict: Not recommended as primary backend. Immutability blocks recurrence.*
+
+---
+
+**Option B — PyTorch**  
+Widely used GPU tensor library with MPS (Metal) and CUDA backends.
+
+*Advantages:* Mature, widely supported, large ecosystem.
+
+*Blockers for Pringle:*  
+- **Immutability.** PyTorch tensors support in-place ops syntactically (`a[i] = x`) but these don't compose with autograd. Same recurrence problem as JAX.  
+- **API divergence.** `torch.sum(x, dim=0)` vs `np.sum(x, axis=0)` — argument names differ; the namespace whitelist would need significant reworking.  
+- **CUDA version fragmentation.** PyTorch ships different wheels per CUDA version; users must match their driver. This complexity is incompatible with `pip install pringle`.  
+- **Size.** PyTorch CPU-only is ~250MB; GPU variant is ~1.5GB.
+
+*Verdict: Not recommended. Worse than JAX on every relevant dimension for this use case.*
+
+---
+
+**Option C — CuPy**  
+A near-exact numpy drop-in (`import cupy as np`) for CUDA GPUs. Minimal API changes — most expressions would work unmodified.
+
+*Advantages:* Essentially zero expression-layer refactor; no immutability issue; recurrence engine works as-is; mutable arrays; identical numpy semantics.
+
+*Blockers for Pringle:*  
+- **CUDA-only.** CuPy has no Metal or CPU fallback. macOS users (the current development platform) get nothing. A numpy fallback could be made automatic, but this creates a two-code-path maintenance burden.  
+- **CUDA dependency.** Same driver-matching problem as PyTorch.
+
+*Verdict: The cleanest API story, but platform exclusion is a hard blocker for now. Worth revisiting if cross-platform GPU compute becomes a requirement and WGSL shaders are not yet ready.*
+
+---
+
+**Option D — Numba**  
+JIT compiler for Python + numpy code. Can target CPU (LLVM) or CUDA GPU. Does **not** require changing the expression namespace at all — applies to the renderer's Python-loop bottlenecks rather than user expressions.
+
+*Advantages:*  
+- `@numba.njit` on `_clip_mesh_to_mask` (PERF-004, 170ms at n=128) would likely reduce it to ~1ms with zero changes to the public API or user-facing expression semantics.  
+- No immutability issue — numba compiles standard Python with mutable numpy arrays.  
+- Lightweight dependency; CPU-mode requires no GPU driver.  
+- Could accelerate expression evaluation via `@numba.njit` on lambdas, though eval'd lambdas from `exec()` don't compose directly with numba's AOT compilation model.
+
+*Verdict: **Best near-term option for geometry acceleration.** Does not address expression computation on GPU, but PERF-004 is the dominant bottleneck before expression compute matters. Investigate as part of PERF-004 fix.*
+
+---
+
+**Option E — MLX (Apple)**  
+Apple's open-source ML framework. Metal-native, numpy-like API, runs on Apple Silicon GPU. Has autograd.
+
+*Advantages:* Native Metal GPU; numpy-like; would achieve zero-copy with wgpu on macOS (both use Metal) if DLPack support were added to pygfx.
+
+*Blockers:*  
+- macOS/Apple Silicon only — not usable on Linux or Windows.  
+- DLPack interop with wgpu not currently implemented.
+
+*Verdict: Interesting for macOS-only optimization, but platform exclusion makes it unsuitable as a primary backend.*
+
+---
+
+**Option F — Taichi**  
+A Python-embedded DSL that compiles to Metal, CUDA, Vulkan, OpenGL, or CPU. Designed for physics simulation and visualization.
+
+*Advantages:* Truly cross-platform GPU (covers macOS, Linux, Windows); could in principle share Metal/Vulkan buffers with wgpu since both target the same backends; data-oriented programming model suits grid computations.
+
+*Blockers:*  
+- Not numpy-compatible — users write Taichi kernels, not numpy expressions. The expression namespace would need a complete redesign.  
+- Large dependency; less mature than numpy/scipy ecosystem.
+
+*Verdict: Interesting for the geometry layer (compute shaders for `_clip_mesh_to_mask`), less so for user-facing expressions.*
+
+---
+
+**Option G — WGSL compute shaders (native wgpu) — Recommended long-term path**  
+Write the surface evaluation and geometry construction as compute shaders executing directly inside wgpu. Results live in `GPUBuffer` objects that feed the vertex shader with zero CPU involvement. This is the "v2 GLSL compile" path referenced in the architecture design docs.
+
+*Advantages:*  
+- True zero-copy: compute result → vertex buffer, no CPU roundtrip at all.  
+- Cross-platform: wgpu targets Metal, Vulkan, DX12 — all major platforms.  
+- No new dependencies: wgpu is already a dependency.  
+- Eliminates both PERF-002 (GPU upload) and the expression compute cost in one architecture.
+
+*Cost:*  
+- Requires an expression → WGSL transpiler. The current `exec()`-based eval model cannot be used; a compilable subset of expressions must be defined.  
+- User expressions would be restricted to what can be represented in WGSL (no arbitrary Python, no scipy calls).  
+- Significant implementation effort — effectively a v2 eval engine.  
+- Data cells and recurrence relations would remain on CPU/numpy regardless.
+
+*Verdict: The correct long-term architecture. Should be designed as an optional fast path alongside the existing numpy eval engine rather than a replacement — so that arbitrary Python expressions remain supported for correctness and scipy/recurrence use cases, while simple grid expressions opt into the WGSL path for animation performance.*
+
+---
+
+**Summary table:**
+
+| Option | Platform | API change | Recurrence | Dependency | Zero-copy GPU | Recommendation |
+|--------|----------|-----------|------------|------------|--------------|----------------|
+| JAX | CUDA + Metal (exp.) | Low | ✗ breaks | Heavy | No | Blocked by recurrence |
+| PyTorch | CUDA + MPS | Medium | ✗ breaks | Very heavy | No | Not recommended |
+| CuPy | CUDA only | Near-zero | ✓ works | Medium | No | Blocked by platform |
+| **Numba** | **All (CPU+CUDA)** | **None** | **✓ works** | **Light** | **No** | **Best near-term** |
+| MLX | macOS only | Low | ✓ works | Medium | Possible | Platform blocker |
+| Taichi | All | High | ✓ works | Medium | Possible | Complex |
+| **WGSL shaders** | **All** | **N/A (opt-in)** | **✓ unchanged** | **None** | **✓ Yes** | **Best long-term** |
+
+**Recommended path:**  
+1. **Now:** Fix PERF-004 (`_clip_mesh_to_mask`) with Numba `@njit` as a targeted optimization — no architecture change, no new user-facing API.  
+2. **Later:** Design the WGSL compute shader path as an opt-in fast path for simple grid expressions, keeping numpy eval as the fallback for arbitrary Python and scipy/recurrence cells.
+
+---
+
+### FEAT-036 — Critical point markers on surfaces (toggle for animation performance)
+**Status:** Open  
+**Logged:** 2026-05-20
+
+**Description:**  
+Overlay small markers on a surface at every point where `∂z/∂x = 0` and `∂z/∂y = 0` simultaneously — the critical points (local minima, maxima, and saddle points). Markers are all the same neutral color; classification by type is intentionally omitted since the surface geometry makes type self-evident and extra colors increase visual clutter. The feature is **off by default** and must be explicitly toggled on because it requires sharing the normal computation path with the renderer.
+
+**Motivation:**  
+Visually locating fixed points of a parameterized surface (e.g. identifying how extrema move as a slider sweeps through values) is difficult by eye. Static markers make this immediate. The primary use case is parameter sweeps — watching markers migrate across the surface as `a` changes — which makes the toggle critical: users running animated sweeps should be able to disable the overlay to recover framerate.
+
+**UI:**  
+A checkbox in the style popover labeled "Critical points", stored as `CellStyle.show_critical_points: bool = False`. Visible for all surface-type cells. Checking it triggers an immediate re-render; unchecking removes the marker overlay with no recomputation.
+
+**Gradient sharing — zero marginal cost for the `np.gradient` call:**
+
+`_grid_normals` in `renderer.py` already computes `dz_dx` and `dz_dy` via `np.gradient` (lines 35–36) in order to build the Phong shading normals. These values are used internally and then discarded. Critical point detection needs exactly the same two arrays on the same grid.
+
+A critical point (∂z/∂x = 0, ∂z/∂y = 0) corresponds to the surface normal pointing straight up — `n = (0, 0, 1)` — since the unnormalized normal is `(-∂z/∂x, -∂z/∂y, 1)`. The gradient information is therefore already encoded in the normal vectors: `dz_dx = -nx/nz`, `dz_dy = -ny/nz`. However, recovering it from the normalized float32 normals amplifies precision error for near-vertical faces, so the cleaner approach is to share the raw gradients directly.
+
+**Required refactor of `_grid_normals`:** Extract gradient computation into a standalone helper, then pass the result to both the normal builder and critical point detection:
+
+```python
+def _grid_gradients(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Return (dz_dx, dz_dy) via central finite differences. Used by both
+    _grid_normals and critical point detection — compute once, share."""
+    return np.gradient(z, x[0, :], axis=1), np.gradient(z, y[:, 0], axis=0)
+
+def _grid_normals(dz_dx: np.ndarray, dz_dy: np.ndarray) -> np.ndarray:
+    """Accept pre-computed gradients; signature change from (x, y, z)."""
+    nx = -dz_dx;  ny = -dz_dy;  nz = np.ones_like(dz_dx)
+    length = np.sqrt(nx**2 + ny**2 + nz**2)
+    ...
+```
+
+`make_surface_mesh` calls `_grid_gradients` once, passes the result to both. When `show_critical_points=False`, the gradients are only used for normals — no extra work. When `True`, the same arrays are also passed to `_find_critical_points`. The `np.gradient` call is paid exactly once regardless.
+
+**Important:** use the pre-clip gradients (before `_clip_mesh_to_mask` runs), since the clipped normals array grows with boundary midpoint vertices and can no longer be reshaped to `(rows, cols)`. The seam is between lines 194 and 198 of the current `make_surface_mesh`.
+
+**Algorithm — detection:**
+
+`dz_dx` and `dz_dy` are already available from `_grid_gradients` — no additional `np.gradient` call needed. Scan for cells where both gradient components have a sign change. For each 2×2 block `(i,j)`:
+
+```python
+# sign change in gx across the cell (either row)
+sx = (gx[i, j] * gx[i, j+1] < 0) | (gx[i+1, j] * gx[i+1, j+1] < 0)
+# sign change in gy across the cell (either column)
+sy = (gy[i, j] * gy[i+1, j] < 0) | (gy[i, j+1] * gy[i+1, j+1] < 0)
+candidates = np.where(sx & sy)   # fully vectorized; no Python loop
+```
+
+For a 128×128 grid this is ~16K boolean comparisons — sub-millisecond.
+
+**Algorithm — refinement (no extra z evaluations):**
+
+Refinement uses only already-computed gradient values at the four corners of each candidate cell. One Newton step with the local Hessian assembled from finite differences of `gx`/`gy`:
+
+```python
+for i, j in zip(*candidates):
+    # gradient at cell center (bilinear interpolation of corners)
+    g0 = np.array([
+        (gx[i, j] + gx[i+1, j] + gx[i, j+1] + gx[i+1, j+1]) / 4,
+        (gy[i, j] + gy[i+1, j] + gy[i, j+1] + gy[i+1, j+1]) / 4,
+    ])
+    # local Hessian from finite differences of the gradient arrays
+    J = np.array([
+        [(gx[i, j+1] - gx[i, j]) / dx,  (gx[i+1, j] - gx[i, j]) / dy],
+        [(gy[i, j+1] - gy[i, j]) / dx,  (gy[i+1, j] - gy[i, j]) / dy],
+    ])
+    if abs(np.linalg.det(J)) > 1e-10:
+        delta = np.linalg.solve(J, -g0)
+        delta = np.clip(delta, -0.5, 0.5)   # stay within cell
+        x_crit = x1d[j] + delta[0] * dx
+        y_crit = y1d[i] + delta[1] * dy
+    else:
+        x_crit, y_crit = x1d[j] + dx/2, y1d[i] + dy/2   # fallback to midpoint
+    z_crit = float(z_raw[i, j])   # nearest grid value (or bilinear interp)
+    critical_pts.append((x_crit, y_crit, z_crit))
+```
+
+The Newton step uses only values already in `gx` and `gy` — zero additional `z` evaluations. The cost is one 2×2 linear solve per candidate. With K critical points (typically K ≪ N²), this adds negligible time.
+
+**No classification:** The Hessian determinant and sign check (for min/max/saddle distinction) are intentionally skipped. All markers are rendered identically.
+
+**Rendering:**  
+Critical points are collected into an `(K, 3)` float32 array and passed to `make_scatter_mesh` with a fixed neutral style (light gray, small size). The scatter object is keyed as `cell_id + ":crits"` in `_objects`, so `remove_object(cell_id)` must also remove `cell_id + ":crits"`. When `show_critical_points=False`, the entry is absent entirely (not hidden — removed) so it imposes no render cost.
+
+**Performance profile:**
+
+| Component | Cost | Notes |
+|---|---|---|
+| `_grid_gradients` (`np.gradient`) | **0 ms marginal** | Already computed for Phong normals; shared via refactor |
+| Vectorized sign-change scan | < 0.1 ms | Pure NumPy boolean ops |
+| Newton refinement (K steps) | < 0.1 ms | Typically K < 20; 2×2 solve per candidate |
+| Total marginal overhead | **< 0.2 ms at 128×128** | Essentially free on top of normal surface render |
+
+The gradient computation was originally listed as ~0.5 ms, but this is eliminated by sharing `dz_dx`/`dz_dy` from `_grid_normals` (which already pays this cost unconditionally for Phong shading). The true marginal cost of enabling critical point detection is just the sign-change scan and refinement.
+
+With `show_critical_points=False`, the gradient arrays are still computed (they are needed for Phong normals regardless), but the sign-change scan is skipped entirely.
+
+**Integration in `_on_cell_result` (`app.py`):**  
+After `make_surface_mesh` produces the surface mesh, and only when `style.show_critical_points` is True:
+
+```python
+crits = _find_critical_points(result.data, result.x, result.y,
+                               z_raw=result.data_unmasked)
+if len(crits) > 0:
+    crit_mesh = make_scatter_mesh(crits, color=(0.85, 0.85, 0.85, 1.0),
+                                  size=0.04)
+    vp.add_object(cell_id + ":crits", crit_mesh)
+else:
+    vp.remove_object(cell_id + ":crits")
+```
+
+`_find_critical_points` is a standalone function in `renderer.py` taking `(z, x_grid, y_grid)` and returning an `(K, 3)` array. Keeping it separate makes it testable and lets the toggle short-circuit before calling it.
+
+**Constraint interaction:**  
+Use `z` (the NaN-masked data) for gradient computation so that masked regions (constraint sub-cells) produce NaN gradients. Cells adjacent to a NaN value will have unreliable gradient estimates via `np.gradient`'s edge handling — in practice this means a few spurious candidates near the constraint boundary. These are filtered out by checking that `z_crit` is not NaN.
+
+---
+
+### FEAT-038 — Expose surface gradients as a shared renderer primitive
+**Status:** Open  
+**Logged:** 2026-05-20  
+**Related:** FEAT-036 (critical points), [PERF-002](18-performance-backlog.md)
+
+**Motivation:**  
+`_grid_normals` in `renderer.py` already computes `dz_dx = np.gradient(z, x[0,:], axis=1)` and `dz_dy = np.gradient(z, y[:,0], axis=0)` as an internal step, then discards them after normalization. Any downstream function that needs the surface gradients — critical point detection, slope/steepness coloring, curvature maps, gradient flow arrows — currently has to call `np.gradient` again independently, paying ~0.5 ms per call at n=128 for work that is already done.
+
+This feature extracts gradient computation into a shared primitive so it is computed once per surface update regardless of how many consumers exist.
+
+**Proposed change — `renderer.py`:**
+
+1. Add a standalone `_grid_gradients` function:
+```python
+def _grid_gradients(
+    x: np.ndarray, y: np.ndarray, z: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """∂z/∂x and ∂z/∂y via central finite differences on the (x, y, z) grid.
+    Shared by _grid_normals and any downstream gradient consumer."""
+    dz_dx = np.gradient(z, x[0, :], axis=1)
+    dz_dy = np.gradient(z, y[:, 0], axis=0)
+    return dz_dx, dz_dy
+```
+
+2. Refactor `_grid_normals` to accept pre-computed gradients rather than recomputing them:
+```python
+def _grid_normals(dz_dx: np.ndarray, dz_dy: np.ndarray) -> np.ndarray:
+    nx = -dz_dx;  ny = -dz_dy;  nz = np.ones_like(dz_dx)
+    length = np.sqrt(nx**2 + ny**2 + nz**2)
+    nx /= length;  ny /= length;  nz /= length
+    return np.stack([nx.ravel(), ny.ravel(), nz.ravel()], axis=1).astype(np.float32)
+```
+
+3. Update `make_surface_mesh` to call `_grid_gradients` once at the top and thread the result through:
+```python
+dz_dx, dz_dy = _grid_gradients(x, y, z_pos)
+normals = _grid_normals(dz_dx, dz_dy)
+# critical points, slope maps, etc. receive dz_dx/dz_dy directly
+```
+
+**Important:** use the pre-clip gradients (computed from `z_pos`, before `_clip_mesh_to_mask` runs). The clipped normals array grows with boundary midpoint vertices and can no longer be reshaped to `(rows, cols)`, so gradient consumers must be invoked before clipping.
+
+**Known downstream consumers:**
+
+| Consumer | Currently pays `np.gradient`? | After this change |
+|----------|-------------------------------|-------------------|
+| `_grid_normals` (Phong shading) | Yes — always | Free; receives pre-computed arrays |
+| FEAT-036 critical point detection | Yes — when enabled | Free; receives pre-computed arrays |
+| FEAT-035 colormap-by-gradient-magnitude | Would need to | Free |
+| Future: curvature, Laplacian, slope map | Would need to | Free |
+
+**Performance:** The `np.gradient` call costs ~0.5 ms at n=128. With this change it is paid exactly once per surface update regardless of how many gradient consumers are active. Any feature built on surface gradients after this point has zero marginal gradient cost.
+
+**Scope:** Pure refactor inside `renderer.py`. No changes to `evaluator.py`, the cell namespace, or the YAML format. `_grid_gradients` and the updated `_grid_normals` are internal functions — no public API change.
+
+---
+
+### FEAT-035 — User-supplied variable as colormap data source ("colormap by")
+**Status:** Open  
+**Logged:** 2026-05-18
+
+**Description:**  
+Allow the user to specify any same-shaped array from the expression namespace as the data source that drives a colormap, instead of the built-in default (z-values for surfaces, parametric index for curves). The primary use case is gradient-magnitude coloring: define `grad_norm` in a cell, then pin the colormap of a surface to `grad_norm` to visually locate fixed points and track how they move as parameters change.
+
+**UI:**  
+Add an optional text-input row below the colormap swatch row in `StylePopoverWidget`, visible only when a colormap is selected:
+```
+Colormap:  [▒▒▒▒▒][▓▓▓▓▓][░░░░░][▒▒▒▒▒][▓▓▓▓▓] [⇄]
+by: [_________________________]
+```
+The field has placeholder text `variable name…`. Typing a name and pressing Enter (or leaving the field) updates the style. Clearing the field reverts to default coloring. Selecting a colormap swatch while the field is empty keeps the default source; the field is independent of swatch selection so a user can switch colormaps while keeping the same data source.
+
+**Implementation — `CellStyle` (`style.py`):**  
+Add one field:
+```python
+colormap_expr: str | None = None   # variable name to drive colormap; None = default
+```
+Persisted to YAML as `colormap_expr`. Read back in `restore_cell_list` with fallback `None`.
+
+**Implementation — `style_popover.py`:**  
+After the `cmap_row` block, add a conditional row:
+```python
+self._cmap_expr_edit = QLineEdit()
+self._cmap_expr_edit.setPlaceholderText("variable name…")
+self._cmap_expr_edit.setText(self._style.colormap_expr or "")
+self._cmap_expr_edit.setFixedWidth(130)
+self._cmap_expr_edit.editingFinished.connect(self._on_cmap_expr_changed)
+expr_row = QHBoxLayout()
+expr_row.addWidget(QLabel("by:"))
+expr_row.addWidget(self._cmap_expr_edit)
+expr_row.addStretch()
+layout.addLayout(expr_row)
+```
+The row is always present but could be hidden when no colormap is selected (style cleanup concern, not functional). `_on_cmap_expr_changed` updates `self._style.colormap_expr` to the stripped text (or `None` if empty) and emits `style_changed`.
+
+**Implementation — `app.py` (`_on_cell_result`):**  
+Resolve the variable name to an array from the shared namespace immediately before calling mesh builders:
+```python
+cmap_data: np.ndarray | None = None
+if style.colormap and style.colormap_expr:
+    raw = self._cell_list._shared_ns.get(style.colormap_expr.strip())
+    if isinstance(raw, np.ndarray):
+        cmap_data = raw.astype(np.float32)
+    # if lookup fails or wrong type: cmap_data stays None → fallback to default
+```
+Pass `cmap_data` to each mesh builder as a new `colormap_data: np.ndarray | None = None` parameter.
+
+**Implementation — `renderer.py` (mesh builders):**  
+Add `colormap_data` parameter to `make_surface_mesh`, `make_line_mesh`, `make_scatter_mesh`. When present and shape-valid, use it as the scalar array for `_apply_colormap` instead of the built-in default:
+
+*Surface:*
+```python
+if colormap is not None:
+    if colormap_data is not None and colormap_data.size == z.size:
+        color_vals = colormap_data.ravel()
+    elif colormap_data is not None:
+        # Shape mismatch: fall back, mark warning
+        color_vals = positions[:, 2]
+    else:
+        color_vals = positions[:, 2]   # default: z-value
+    colors = _apply_colormap(color_vals, colormap, colormap_reversed)
+```
+The shape check `colormap_data.size == z.size` ensures the array matches the N×M surface grid. After clipping, `positions` may have more vertices (boundary midpoints), so `colormap_data.ravel()` is indexed before clipping and matched to the original grid. The cleanest approach is: compute colors for all N×M grid positions using the custom data, then let the clip pass rearrange them in sync with vertices.  
+This requires threading `colormap_data`-derived colors through the clip as a per-vertex attribute alongside positions/normals — a moderate refactor. An alternative is to map the custom data onto the clipped vertices by nearest-grid-index, which is simpler but approximate at boundaries.
+
+*Curve / scatter:*
+```python
+if colormap is not None:
+    if colormap_data is not None and len(colormap_data.ravel()) == len(pts):
+        color_vals = colormap_data.ravel()
+    else:
+        color_vals = np.linspace(0.0, 1.0, len(pts), dtype=np.float32)
+    colors = _apply_colormap(color_vals, colormap, colormap_reversed)
+```
+
+**Shape-mismatch handling:**  
+When `colormap_data` is provided but has the wrong shape, fall back to default coloring silently. Optionally surface a warning via the cell's `set_warning` mechanism: since the warning must be set before the mesh builder is called (the builder has no access to the cell widget), the check and warning should happen in `_on_cell_result` before the builder call.
+
+**Dependency tracking limitation:**  
+If the surface cell's source does not reference `colormap_expr` (e.g., the cell is `z = f(x, y)` and `grad_norm` is defined in a separate cell), a change to `grad_norm`'s cell will trigger `_rebuild_namespace` and re-evaluate `grad_norm` — but the surface cell `z = f(x, y)` has no syntactic dependency on `grad_norm` and will not re-evaluate. The surface will therefore keep its old coloring until some other change forces a rebuild.
+
+In the typical use case (gradient arrays derived from the same slider parameters that drive the surface), this is not a problem: changing `a` re-evaluates both `z = f(x, y, a)` and `grad_norm = g(x, y, a)`, and the surface rebuilds picking up the new `grad_norm`. The edge case only arises if `grad_norm` depends on variables the surface doesn't share.
+
+**Session persistence (`session.py`):**  
+`cell_to_dict` writes `colormap_expr` from `style.colormap_expr`. `restore_cell_list` reads it with `style_data.get("colormap_expr", None)`.
+
+---
+
 ### FEAT-031 — Halve the crosshair arm length
 **Status:** Open  
 **Logged:** 2026-05-18
@@ -202,19 +603,192 @@ Add a custom icon for the application window and macOS Dock entry.
 
 ---
 
-### FEAT-014 — Vector arrows
+### FEAT-014 — Vector / arrow rendering (flow chains and explicit tail+head pairs)
 **Status:** Open  
-**Logged:** 2026-05-16
+**Logged:** 2026-05-16  
+**Updated:** 2026-05-20
 
 **Description:**  
-Support rendering 3D vector fields as arrow glyphs — a set of origin points each with a direction and optional magnitude-scaled length.
+Render 3D arrows for two distinct use cases:
 
-**Implementation notes:**
-- Expected input: an `(N, 3)` positions array paired with an `(N, 3)` directions array (or a single `(N, 6)` array where columns 0–2 are origins and 3–5 are vectors). The magic variable name (e.g. `arrows`) or a style toggle would trigger this render type.
-- pygfx does not have a built-in arrow/glyph primitive. Each arrow must be constructed from geometry: a `Line` for the shaft and a cone (or a second short line pair forming a "V") for the head. For large fields this is expensive if done per-arrow; consider instanced geometry or a custom shader approach.
-- A simpler v1 approach: pre-build a single arrow mesh and use `gfx.InstancedMesh` to render N copies with per-instance transform matrices. pygfx supports instanced meshes, which makes this GPU-efficient.
-- Shaft length should scale with vector magnitude by default; a "normalize" style toggle should pin all arrows to equal length.
-- Color follows the cell's assigned color, with the colormap extension (FEAT-013) applying naturally once that is built.
+1. **Flow mode** — given an (N, 3) scatter array, draw N−1 arrows between consecutive pairs of points, visualizing directionality along a path or trajectory.
+2. **Vector field mode** — given an (N, 6) array (columns 0–2 = tail, 3–5 = head), draw N independent arrows as an arbitrary vector field. An (N, 4) array is the 2D version: tail (x, y) and head (x, y) with z=0.
+
+A third option — treating (N, 6) as position + direction vector rather than tail + head — is intentionally not included: it reduces to vector field mode by computing `head = tail + direction`, so no separate mode is needed.
+
+---
+
+**Arrow geometry — pygfx backend:**
+
+pygfx has no built-in arrow primitive. The correct approach is a single combined unit-arrow mesh rendered via `gfx.InstancedMesh` — one GPU draw call for all N arrows. The unit arrow points along +Z from `z=0` (tail) to `z=1` (head):
+
+```python
+def _build_unit_arrow_geometry(shaft_r=0.03, head_r=0.09,
+                                head_frac=0.25, segments=8):
+    """Shaft cylinder + cone head, combined into one Geometry."""
+    shaft_h = 1.0 - head_frac   # e.g. 0.75
+    head_h  = head_frac         # e.g. 0.25
+
+    # Shaft: cylinder centered at origin → shift so z ∈ [0, shaft_h]
+    sg = gfx.cylinder_geometry(
+        radius_bottom=shaft_r, radius_top=shaft_r,
+        height=shaft_h, radial_segments=segments)
+    sp = sg.positions.data.copy();  sp[:, 2] += shaft_h / 2
+    sn = sg.normals.data.copy()
+
+    # Head: cone (top radius=0) centered at origin → shift to z ∈ [shaft_h, 1]
+    cg = gfx.cylinder_geometry(
+        radius_bottom=head_r, radius_top=0.0,
+        height=head_h, radial_segments=segments)
+    cp = cg.positions.data.copy();  cp[:, 2] += shaft_h + head_h / 2
+    cn = cg.normals.data.copy()
+
+    positions = np.concatenate([sp, cp], axis=0)
+    normals   = np.concatenate([sn, cn], axis=0)
+    indices   = np.concatenate([sg.indices.data,
+                                 cg.indices.data + len(sp)], axis=0)
+    return gfx.Geometry(positions=positions, normals=normals, indices=indices)
+```
+
+This geometry is built once and cached (module-level singleton). Changing arrow count or direction does not require rebuilding it.
+
+**Per-arrow transform matrix:**
+
+Each arrow is placed by a 4×4 matrix that rotates the unit +Z arrow to the desired direction, scales it to the arrow length, and translates it to the tail position:
+
+```python
+def _arrow_matrix(tail, head):
+    d = np.asarray(head, dtype=np.float64) - tail
+    L = np.linalg.norm(d)
+    if L < 1e-10:
+        return None          # zero-length arrow — skip
+    d_hat = d / L
+
+    z = np.array([0.0, 0.0, 1.0])
+    axis = np.cross(z, d_hat)
+    s = np.linalg.norm(axis)
+    c = float(np.dot(z, d_hat))
+
+    if s < 1e-8:             # parallel or anti-parallel
+        R = np.eye(3) if c > 0 else np.diag([1.0, -1.0, -1.0])
+    else:
+        axis /= s
+        K = np.array([[ 0,       -axis[2],  axis[1]],
+                       [ axis[2],  0,       -axis[0]],
+                       [-axis[1],  axis[0],  0      ]])
+        R = np.eye(3) + s * K + (1 - c) * (K @ K)   # Rodrigues
+
+    # Scale: multiply the Z column by L so the unit arrow becomes length L
+    M = np.eye(4, dtype=np.float32)
+    M[:3, 0] = R[:, 0]
+    M[:3, 1] = R[:, 1]
+    M[:3, 2] = R[:, 2] * L   # Z column scaled by arrow length
+    M[:3, 3] = tail           # tail is the origin of the unit arrow (z=0)
+    return M
+```
+
+**`make_arrow_mesh` function (`renderer.py`):**
+
+```python
+_ARROW_GEO = None   # module-level cache
+
+def make_arrow_mesh(arrows: np.ndarray,   # (N, 6): [tail_x,y,z, head_x,y,z]
+                    color=(0.9, 0.6, 0.1, 1.0),
+                    normalize: bool = False) -> gfx.InstancedMesh:
+    global _ARROW_GEO
+    if _ARROW_GEO is None:
+        _ARROW_GEO = _build_unit_arrow_geometry()
+
+    tails, heads = arrows[:, :3], arrows[:, 3:]
+    if normalize:
+        # Pin all arrows to the same length (mean magnitude)
+        mags = np.linalg.norm(heads - tails, axis=1, keepdims=True)
+        mean_mag = float(np.nanmean(mags))
+        dirs = (heads - tails) / np.maximum(mags, 1e-10)
+        heads = tails + dirs * mean_mag
+
+    mat = gfx.MeshPhongMaterial(color=color, side="front")
+    mesh = gfx.InstancedMesh(_ARROW_GEO, mat, len(arrows))
+    valid = 0
+    for i, (t, h) in enumerate(zip(tails, heads)):
+        M = _arrow_matrix(t, h)
+        if M is not None:
+            mesh.set_matrix_at(i, M)
+            valid += 1
+    return mesh
+```
+
+---
+
+**Shape detection and render types:**
+
+Extend `_detect_shape` (`evaluator.py`) to recognise vector arrays before the existing scatter checks:
+
+```python
+if val.ndim == 2 and val.shape[1] == 6:
+    return "vectors", val       # 3D tail+head pairs
+if val.ndim == 2 and val.shape[1] == 4:
+    return "vectors_2d", val    # 2D tail+head pairs (z=0 plane)
+```
+
+Priority: `(N, 6)` → vectors before `(N, 3)` → scatter, so a 6-column array is never misread as scatter.
+
+For 2D vectors, promote to 3D before passing to `make_arrow_mesh`:
+```python
+arrows_3d = np.column_stack([val[:, :2],
+                              np.zeros(len(val)),
+                              val[:, 2:4],
+                              np.zeros(len(val))])
+```
+
+**Flow mode — consecutive-pair arrows:**
+
+Flow mode is a fourth option in the scatter render mode radio selector (FEAT-033), alongside "Circles", "Line", "Spheres". When `scatter_render_mode == "arrows"`:
+
+```python
+pts = result.data   # (N, 3) scatter array
+arrows = np.concatenate([pts[:-1], pts[1:]], axis=1)   # (N-1, 6)
+obj = make_arrow_mesh(arrows, color=style.color,
+                      normalize=style.normalize_arrows)
+```
+
+This converts a trajectory into N−1 flow arrows with no change to the evaluator — just the render dispatch in `_on_cell_result`.
+
+---
+
+**`CellStyle` additions:**
+
+```python
+normalize_arrows: bool = False   # pin all arrows to equal length
+```
+
+The normalize toggle appears in the style popover alongside the render mode radio buttons (only visible when render mode is "arrows" or render type is "vectors"/"vectors_2d"). Persisted to YAML.
+
+---
+
+**`_on_cell_result` dispatch (`app.py`):**
+
+```python
+elif result.render_type in ("vectors", "vectors_2d"):
+    data = result.data
+    if result.render_type == "vectors_2d":
+        data = np.column_stack([data[:, :2], np.zeros(len(data)),
+                                data[:, 2:], np.zeros(len(data))])
+    obj = make_arrow_mesh(data, color=style.color,
+                          normalize=style.normalize_arrows)
+    vp.add_object(cell_id, obj)
+```
+
+Flow mode is handled in the existing `scatter` dispatch block by switching on `style.scatter_render_mode == "arrows"` and converting consecutive pairs as above.
+
+---
+
+**Performance:**
+
+- Unit geometry: ~160 vertices and ~280 triangles (8 segments, shaft + cone). Fixed cost.
+- `InstancedMesh` with N instances: one draw call. Scales to thousands of arrows with no meaningful overhead.
+- Per-arrow matrix computation: one cross-product, one Rodrigues rotation, one 4×4 fill — O(N) CPU work, takes < 1 ms for N ≤ 1000.
+- The bottleneck for large vector fields (N > 10K) is the Python loop over `set_matrix_at`. This can be pre-vectorized if needed by constructing all matrices as a batched numpy operation and uploading in one call (requires checking pygfx's InstancedMesh API for bulk matrix upload).
 
 ---
 

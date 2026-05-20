@@ -92,7 +92,7 @@ During slider animation, only the z-values change. The mesh topology (index buff
 | normals (N×3 float32) | 192 KB | Yes (z-dependent) |
 | **Total** | **~771 KB** | — |
 
-**Estimated cost:** Dominates GPU upload budget; also creates GC pressure from discarded numpy arrays.
+**Measured cost (headless benchmark):** The CPU object-creation overhead (~9 ms difference between `geo/cpu_total` and `mesh/make_surface_mesh` at n=128) is small noise against PERF-003/004. **The GPU upload cost is not captured by the headless benchmark** — `gfx.Geometry` defers the actual wgpu buffer upload until the first `render()` call, which the benchmark never invokes. The ~771 KB upload cost is therefore a blind spot in the current numbers and must be measured via Instruments / wgpu timestamp queries (SOP Phase 5). This issue becomes the dominant bottleneck once PERF-003 and PERF-004 reduce CPU geometry time from ~227 ms to ~3 ms.
 
 **Fix (short-term):** Cache the index buffer (`_grid_indices` result) per grid shape — it never changes for a fixed n. Pass it into `make_surface_mesh` as an optional argument to avoid recomputing it.
 
