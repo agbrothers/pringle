@@ -6,6 +6,13 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-038 — Expose surface gradients as a shared renderer primitive
+**Status:** Closed (implemented 2026-05-20)
+
+**Implementation:** Added `_grid_gradients(x, y, z) → (dz_dx, dz_dy)` to `renderer.py` — extracts the two `np.gradient` calls that were previously buried inside `_grid_normals`. Refactored `_grid_normals` to accept pre-computed `(dz_dx, dz_dy)` rather than `(x, y, z)`. `make_surface_mesh` calls `_grid_gradients` once before the clip pass and threads the result to `_grid_normals`; the gradients remain available as local variables for any downstream consumer (FEAT-036 critical points, FEAT-035 gradient coloring, etc.) at zero additional `np.gradient` cost. Pure internal refactor — no changes to the evaluator, cell namespace, or YAML format.
+
+---
+
 ### FEAT-034 — Colormap normalization uses visible (constrained) data range
 **Status:** Closed (implemented 2026-05-18)
 

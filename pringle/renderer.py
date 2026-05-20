@@ -24,25 +24,27 @@ import pylinalg as la
 # Mesh construction helpers
 # ---------------------------------------------------------------------------
 
-def _grid_normals(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> np.ndarray:
-    """
-    Compute per-vertex normals for a height-field surface z = f(x, y).
+def _grid_gradients(
+    x: np.ndarray, y: np.ndarray, z: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """∂z/∂x and ∂z/∂y via central finite differences on the (x, y, z) grid.
+    Shared by _grid_normals and any downstream gradient consumer (critical points,
+    slope maps, etc.) — compute once per surface update, pass the result to each."""
+    return np.gradient(z, x[0, :], axis=1), np.gradient(z, y[:, 0], axis=0)
 
-    Uses central finite differences on x and y, then cross-products to get
-    the surface normal at each vertex.  Output shape: (N*M, 3) float32.
-    """
-    # Gradient via central differences (padded edges use one-sided diff)
-    dz_dx = np.gradient(z, x[0, :], axis=1)  # ∂z/∂x
-    dz_dy = np.gradient(z, y[:, 0], axis=0)  # ∂z/∂y
 
-    # Tangent vectors: T_x = (1, 0, dz/dx),  T_y = (0, 1, dz/dy)
-    # Normal = T_x × T_y = (-dz/dx, -dz/dy, 1), then normalized
+def _grid_normals(dz_dx: np.ndarray, dz_dy: np.ndarray) -> np.ndarray:
+    """
+    Compute per-vertex normals from pre-computed surface gradients.
+
+    Normal = T_x × T_y = (-dz/dx, -dz/dy, 1), then normalized.
+    Output shape: (N*M, 3) float32.
+    """
     nx = -dz_dx
     ny = -dz_dy
-    nz = np.ones_like(z)
+    nz = np.ones_like(dz_dx)
     length = np.sqrt(nx**2 + ny**2 + nz**2)
     nx /= length;  ny /= length;  nz /= length
-
     return np.stack([nx.ravel(), ny.ravel(), nz.ravel()], axis=1).astype(np.float32)
 
 
@@ -190,7 +192,9 @@ def make_surface_mesh(
     z_pos = z_raw if (z_raw is not None and constraint_mask is not None) else z
     positions = np.stack([x.ravel(), y.ravel(), z_pos.ravel()], axis=1).astype(np.float32)
     indices   = _grid_indices(rows, cols)
-    normals   = _grid_normals(x, y, z_pos)
+    # Compute gradients once; _grid_normals and any downstream consumers share these arrays.
+    dz_dx, dz_dy = _grid_gradients(x, y, z_pos)
+    normals   = _grid_normals(dz_dx, dz_dy)
 
     if constraint_mask is not None:
         inside = constraint_mask.ravel().astype(bool)
