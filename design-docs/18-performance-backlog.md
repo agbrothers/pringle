@@ -24,9 +24,23 @@ Run via `python tests/bench_slider_animation.py --n 128 --frames 30`.
 | `build_equation_namespace()` (PERF-005) | 0.02 | ~0% |
 | **Estimated total frame** | **253** | **767%** |
 
-**Current effective frame rate: ~4 fps at n=128.**
+**Effective frame rate at baseline: ~4 fps at n=128.**
 
-The two Python-loop geometry functions dominate the budget by an order of magnitude. Fixing PERF-003 and BUG-001 alone would cut the geometry cost from 227 ms to under 5 ms (numpy vectorized). Combined with the 17 ms evaluation chain, that puts us at ~22 ms per frame — inside the 30fps budget.
+---
+
+## Post-patch Benchmark (2026-05-20, n=128, 30 frames)
+
+After BUG-001 partial fix and PERF-003 vectorization (both applied by dev 2026-05-20). Geometry functions timed directly via inline benchmark (bench script API mismatch after refactor; see PERF-010).
+
+| Component | Mean ms | % of 33ms budget | vs baseline |
+|-----------|---------|-----------------|-------------|
+| `_clip_mesh_to_mask` (partial fix, PERF-010) | **26.7** | **81%** | 6.4× faster |
+| `_grid_gradients + _grid_normals` (FEAT-038) | 0.31 | 1% | — |
+| `_grid_indices` (PERF-003, closed) | 0.19 | 1% | 295× faster |
+| Cell evaluation chain (PERF-001, PERF-006) | **17.0** | **52%** | unchanged |
+| **Estimated total frame** | **44** | **134%** | **5.7× faster** |
+
+**Effective frame rate post-patch: ~23 fps at n=128.** Below 30 fps target. Primary remaining bottleneck is PERF-010 (O(n²) vertex list conversion inside `_clip_mesh_to_mask`). Fixing it is estimated to cut the function from 26.7 ms to ~3–5 ms and push the frame to ~20 ms (~50 fps).
 
 ---
 
@@ -38,6 +52,68 @@ The two Python-loop geometry functions dominate the budget by an order of magnit
 | HIGH | Significant contribution to frame budget; fix in first optimization pass |
 | MEDIUM | Measurable but not dominant; address in second pass |
 | LOW | Minor; fix opportunistically or when touching the relevant code |
+
+---
+
+### PERF-010 — O(n²) vertex list/array roundtrip in `_clip_mesh_to_mask`
+**Status:** Open  
+**Priority:** CRITICAL  
+**Logged:** 2026-05-20  
+**Discovered via:** Post-patch benchmark (2026-05-20)  
+**Measured impact:** ~13 ms of the 26.7 ms `_clip_mesh_to_mask` total at n=128; function still at 81% of frame budget after BUG-001 partial fix  
+**Files:** [renderer.py:99-100](../pringle/renderer.py#L99), [renderer.py:153-154](../pringle/renderer.py#L153)
+
+**Description:**  
+The BUG-001 patch vectorized triangle classification correctly (O(n) boundary loop), but retained a full-array Python list conversion that is still O(n²):
+
+```python
+# line 99-100 — called every frame, always:
+new_pos = list(positions)   # 16,384 numpy rows → Python list
+new_nor = list(normals)     # 16,384 numpy rows → Python list
+...
+# line 153-154 — rebuild from list:
+out_pos = np.array(new_pos, dtype=np.float32)   # list → numpy
+out_nor = np.array(new_nor, dtype=np.float32)
+```
+
+This conversion costs ~13 ms regardless of how many boundary triangles exist. At n=128, 16,384 rows are converted to and from Python lists on every animation frame even though only ~512 new boundary vertices are appended. The numpy array creation from a heterogeneous Python list is particularly slow because numpy must process each row individually.
+
+**Fix:**  
+Avoid converting the full position/normal arrays to Python lists. Instead, accumulate only the *new* boundary vertices in a small separate list, then `np.concatenate` them with the original arrays:
+
+```python
+# Replace lines 99-154 with:
+new_verts_pos: list[np.ndarray] = []
+new_verts_nor: list[np.ndarray] = []
+vertex_offset = len(positions)   # index of first new vertex
+
+def _bv(ia: int, ib: int) -> int:
+    key = (min(ia, ib), max(ia, ib))
+    if key in edge_cache:
+        return edge_cache[key]
+    f_a, f_b = float(f_values[ia]), float(f_values[ib])
+    denom = f_a - f_b
+    t = float(np.clip(f_a / denom, 0.0, 1.0)) if abs(denom) > 1e-10 else 0.5
+    new_verts_pos.append(positions[ia] + t * (positions[ib] - positions[ia]))
+    nv = normals[ia] + t * (normals[ib] - normals[ia])
+    length = float(np.linalg.norm(nv))
+    new_verts_nor.append(nv / length if length > 1e-8 else nv)
+    vi = vertex_offset + len(new_verts_pos) - 1
+    edge_cache[key] = vi
+    return vi
+
+# ... boundary loop unchanged ...
+
+if new_verts_pos:
+    out_pos = np.concatenate([positions, np.array(new_verts_pos, dtype=np.float32)], axis=0)
+    out_nor = np.concatenate([normals,   np.array(new_verts_nor, dtype=np.float32)], axis=0)
+else:
+    out_pos, out_nor = positions, normals
+```
+
+This reduces the `np.array()` call from 16,384 rows to ~512 rows (the new boundary vertices only). The original arrays are passed through unchanged via `np.concatenate`, which is O(1) for the original slice.
+
+**Estimated impact after fix:** `_clip_mesh_to_mask` ~3–5 ms → frame total ~20 ms → ~50 fps.
 
 ---
 

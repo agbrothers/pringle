@@ -18,7 +18,20 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 - `make_surface_mesh` — added `constraint_values` param; prefers it over `constraint_mask` for the clip call.
 - `app.py` — passes `result.constraint_values` to `make_surface_mesh`.
 
-**Expected impact:** 170 ms → <1 ms for `_clip_mesh_to_mask`; boundary now follows constraint curve exactly.
+**Measured impact (2026-05-20, n=128, 30 frames):**
+
+| Metric | Before | After | Change |
+|--------|--------|-------|--------|
+| `_clip_mesh_to_mask` | 170.2 ms | **26.7 ms** | 6.4× faster |
+| `_grid_indices` (PERF-003 ref) | 54.7 ms | 0.19 ms | 295× faster |
+| Estimated total frame | 253 ms | **44 ms** | 5.7× faster |
+| Effective fps | ~4 fps | **~23 fps** | — |
+
+**Quality fix confirmed:** boundary now follows the constraint curve exactly. Visual improvement is significant.
+
+**Remaining performance issue in `_clip_mesh_to_mask`:** Expected "<1 ms" not achieved. Actual 26.7 ms is dominated by a remaining O(n²) cost on lines 99–100 and 153–154: `new_pos = list(positions)` and `new_nor = list(normals)` convert the full 16,384-vertex arrays to Python lists (measured at ~13 ms alone), and `np.array(new_pos)` converts them back. This conversion occurs unconditionally even though only ~512 boundary vertices are added. See **PERF-010** in `18-performance-backlog.md` for the fix.
+
+**Status:** Quality fix complete; performance fix incomplete. Frame rate at ~23 fps vs 30 fps target.
 
 ---
 
