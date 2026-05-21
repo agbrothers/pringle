@@ -136,41 +136,6 @@ def _move_cell(self, from_idx: int, to_idx: int) -> None:
 
 ---
 
-### BUG-021 — Startup font warning: 174 ms alias scan for missing "Monospace" family
-**Status:** Open  
-**Logged:** 2026-05-20  
-**Severity:** Low — slows launch by ~174 ms; no functional impact
-
-**Description:**  
-On launch the terminal prints:
-```
-qt.qpa.fonts: Populating font family aliases took 174 ms. Replace uses of missing 
-font family "Monospace" with one that exists to avoid this cost.
-```
-This adds ~174 ms to startup time on every run.
-
-**Root cause** (`comment_cell_widget.py:131, 144`):  
-Two stylesheet strings use `font-family: monospace` (lowercase):
-```python
-"color: #4a7c59; font-size: 13px; font-family: monospace; ..."  # line 131
-"  font-family: monospace;"                                       # line 144
-```
-In Qt's CSS parser, `monospace` in a `font-family` property is treated as a **literal font family name**, not as the CSS generic keyword. On macOS no font is registered under the name "Monospace" (the correct font family names are "Menlo", "Courier New", etc.). Qt searches all installed font families for a match or alias, taking ~174 ms on a large font catalog.
-
-In standard CSS, `monospace` used as the *last* fallback in a font stack is a generic keyword that the browser interprets as "pick the platform monospace font." Qt does not honour this semantics — it must be given a real family name.
-
-**Fix** (`comment_cell_widget.py:131, 144`):  
-Replace the bare `monospace` family with a cross-platform stack of real monospace font names, ending with the Qt-specific generic fallback `"Courier New"`:
-```python
-# Before:
-"font-family: monospace;"
-
-# After:
-"font-family: 'Menlo', 'Consolas', 'Courier New';"
-```
-`"Menlo"` is the default monospace font on macOS, `"Consolas"` on Windows. Qt picks the first name it finds, so this is cross-platform without any alias scan.
-
----
 
 ### BUG-014 — `RuntimeError: CallerHelper has been deleted` on app close
 **Status:** Open  

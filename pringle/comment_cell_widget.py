@@ -128,7 +128,7 @@ class CommentCellWidget(QWidget):
         hash_lbl.setFixedWidth(18)
         hash_lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
         hash_lbl.setStyleSheet(
-            "color: #4a7c59; font-size: 13px; font-family: monospace; font-weight: bold;"
+            "color: #4a7c59; font-size: 13px; font-family: 'Menlo', 'Consolas', 'Courier New'; font-weight: bold;"
             "padding-top: 5px;"
         )
         outer_h.addWidget(hash_lbl, 0, Qt.AlignmentFlag.AlignTop)
@@ -141,7 +141,7 @@ class CommentCellWidget(QWidget):
             "  background: transparent;"
             "  color: #7a9e7a;"
             "  font-size: 12px;"
-            "  font-family: monospace;"
+            "  font-family: 'Menlo', 'Consolas', 'Courier New';"
             "  border: none;"
             "  padding: 2px 0;"
             "}"

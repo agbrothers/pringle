@@ -6,6 +6,16 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-021 — Startup font warning: 174 ms alias scan for missing "Monospace" family
+**Status:** Closed (fixed 2026-05-20)  
+**Severity:** Low
+
+**Root cause** (`comment_cell_widget.py`): Two stylesheet strings used `font-family: monospace`. Qt treats `monospace` as a literal font family name (not a CSS generic keyword) and scans all installed font families for a match or alias — taking ~174 ms on a large font catalog.
+
+**Fix:** Replaced bare `monospace` with an explicit cross-platform stack: `font-family: 'Menlo', 'Consolas', 'Courier New';`. Qt picks the first available name without triggering an alias scan. `Menlo` is the default monospace font on macOS; `Consolas` on Windows.
+
+---
+
 ### BUG-022 — Transparent surface shows triangle mesh artifact where it self-overlaps
 **Status:** Closed (fixed 2026-05-20)  
 **Severity:** Medium
