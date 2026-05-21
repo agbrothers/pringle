@@ -8,6 +8,19 @@ See [20-profiling-sop.md](20-profiling-sop.md) for the profiling standard operat
 
 ---
 
+### PERF-010 — O(n²) vertex list/array roundtrip in `_clip_mesh_to_mask`
+**Status:** Closed (fixed 2026-05-20)  
+**Priority:** CRITICAL  
+**Measured impact:** ~13 ms of the 26.7 ms post-BUG-001 `_clip_mesh_to_mask` cost at n=128
+
+**Root cause:** After BUG-001's vectorized fast path, `new_pos = list(positions)` still converted all 16,384 vertex rows to a Python list unconditionally every frame. `np.array(new_pos)` then rebuilt the array row-by-row. Only ~512 new boundary vertices were ever appended, but the full 16K conversion paid the cost regardless.
+
+**Fix:** Removed `list(positions)` / `list(normals)` entirely. New boundary vertices accumulate in small `new_verts_pos` / `new_verts_nor` Python lists (only the ~512 new ones). Final arrays built with `np.concatenate([positions, np.array(new_verts_pos)])` — original array is a zero-copy slice, `np.array()` call is now O(n) for boundary vertices only. When no boundary vertices are added, the original arrays are returned directly with no allocation.
+
+**Estimated impact:** `_clip_mesh_to_mask` ~3–5 ms → frame total ~20 ms → ~50 fps.
+
+---
+
 ### PERF-004 / BUG-001 — Python loop in constraint mesh clipping + midpoint interpolation
 **Status:** Closed (fixed 2026-05-20)  
 **Priority:** CRITICAL  

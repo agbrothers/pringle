@@ -96,8 +96,11 @@ def _clip_mesh_to_mask(
     all_in_idx = indices[all_in]  # (K, 3) numpy array
 
     # --- Boundary triangles: linear interpolation in a Python loop ---
-    new_pos = list(positions)
-    new_nor = list(normals)
+    # Only new boundary vertices are accumulated; original arrays are never
+    # converted to Python lists (avoids the O(n²) list(positions) cost).
+    new_verts_pos: list[np.ndarray] = []
+    new_verts_nor: list[np.ndarray] = []
+    vertex_offset = len(positions)   # index of first new vertex
     new_idx: list[list[int]] = []
     edge_cache: dict[tuple[int, int], int] = {}
 
@@ -114,13 +117,11 @@ def _clip_mesh_to_mask(
         else:
             t = 0.5
         p = positions[ia] + t * (positions[ib] - positions[ia])
-        n = normals[ia] + t * (normals[ib] - normals[ia])
-        length = float(np.linalg.norm(n))
-        if length > 1e-8:
-            n = n / length
-        vi = len(new_pos)
-        new_pos.append(p)
-        new_nor.append(n)
+        nv = normals[ia] + t * (normals[ib] - normals[ia])
+        length = float(np.linalg.norm(nv))
+        new_verts_pos.append(p)
+        new_verts_nor.append(nv / length if length > 1e-8 else nv)
+        vi = vertex_offset + len(new_verts_pos) - 1
         edge_cache[key] = vi
         return vi
 
@@ -150,8 +151,12 @@ def _clip_mesh_to_mask(
             new_idx.append([v1, v2, p1])
             new_idx.append([v2, p2, p1])
 
-    out_pos = np.array(new_pos, dtype=np.float32)
-    out_nor = np.array(new_nor, dtype=np.float32)
+    if new_verts_pos:
+        out_pos = np.concatenate([positions, np.array(new_verts_pos, dtype=np.float32)], axis=0)
+        out_nor = np.concatenate([normals,   np.array(new_verts_nor, dtype=np.float32)], axis=0)
+    else:
+        out_pos, out_nor = positions, normals
+
     parts: list[np.ndarray] = []
     if len(all_in_idx):
         parts.append(all_in_idx)
