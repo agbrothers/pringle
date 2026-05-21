@@ -6,6 +6,22 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-001 — Constraint edge clipping jagged + 170 ms bottleneck
+**Status:** Closed (fixed 2026-05-20)  
+**Severity:** Critical (both quality and performance)
+
+**Root cause:** Two independent defects: (1) boundary vertices placed at the edge midpoint rather than the true constraint zero-crossing — the inserted vertex was in the wrong place so the clipped boundary did not follow the constraint curve; (2) every triangle (~32,258 at n=128) was iterated in a Python `for` loop even though only the O(n) perimeter triangles straddle the boundary.
+
+**Fix:**
+- `evaluator.py` — added `_eval_signed_constraint` helper: for simple comparison expressions (`<`, `<=`, `>`, `>=`) uses AST parsing to evaluate the signed constraint value as a float (positive = inside). `apply_constraints` now returns a third value `constraint_values` (float32, positive = inside) when `return_mask=True`. `CellResult` gains `constraint_values` field.
+- `renderer.py:_clip_mesh_to_mask` — signature changed from `inside: bool[]` to `f_values: float[]`; `inside` derived as `f_values >= 0`. Vectorized fast path: `inside_count = inside[indices].sum(axis=1)` → all-inside triangles (`inside_count == 3`) concatenated directly via numpy, all-outside discarded; Python loop restricted to `boundary` triangles only (`~512` at n=128 vs ~32,258 before). `_bv` uses `t = f_A / (f_A - f_B)` for zero-crossing interpolation (NaN/degenerate fallback to midpoint).
+- `make_surface_mesh` — added `constraint_values` param; prefers it over `constraint_mask` for the clip call.
+- `app.py` — passes `result.constraint_values` to `make_surface_mesh`.
+
+**Expected impact:** 170 ms → <1 ms for `_clip_mesh_to_mask`; boundary now follows constraint curve exactly.
+
+---
+
 ### BUG-020 — Hard crash when a callable is assigned to a magic variable (`z`, `xyz`, etc.)
 **Status:** Closed (fixed 2026-05-20)  
 **Severity:** Critical

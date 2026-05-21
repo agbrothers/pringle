@@ -8,6 +8,17 @@ See [20-profiling-sop.md](20-profiling-sop.md) for the profiling standard operat
 
 ---
 
+### PERF-004 / BUG-001 — Python loop in constraint mesh clipping + midpoint interpolation
+**Status:** Closed (fixed 2026-05-20)  
+**Priority:** CRITICAL  
+**Measured impact:** 170.2 ms at n=128 before fix (516% of frame budget)
+
+**Root cause:** `_clip_mesh_to_mask` iterated every triangle in a Python `for` loop, and placed boundary vertices at edge midpoints rather than true zero-crossings.
+
+**Fix:** Vectorized fast path (numpy boolean indexing) handles all-inside and all-outside triangles in bulk — only O(n) boundary triangles go through the Python loop. Signed constraint values (`f_values`: float, positive = inside) computed via AST evaluation of the constraint expression, enabling `t = f_A / (f_A - f_B)` zero-crossing interpolation in `_bv`. See BUG-001 in [16-closed-bugs.md](16-closed-bugs.md) for full details.
+
+---
+
 ### PERF-003 — Python nested-loop triangle index generation
 **Status:** Closed (fixed 2026-05-19)  
 **Priority:** CRITICAL  

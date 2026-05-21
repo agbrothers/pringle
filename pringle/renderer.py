@@ -65,50 +65,71 @@ def _clip_mesh_to_mask(
     positions: np.ndarray,
     indices: np.ndarray,
     normals: np.ndarray,
-    inside: np.ndarray,
+    f_values: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Clip a triangle mesh to a boolean vertex mask.
+    Clip a triangle mesh to a signed constraint field.
 
-    Triangles entirely outside are removed.  Triangles that cross the
-    constraint boundary get a new vertex added at the midpoint of each
-    boundary edge, turning the staircase pixel-steps into smooth diagonal
-    cuts.  Works in O(n_triangles) with a dict cache for shared edges.
+    f_values: float32 per-vertex array — positive = inside, negative = outside.
+    inside is derived as f_values >= 0.
+
+    Fast path: all-inside and all-outside triangles are handled in bulk via
+    numpy boolean indexing — no Python loop. Only the O(n) perimeter triangles
+    that straddle the boundary go through the Python loop.
+
+    Boundary vertices are placed at the true constraint zero-crossing via
+    linear interpolation: t = f_A / (f_A - f_B), which positions the vertex
+    exactly where the constraint function equals zero along the edge.
 
     Returns (positions, indices, normals) for the clipped mesh.
     """
+    inside = f_values >= 0
+
+    # --- Vectorized classification ---
+    inside_tri   = inside[indices]           # (T, 3) bool
+    inside_count = inside_tri.sum(axis=1)   # (T,) int
+
+    all_in       = inside_count == 3
+    boundary     = (inside_count > 0) & (inside_count < 3)
+
+    # All-inside triangles pass through unchanged.
+    all_in_idx = indices[all_in]  # (K, 3) numpy array
+
+    # --- Boundary triangles: linear interpolation in a Python loop ---
     new_pos = list(positions)
     new_nor = list(normals)
     new_idx: list[list[int]] = []
     edge_cache: dict[tuple[int, int], int] = {}
 
     def _bv(ia: int, ib: int) -> int:
-        """Return (or create) the midpoint boundary vertex on edge ia→ib."""
+        """Return (or create) a boundary vertex on edge ia→ib using zero-crossing interpolation."""
         key = (min(ia, ib), max(ia, ib))
         if key in edge_cache:
             return edge_cache[key]
-        p = (positions[ia] + positions[ib]) * 0.5
-        n = (normals[ia] + normals[ib]) * 0.5
+        f_a = float(f_values[ia])
+        f_b = float(f_values[ib])
+        denom = f_a - f_b
+        if abs(denom) > 1e-10 and np.isfinite(f_a) and np.isfinite(f_b):
+            t = float(np.clip(f_a / denom, 0.0, 1.0))
+        else:
+            t = 0.5
+        p = positions[ia] + t * (positions[ib] - positions[ia])
+        n = normals[ia] + t * (normals[ib] - normals[ia])
         length = float(np.linalg.norm(n))
         if length > 1e-8:
             n = n / length
-        idx = len(new_pos)
+        vi = len(new_pos)
         new_pos.append(p)
         new_nor.append(n)
-        edge_cache[key] = idx
-        return idx
+        edge_cache[key] = vi
+        return vi
 
-    for tri in indices:
+    for tri in indices[boundary]:
         a, b, c = int(tri[0]), int(tri[1]), int(tri[2])
         ia, ib, ic = bool(inside[a]), bool(inside[b]), bool(inside[c])
         n_in = int(ia) + int(ib) + int(ic)
 
-        if n_in == 3:
-            new_idx.append([a, b, c])
-        elif n_in == 0:
-            pass  # entirely outside — discard
-        elif n_in == 1:
-            # One inside vertex — one output triangle
+        if n_in == 1:
             if ia:
                 vi, o1, o2 = a, b, c
             elif ib:
@@ -118,7 +139,7 @@ def _clip_mesh_to_mask(
             p1, p2 = _bv(vi, o1), _bv(vi, o2)
             new_idx.append([vi, p1, p2])
         else:
-            # Two inside vertices — quad split into two triangles
+            # n_in == 2: quad split into two triangles
             if not ia:
                 vo, v1, v2 = a, b, c
             elif not ib:
@@ -131,10 +152,12 @@ def _clip_mesh_to_mask(
 
     out_pos = np.array(new_pos, dtype=np.float32)
     out_nor = np.array(new_nor, dtype=np.float32)
+    parts: list[np.ndarray] = []
+    if len(all_in_idx):
+        parts.append(all_in_idx)
     if new_idx:
-        out_idx = np.array(new_idx, dtype=np.int32)
-    else:
-        out_idx = np.zeros((0, 3), dtype=np.int32)
+        parts.append(np.array(new_idx, dtype=np.int32))
+    out_idx = np.concatenate(parts, axis=0) if parts else np.zeros((0, 3), dtype=np.int32)
     return out_pos, out_idx, out_nor
 
 
@@ -167,6 +190,7 @@ def make_surface_mesh(
     color: tuple = (0.2, 0.4, 0.9, 1.0),
     opacity: float = 1.0,
     constraint_mask: np.ndarray | None = None,
+    constraint_values: np.ndarray | None = None,
     z_raw: np.ndarray | None = None,
     colormap: str | None = None,
     colormap_reversed: bool = False,
@@ -196,9 +220,11 @@ def make_surface_mesh(
     dz_dx, dz_dy = _grid_gradients(x, y, z_pos)
     normals   = _grid_normals(dz_dx, dz_dy)
 
-    if constraint_mask is not None:
-        inside = constraint_mask.ravel().astype(bool)
-        positions, indices, normals = _clip_mesh_to_mask(positions, indices, normals, inside)
+    if constraint_values is not None:
+        positions, indices, normals = _clip_mesh_to_mask(positions, indices, normals, constraint_values.ravel())
+    elif constraint_mask is not None:
+        f = constraint_mask.ravel().astype(np.float32) * 2 - 1
+        positions, indices, normals = _clip_mesh_to_mask(positions, indices, normals, f)
 
     if len(indices) == 0:
         # Degenerate mesh (e.g. slider at zero collapses surface) — return invisible placeholder

@@ -500,6 +500,7 @@ class PringleWindow(QMainWindow):
             mesh = make_surface_mesh(
                 result.x, result.y, result.data, color=style.color, opacity=style.opacity,
                 constraint_mask=result.constraint_mask,
+                constraint_values=result.constraint_values,
                 z_raw=result.data_unmasked,
                 colormap=cmap, colormap_reversed=cmap_rev,
             )

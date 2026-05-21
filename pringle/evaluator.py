@@ -38,6 +38,7 @@ class CellResult:
     data: Any = None                  # numpy array ready for renderer (NaN where masked)
     data_unmasked: Any = None         # z array before constraint masking (all valid)
     constraint_mask: Any = None       # bool array, True = inside constraint
+    constraint_values: Any = None     # float32 array, positive = inside (for edge interpolation)
     x: np.ndarray | None = None      # grid x (surface only)
     y: np.ndarray | None = None      # grid y (surface only)
     warning: str | None = None       # shape mismatch / undefined var
@@ -153,12 +154,34 @@ def _make_preview(val, max_chars: int = 60) -> str | None:
 # Constraint application
 # ---------------------------------------------------------------------------
 
+def _eval_signed_constraint(expr: str, local_ns: dict) -> np.ndarray | None:
+    """Evaluate a constraint expression as signed float (positive = inside).
+    For simple comparisons (lhs < rhs, lhs > rhs, etc.) returns rhs-lhs or lhs-rhs
+    so that the magnitude encodes distance to the boundary — enabling accurate
+    linear interpolation in _clip_mesh_to_mask. Returns None on failure."""
+    try:
+        tree = ast.parse(expr, mode="eval")
+        body = tree.body
+        if isinstance(body, ast.Compare) and len(body.ops) == 1:
+            op = body.ops[0]
+            builtins: dict = {"__builtins__": {}}
+            lhs = eval(compile(ast.Expression(body=body.left), "<c>", "eval"), builtins, local_ns)  # noqa: S307
+            rhs = eval(compile(ast.Expression(body=body.comparators[0]), "<c>", "eval"), builtins, local_ns)  # noqa: S307
+            if isinstance(op, (ast.Lt, ast.LtE)):
+                return np.asarray(rhs - lhs, dtype=np.float32)
+            if isinstance(op, (ast.Gt, ast.GtE)):
+                return np.asarray(lhs - rhs, dtype=np.float32)
+    except Exception:
+        pass
+    return None
+
+
 def apply_constraints(
     z: np.ndarray,
     constraint_exprs: list[str],
     ns: dict,
     return_mask: bool = False,
-) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
+) -> np.ndarray | tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Apply boolean constraint expressions to a surface array.
 
@@ -166,32 +189,46 @@ def apply_constraints(
     mask is the AND of all constraints.  Masked positions become NaN
     (degenerate triangles are skipped by the renderer).
 
-    If return_mask is True, returns (z_masked, inside_mask) where inside_mask
-    is the boolean array of vertices inside all constraints.
+    If return_mask is True, returns (z_masked, inside_mask, constraint_values)
+    where inside_mask is bool and constraint_values is float32 (positive = inside,
+    magnitude encodes signed distance to boundary for edge interpolation).
     """
     if not constraint_exprs:
         if return_mask:
-            return z, np.ones(z.shape, dtype=bool)
+            ones = np.ones(z.shape, dtype=bool)
+            return z, ones, ones.astype(np.float32)
         return z
 
-    masks = []
+    masks: list[np.ndarray] = []
+    signed: list[np.ndarray] = []
     for expr in constraint_exprs:
         try:
             local = {**ns, "z": z}
             mask = eval(expr, {"__builtins__": {}}, local)  # noqa: S307
             masks.append(np.asarray(mask, dtype=bool))
+            sv = _eval_signed_constraint(expr, local)
+            if sv is not None:
+                signed.append(sv)
         except Exception:
             pass  # bad constraint — ignore, don't crash
 
     if not masks:
         if return_mask:
-            return z, np.ones(z.shape, dtype=bool)
+            ones = np.ones(z.shape, dtype=bool)
+            return z, ones, ones.astype(np.float32)
         return z
 
     combined = np.logical_and.reduce(masks)
     z_masked = np.where(combined, z, np.nan)
+
     if return_mask:
-        return z_masked, combined
+        if signed:
+            # minimum across all constraints = most-restrictive signed distance
+            constraint_values = np.minimum.reduce(signed).astype(np.float32)
+        else:
+            # fallback: ±1 from the boolean mask (degrades to midpoint interpolation)
+            constraint_values = combined.astype(np.float32) * 2 - 1
+        return z_masked, combined, constraint_values
     return z_masked
 
 
@@ -474,9 +511,10 @@ def run_cell(
         # Apply constraints — keep raw z for smooth boundary clipping in renderer
         if constraint_exprs:
             z_raw = data.copy()
-            data, inside_mask = apply_constraints(data, constraint_exprs, local_ns, return_mask=True)
+            data, inside_mask, cvals = apply_constraints(data, constraint_exprs, local_ns, return_mask=True)
             result.data_unmasked = z_raw
             result.constraint_mask = inside_mask
+            result.constraint_values = cvals
         result.x = grid.x
         result.y = grid.y
 
