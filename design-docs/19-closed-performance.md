@@ -17,7 +17,15 @@ See [20-profiling-sop.md](20-profiling-sop.md) for the profiling standard operat
 
 **Fix:** Removed `list(positions)` / `list(normals)` entirely. New boundary vertices accumulate in small `new_verts_pos` / `new_verts_nor` Python lists (only the ~512 new ones). Final arrays built with `np.concatenate([positions, np.array(new_verts_pos)])` — original array is a zero-copy slice, `np.array()` call is now O(n) for boundary vertices only. When no boundary vertices are added, the original arrays are returned directly with no allocation.
 
-**Estimated impact:** `_clip_mesh_to_mask` ~3–5 ms → frame total ~20 ms → ~50 fps.
+**Measured outcome (2026-05-20, n=128, 30 frames):**
+
+| Metric | Estimated | Actual |
+|--------|-----------|--------|
+| `_clip_mesh_to_mask` after fix | 3–5 ms | **12.5 ms** |
+| Total estimated frame | ~20 ms | **30.0 ms** |
+| Effective fps | ~50 fps | **~33 fps** |
+
+**30 fps target met.** Estimated 3–5 ms was not achieved; actual 12.5 ms reflects the Python loop cost over ~522 boundary triangles, which was not eliminated by PERF-010. Each `_bv` call performs per-vertex numpy operations (`np.linalg.norm` on a length-3 array) and Python attribute lookups — at ~24 µs/triangle for 522 triangles, this accounts for the remaining ~12 ms. Further reduction requires either Numba `@njit` on the boundary loop body or a fully vectorized boundary triangle split (complex, variable output count). Neither is needed to meet the current 30 fps bar.
 
 ---
 

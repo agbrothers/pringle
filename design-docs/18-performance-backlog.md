@@ -28,19 +28,35 @@ Run via `python tests/bench_slider_animation.py --n 128 --frames 30`.
 
 ---
 
-## Post-patch Benchmark (2026-05-20, n=128, 30 frames)
+## Intermediate Benchmark — After BUG-001 + PERF-003 (2026-05-20, n=128, 30 frames)
 
-After BUG-001 partial fix and PERF-003 vectorization (both applied by dev 2026-05-20). Geometry functions timed directly via inline benchmark (bench script API mismatch after refactor; see PERF-010).
+After BUG-001 partial fix and PERF-003 vectorization. Geometry functions timed directly via inline benchmark (bench script API mismatch after FEAT-038 refactor).
 
 | Component | Mean ms | % of 33ms budget | vs baseline |
 |-----------|---------|-----------------|-------------|
-| `_clip_mesh_to_mask` (partial fix, PERF-010) | **26.7** | **81%** | 6.4× faster |
+| `_clip_mesh_to_mask` (partial fix, PERF-010 pending) | **26.7** | **81%** | 6.4× faster |
 | `_grid_gradients + _grid_normals` (FEAT-038) | 0.31 | 1% | — |
 | `_grid_indices` (PERF-003, closed) | 0.19 | 1% | 295× faster |
 | Cell evaluation chain (PERF-001, PERF-006) | **17.0** | **52%** | unchanged |
 | **Estimated total frame** | **44** | **134%** | **5.7× faster** |
 
-**Effective frame rate post-patch: ~23 fps at n=128.** Below 30 fps target. Primary remaining bottleneck is PERF-010 (O(n²) vertex list conversion inside `_clip_mesh_to_mask`). Fixing it is estimated to cut the function from 26.7 ms to ~3–5 ms and push the frame to ~20 ms (~50 fps).
+**~23 fps — below target.**
+
+---
+
+## Current Benchmark — After PERF-010 (2026-05-20, n=128, 30 frames)
+
+After PERF-010 fix (np.concatenate approach; list(positions) roundtrip eliminated).
+
+| Component | Mean ms | % of 33ms budget | vs baseline |
+|-----------|---------|-----------------|-------------|
+| `_clip_mesh_to_mask` (PERF-010 closed) | **12.5** | **38%** | 14× faster |
+| `_grid_gradients + _grid_normals` (FEAT-038) | 0.29 | 1% | — |
+| `_grid_indices` (PERF-003, closed) | 0.15 | 0% | 365× faster |
+| Cell evaluation chain (PERF-001, PERF-006) | **17.0** | **52%** | unchanged |
+| **Estimated total frame** | **30.0** | **91%** | **8.4× faster** |
+
+**~33 fps — 30 fps target met (CPU side).** Remaining 12.5 ms in `_clip_mesh_to_mask` is the Python loop over ~522 boundary triangles; further reduction needs Numba or fully vectorized boundary splitting (not required at current target). Note: GPU upload cost (PERF-002) is not captured here and may reduce effective fps once measured via Instruments.
 
 ---
 
