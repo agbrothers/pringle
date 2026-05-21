@@ -10,7 +10,9 @@ Creates the top-level QMainWindow with:
 
 from __future__ import annotations
 
+import os
 import sys
+import time as _time
 import numpy as np
 
 import PyQt6  # must be imported before rendercanvas.qt  # noqa: F401
@@ -53,13 +55,26 @@ class PringleViewport(QRenderWidget):
     Held keys are applied each timer tick for smooth, continuous panning.
     """
 
+    # How many frames between each printed timing report.
+    _FRAME_REPORT_INTERVAL = 60
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._pr = PringleRenderer(self)
-        self.request_draw(self._pr.render)
         self._held_keys: set[int] = set()
         self._seen_cell_ids: set[str] = set()
+
+        # Frame timing: set PRINGLE_FRAME_TIMING=1 to enable.
+        # Wraps the render callback to record wall-clock time per frame.
+        # Prints mean / P95 / fps to stderr every _FRAME_REPORT_INTERVAL frames.
+        # Subtract CPU-only benchmark times to estimate GPU contribution.
+        self._frame_times: list[float] = []
+        if os.environ.get("PRINGLE_FRAME_TIMING"):
+            self.request_draw(self._timed_render)
+        else:
+            self.request_draw(self._pr.render)
+
         self._draw_timer = QTimer(self)
         self._draw_timer.setInterval(16)  # ~60fps
         self._draw_timer.timeout.connect(self._tick)
@@ -69,6 +84,23 @@ class PringleViewport(QRenderWidget):
         if self._held_keys:
             self._apply_movement()
         self.request_draw()
+
+    def _timed_render(self) -> None:
+        t0 = _time.perf_counter()
+        self._pr.render()
+        ms = (_time.perf_counter() - t0) * 1000
+        self._frame_times.append(ms)
+        n = len(self._frame_times)
+        if n % self._FRAME_REPORT_INTERVAL == 0:
+            window = np.array(self._frame_times[-self._FRAME_REPORT_INTERVAL:])
+            mean_ms = window.mean()
+            p95_ms  = np.percentile(window, 95)
+            fps     = 1000.0 / mean_ms if mean_ms > 0 else float("inf")
+            print(
+                f"[frame] frames={n:5d}  "
+                f"mean={mean_ms:6.1f}ms  p95={p95_ms:6.1f}ms  fps≈{fps:4.0f}",
+                file=sys.stderr, flush=True,
+            )
 
     def _apply_movement(self) -> None:
         import numpy as np

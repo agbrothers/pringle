@@ -56,7 +56,27 @@ After PERF-010 fix (np.concatenate approach; list(positions) roundtrip eliminate
 | Cell evaluation chain (PERF-001, PERF-006) | **17.0** | **52%** | unchanged |
 | **Estimated total frame** | **30.0** | **91%** | **8.4× faster** |
 
-**~33 fps — 30 fps target met (CPU side).** Remaining 12.5 ms in `_clip_mesh_to_mask` is the Python loop over ~522 boundary triangles; further reduction needs Numba or fully vectorized boundary splitting (not required at current target). Note: GPU upload cost (PERF-002) is not captured here and may reduce effective fps once measured via Instruments.
+**~33 fps — 30 fps target met (CPU side).** Remaining 12.5 ms in `_clip_mesh_to_mask` is the Python loop over ~522 boundary triangles; further reduction needs Numba or fully vectorized boundary splitting (not required at current target).
+
+---
+
+## GPU Frame Timer — First Measurement (2026-05-20, n=128, memory.yml)
+
+**Method:** Qt frame-timer wrapper (`PRINGLE_FRAME_TIMING=1`). Times the `_pr.render()` callback wall-clock. Enabled via env var; zero overhead when unset. Cell evaluation runs in the Qt event loop *outside* this callback, so the two costs are additive.
+
+**Note on distribution:** Frame 1 always spikes (~984 ms) due to Metal pipeline compilation and initial 771 KB buffer allocation. Steady-state figures exclude that spike.
+
+| Phase | Cost | Notes |
+|-------|------|-------|
+| GPU render callback (steady state, p95) | **~9 ms** | Upload 771 KB mesh + Metal render commands |
+| CPU cell evaluation (from headless benchmark) | **~30 ms** | Outside render callback; runs in Qt event loop |
+| **Total wall-clock frame (sum)** | **~39 ms** | **~25 fps actual vs ~33 fps CPU-only estimate** |
+
+**Key findings:**
+- GPU upload + render of the full 771 KB mesh costs ~9 ms per frame — meaningful but not dominant
+- PERF-002 (live buffer update, uploading only z-column + normals ~384 KB) could save ~4–5 ms of that 9 ms
+- CPU work (~30 ms) is still the primary bottleneck; PERF-011 (Numba) targeting `_clip_mesh_to_mask` reduces it by ~11 ms → combined frame ~28 ms → ~36 fps
+- To reach ~50 fps, both PERF-002 and PERF-011 need to land together
 
 ---
 
@@ -274,6 +294,66 @@ _ALWAYS_DEFINED: frozenset[str] = (
     | {"t", "True", "False", "None"}
 )
 ```
+
+---
+
+### PERF-011 — Python boundary loop in `_clip_mesh_to_mask` (Numba target)
+**Status:** Open  
+**Priority:** HIGH  
+**Logged:** 2026-05-20  
+**Discovered via:** Post-PERF-010 benchmark  
+**Measured cost:** 12.5 ms at n=128 (38% of frame budget); Python loop over ~522 boundary triangles  
+**Files:** [renderer.py:128-152](../pringle/renderer.py#L128)
+
+**Description:**  
+After PERF-010, the remaining cost in `_clip_mesh_to_mask` is the Python `for tri in indices[boundary]` loop (~522 triangles at n=128). Each iteration calls `_bv`, which performs per-vertex `np.linalg.norm` on a length-3 array — numpy function-call overhead at this granularity costs ~24 µs/triangle in Python vs ~50 ns in compiled code. A full numpy vectorization is not straightforward because each boundary triangle produces a variable number of output triangles (1-in → 1 triangle; 2-in → 2 triangles), making the output count per input row irregular.
+
+**Fix — Numba `@njit` on the boundary loop:**  
+Port the boundary triangle loop body to a standalone `@numba.njit` function. Numba handles mutable arrays and integer arithmetic natively; the compiled loop eliminates Python dispatch overhead entirely.
+
+Restructuring required:
+- Replace `edge_cache: dict[tuple[int,int], int]` with `numba.typed.Dict.empty(key_type=numba.types.UniTuple(numba.int32, 2), value_type=numba.int32)`
+- Pre-allocate output arrays at maximum possible size: `max_new_verts = 2 * len(boundary_tris)`, `max_new_idx = 2 * len(boundary_tris)`
+- Return actual vertex/triangle counts to slice to true size after the loop
+- Replace `np.linalg.norm` with inline `sqrt(nx*nx + ny*ny + nz*nz)` — Numba compiles this to a single FPU instruction
+
+```python
+import numba
+
+@numba.njit(cache=True)
+def _clip_boundary_njit(
+    positions, normals, f_values, inside,
+    boundary_tris,           # (B, 3) int32
+    out_pos,                 # pre-allocated (2B, 3) float32
+    out_nor,                 # pre-allocated (2B, 3) float32
+    out_idx,                 # pre-allocated (2B, 3) int32
+    vert_offset,             # int: len(positions) at call time
+) -> tuple[int, int]:        # (n_new_verts, n_new_tris)
+    ...
+```
+
+**JIT warmup:** First call compiles (~0.5–2 s); subsequent calls use the cached binary (`cache=True`). Warmup is one-time per Python process.
+
+**Estimated impact:** ~12.5 ms → ~1–2 ms for `_clip_mesh_to_mask`; total frame ~30 ms → ~18–19 ms → ~53–56 fps. Provides headroom against PERF-002 GPU upload cost once measured.
+
+---
+
+### PERF-012 — Numba JIT for recurrence-relation cell evaluation
+**Status:** Open  
+**Priority:** LOW — not currently applicable; logged for future architecture consideration  
+**Logged:** 2026-05-20  
+**Discovered via:** GPU library evaluation (FEAT-037)
+
+**Description:**  
+Cells that define sequential recurrence relations (`arr[n] = f(arr[n-1])`) cannot be vectorized with numpy and cannot use JAX/PyTorch (immutable array semantics). Currently they must be written as Python `for` loops, which is ~100× slower than C for numerical kernels of this shape.
+
+Numba `@njit` is the correct solution for this pattern: it compiles mutable-array sequential loops to native code, runs them in place without copies, and requires no API changes to the array interface. The blocker is that Pringle cells are evaluated via `exec()` on a user-supplied string — dynamic code that cannot be JIT-compiled.
+
+**Possible approaches:**
+- **Specialized recurrence cell type:** A dedicated cell variant (e.g. `[recurrence]`) that accepts a restricted grammar (`x[i] = f(x, i)`) and compiles it to a Numba kernel at definition time. The compiled kernel is cached and called on every animation tick. This is a significant feature addition but would make iterative numerical methods (ODE solvers, time-series, cellular automata) run at near-C speed.
+- **Numba-aware helper functions in the namespace:** Add a `@numba.njit`-compiled `cumulate(fn, x0, n)` or similar utility to `build_equation_namespace()`. Users write the body as a lambda; Numba JITs it on first call. Simpler than a new cell type but limited to fixed-structure recurrences.
+
+**Why it matters:** Recurrence relations are a natural Pringle use case (Fibonacci, Lorenz attractor, Mandelbrot iteration count, forward Euler ODE). Without Numba, large N makes these prohibitively slow. With it, they become competitive with MATLAB/Julia.
 
 ---
 
