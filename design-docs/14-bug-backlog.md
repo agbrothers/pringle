@@ -7,6 +7,171 @@ See [16-closed-bugs.md](16-closed-bugs.md) for resolved bugs.
 
 ---
 
+### BUG-025 — Drag drop indicator appears inside tall data cells; misplaced near hidden cells
+**Status:** Open  
+**Logged:** 2026-05-20  
+**Severity:** Low — cosmetic, but makes drag-and-drop confusing for multi-line cells
+
+**Description:**  
+When dragging a cell over a data cell that has expanded to multiple lines (e.g., one with recursion sub-cells), the blue drop indicator line appears in the middle of the data cell rather than at a cell boundary. Additionally, dragging near collapsed folder members (which are hidden) produces erratic indicator placement because hidden widgets report stale geometry values.
+
+**Root cause:**  
+`_compute_drop_idx` (`cell_list.py:909`) uses each cell's vertical midpoint as the boundary threshold:
+```python
+if local_y < geo.top() + geo.height() // 2:
+    return i
+```
+For a standard equation cell (~40px tall), the midpoint at 20px is a reasonable boundary. For a tall data cell (e.g., 200px with three sub-cell rows), the midpoint is at 100px — so the user has to drag 100px into the visible cell before the indicator snaps to "below the previous cell." At any mouse position between the top and midpoint of the data cell, the indicator line appears visually in the middle of the data cell widget.
+
+Hidden member cells of a collapsed folder have their `geometry()` return the position they occupied before being hidden (they are removed from the layout's visible flow but not resized to zero). This causes `_compute_drop_idx` to count hidden cells as real insertion points, placing the indicator at phantom positions and sometimes skipping slots or placing in wrong locations near collapsed folders.
+
+**Fix — `_compute_drop_idx`:**  
+Use a smaller threshold fraction (e.g., 25% from the top rather than 50%), and skip hidden cells entirely:
+```python
+def _compute_drop_idx(self, local_y: int) -> int:
+    for i, cell in enumerate(self._cells):
+        if not cell.isVisible():
+            continue             # skip hidden members of collapsed folders
+        geo = cell.geometry()
+        if local_y < geo.top() + geo.height() // 4:   # 25% threshold
+            return i
+    return len(self._cells)
+```
+A 25% threshold means the indicator snaps to "before cell i" only when the mouse is in the top quarter of cell i — giving a much narrower hot zone and keeping the indicator near the actual cell boundary for tall cells.
+
+**Fix — `_position_drop_indicator`:**  
+Similarly, skip hidden cells when computing the indicator Y position so it always snaps to a visible gap between two visible cells.
+
+---
+
+### BUG-024 — New cell inserted above the active cell instead of below
+**Status:** Open  
+**Logged:** 2026-05-20  
+**Severity:** Medium — FEAT-029 (insert below focused cell) regression; inserts in wrong direction
+
+**Description:**  
+When a cell has keyboard focus and the user presses `+ Expression` or `+ Folder`, the new cell appears immediately above the focused cell rather than below it.
+
+**Root cause — off-by-one between `_cells` list index and layout index** (`cell_list.py:241–242`):  
+The QVBoxLayout for the cell panel has an additional placeholder label at index 0:
+```
+layout: [placeholder(0), cell0(1), cell1(2), ..., cellN-1(N), stretch(N+1)]
+```
+`_cells[idx]` therefore lives at layout index `idx + 1`. To insert a new cell after `_cells[idx]`, it must go at layout index `idx + 2`. The current code uses `idx + 1`:
+```python
+self._cells.insert(idx + 1, cell)       # correct: new cell after focused in the list
+self._layout.insertWidget(idx + 1, cell) # wrong: idx+1 = focused cell's slot → inserts before it
+```
+`insertWidget(idx + 1, ...)` places the new widget at the focused cell's layout slot, pushing the focused cell one slot down. The layout then shows the new cell above the focused cell — the opposite of the intended order.
+
+**Fix** (`cell_list.py:242` and equivalent lines in `add_data_cell`, `add_comment_cell`, `add_folder`):  
+```python
+self._layout.insertWidget(idx + 2, cell)   # +2 to skip placeholder at index 0
+```
+Apply the same `+2` correction in every `add_*` method that takes an `after_id` parameter.
+
+---
+
+### BUG-023 — Dragging a folder does not move its member cells
+**Status:** Open  
+**Logged:** 2026-05-20  
+**Severity:** High — core folder drag behavior is broken; members scatter or land in wrong folder
+
+**Description:**  
+Dragging a folder header to a new position in the panel moves only the folder header widget. Member cells remain at their original positions, appearing as top-level cells or becoming members of whatever folder is now above them. When dragging a **closed** folder, hidden member cells have stale geometry values that cause `_compute_drop_idx` to compute incorrect insertion indices, frequently mixing member cells into adjacent folders.
+
+**Expected behavior (per `01-desmos-3d-overview.md` — Folders section):**  
+Dragging a folder moves the entire folder+members block as a unit. Members immediately follow the folder header at the new position, in their original relative order. This holds whether the folder is expanded or collapsed.
+
+**Root cause — `_move_cell` only moves the folder header** (`cell_list.py:933–955`):  
+```python
+cell = self._cells.pop(from_idx)   # only pops the FolderCellWidget
+insert_idx = (to_idx - 1) if to_idx > from_idx else to_idx
+self._cells.insert(insert_idx, cell)
+# Layout rebuild then places members at their old positions
+```
+The branch `if not isinstance(cell, FolderCellWidget)` explicitly skips folder cells for membership re-assignment, but there is no code that also moves the member cells. After the pop+insert, the layout rebuild re-inserts ALL cells in `_cells` order — with the folder header in the new position but the member cells unchanged, creating a visual split.
+
+For closed folders, the second issue is that hidden cells still appear in `_cells` and `_compute_drop_idx` queries their `geometry()`. Hidden widgets return their last-known geometry (not zero), so they register as valid insertion targets at phantom positions.
+
+**Fix — `_move_cell`:**  
+When the cell being moved is a `FolderCellWidget`, collect its members and move them together:
+```python
+def _move_cell(self, from_idx: int, to_idx: int) -> None:
+    from pringle.folder_cell_widget import FolderCellWidget
+    cell = self._cells[from_idx]
+
+    if isinstance(cell, FolderCellWidget):
+        # Collect folder + members as a block
+        folder_id = cell.cell_id
+        members = [c for c in self._cells if self._cell_folder.get(c.cell_id) == folder_id]
+        block = [cell] + members   # folder header first, then members in order
+        # Remove block from _cells (pop in reverse to preserve indices)
+        block_indices = sorted([self._index_of(b.cell_id) for b in block], reverse=True)
+        for i in block_indices:
+            self._cells.pop(i)
+        # Adjust to_idx for the removed items
+        removed_before = sum(1 for i in block_indices if i < to_idx)
+        insert_at = max(0, to_idx - removed_before)
+        for j, b in enumerate(block):
+            self._cells.insert(insert_at + j, b)
+    else:
+        # Original single-cell move logic
+        self._cells.pop(from_idx)
+        insert_idx = (to_idx - 1) if to_idx > from_idx else to_idx
+        self._cells.insert(insert_idx, cell)
+        new_folder = self._infer_folder(self._index_of(cell.cell_id))
+        if new_folder != self._cell_folder.get(cell.cell_id):
+            self._assign_folder(cell, new_folder)
+
+    # Rebuild layout order
+    self._container.setUpdatesEnabled(False)
+    for c in self._cells:
+        self._layout.removeWidget(c)
+    for i, c in enumerate(self._cells):
+        self._layout.insertWidget(i + 1, c)
+    self._container.setUpdatesEnabled(True)
+    self._rebuild_namespace()
+```
+
+---
+
+### BUG-021 — Startup font warning: 174 ms alias scan for missing "Monospace" family
+**Status:** Open  
+**Logged:** 2026-05-20  
+**Severity:** Low — slows launch by ~174 ms; no functional impact
+
+**Description:**  
+On launch the terminal prints:
+```
+qt.qpa.fonts: Populating font family aliases took 174 ms. Replace uses of missing 
+font family "Monospace" with one that exists to avoid this cost.
+```
+This adds ~174 ms to startup time on every run.
+
+**Root cause** (`comment_cell_widget.py:131, 144`):  
+Two stylesheet strings use `font-family: monospace` (lowercase):
+```python
+"color: #4a7c59; font-size: 13px; font-family: monospace; ..."  # line 131
+"  font-family: monospace;"                                       # line 144
+```
+In Qt's CSS parser, `monospace` in a `font-family` property is treated as a **literal font family name**, not as the CSS generic keyword. On macOS no font is registered under the name "Monospace" (the correct font family names are "Menlo", "Courier New", etc.). Qt searches all installed font families for a match or alias, taking ~174 ms on a large font catalog.
+
+In standard CSS, `monospace` used as the *last* fallback in a font stack is a generic keyword that the browser interprets as "pick the platform monospace font." Qt does not honour this semantics — it must be given a real family name.
+
+**Fix** (`comment_cell_widget.py:131, 144`):  
+Replace the bare `monospace` family with a cross-platform stack of real monospace font names, ending with the Qt-specific generic fallback `"Courier New"`:
+```python
+# Before:
+"font-family: monospace;"
+
+# After:
+"font-family: 'Menlo', 'Consolas', 'Courier New';"
+```
+`"Menlo"` is the default monospace font on macOS, `"Consolas"` on Windows. Qt picks the first name it finds, so this is cross-platform without any alias scan.
+
+---
+
 ### BUG-014 — `RuntimeError: CallerHelper has been deleted` on app close
 **Status:** Open  
 **Logged:** 2026-05-18  

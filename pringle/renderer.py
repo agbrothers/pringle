@@ -261,7 +261,7 @@ def make_surface_mesh(
         mat = gfx.MeshPhongMaterial(color=color, side="both")
     if opacity < 1.0:
         mat.opacity = opacity
-        mat.alpha_mode = "blend"
+        mat.alpha_mode = "weighted_blend"
     return gfx.Mesh(geo, mat)
 
 
@@ -304,7 +304,7 @@ def make_line_mesh(
         mat = gfx.LineMaterial(color=color, thickness=thickness, thickness_space="world")
     if opacity < 1.0:
         mat.opacity = opacity
-        mat.alpha_mode = "blend"
+        mat.alpha_mode = "weighted_blend"
     return gfx.Line(geo, mat)
 
 
@@ -342,7 +342,7 @@ def make_scatter_mesh(
         mat = gfx.MeshPhongMaterial(color=color, side="front")
         if opacity < 1.0:
             mat.opacity = opacity
-            mat.alpha_mode = "blend"
+            mat.alpha_mode = "weighted_blend"
         mesh = gfx.InstancedMesh(sphere_geo, mat, len(pts))
         for i, pos in enumerate(pts):
             mesh.set_matrix_at(i, la.mat_from_translation(pos))
@@ -358,7 +358,7 @@ def make_scatter_mesh(
         mat = gfx.PointsMaterial(color=color, size=size, size_space="world")
     if opacity < 1.0:
         mat.opacity = opacity
-        mat.alpha_mode = "blend"
+        mat.alpha_mode = "weighted_blend"
     return gfx.Points(geo, mat)
 
 

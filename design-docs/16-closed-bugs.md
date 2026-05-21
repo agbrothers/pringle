@@ -6,6 +6,16 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-022 — Transparent surface shows triangle mesh artifact where it self-overlaps
+**Status:** Closed (fixed 2026-05-20)  
+**Severity:** Medium
+
+**Root cause:** `alpha_mode="blend"` draws transparent fragments in mesh-index order. For a self-overlapping surface, back triangles could render after front ones, producing a visible triangle-grid artifact.
+
+**Fix:** Changed `alpha_mode="blend"` → `alpha_mode="weighted_blend"` at all four opacity-guarded sites in `renderer.py` (surface, line, scatter/sphere, degenerate-placeholder paths). WBOIT accumulates weighted color contributions from all fragments at each pixel and normalizes at resolve time — no dependency on triangle draw order.
+
+---
+
 ### BUG-001 — Constraint edge clipping jagged + 170 ms bottleneck
 **Status:** Closed (fixed 2026-05-20)  
 **Severity:** Critical (both quality and performance)
