@@ -8,6 +8,33 @@ See [20-profiling-sop.md](20-profiling-sop.md) for the profiling standard operat
 
 ---
 
+### PERF-002 — Full GPU geometry recreated on every surface update
+**Status:** Closed (fixed 2026-05-21)  
+**Priority:** CRITICAL  
+**Measured cost before:** ~1.44 ms CPU geometry rebuild + ~387 KB index buffer re-uploaded to GPU every animation frame
+
+**Root cause:** `make_surface_mesh` constructed brand-new `gfx.Geometry` and `gfx.Mesh` objects on every call. `add_object` removed the old scene object and added the new one, triggering a full GPU buffer upload (~771 KB: positions + indices + normals). During slider animation, only z-values change — the index buffer and x/y positions are constant across all frames.
+
+**Fix:** Added `_surface_geo`, `_surface_mesh`, and `_surface_sig` caches to `PringleRenderer`. On the first frame per cell (or after any topology change), the full rebuild runs and the geometry is cached. On subsequent animation frames where no constraint is active and the grid shape + colormap mode are unchanged:
+- `geo.positions.data[:, 2] = z.ravel()` + `update_full()` — uploads only positions buffer
+- `geo.normals.data[:] = _grid_normals(...)` + `update_full()` — uploads only normals buffer
+- `geo.colors.data[:]` updated only when a colormap is active
+- Index buffer (387 KB) is **never re-uploaded** after the first frame
+
+Topology signature `(rows, cols, has_colormap)` guards the cache — any change triggers a full rebuild. Constraint-active frames always rebuild (topology may change). Cache is cleared in `remove_object`.
+
+**Measured outcome (2026-05-21, headless CPU benchmark):**
+
+| Metric | Before | After | Speedup |
+|--------|--------|-------|---------|
+| CPU geometry update | 1.44 ms | **0.22 ms** | **6.6×** |
+| GPU index upload | ~387 KB/frame | **0 KB** (skipped) | — |
+| Estimated GPU render callback | ~9.3 ms | **~4–5 ms** (est.) | **~2×** |
+
+GPU savings are additive to CPU savings and not directly measurable without a real render loop + wgpu timestamp queries.
+
+---
+
 ### PERF-011 — Python boundary loop in `_clip_mesh_to_mask` (Numba JIT)
 **Status:** Closed (fixed 2026-05-20)  
 **Priority:** HIGH  

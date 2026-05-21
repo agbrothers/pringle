@@ -26,7 +26,7 @@ from PyQt6.QtGui import QKeySequence, QShortcut, QKeyEvent
 from rendercanvas.qt import QRenderWidget
 
 import pygfx as gfx
-from pringle.renderer import PringleRenderer, make_surface_mesh, make_line_mesh, make_scatter_mesh
+from pringle.renderer import PringleRenderer, make_line_mesh, make_scatter_mesh
 from pringle.grid import GridConfig, Grid, make_grid
 from pringle.evaluator import run_cell, CellResult
 from pringle.style import CellStyle
@@ -138,6 +138,21 @@ class PringleViewport(QRenderWidget):
     def add_object(self, cell_id: str, obj: gfx.WorldObject) -> None:
         self._pr.add_object(cell_id, obj)
         if cell_id not in self._seen_cell_ids:
+            self._seen_cell_ids.add(cell_id)
+            self._pr.fit_camera()
+
+    def update_surface(
+        self, cell_id: str,
+        x, y, z, color, opacity,
+        constraint_mask, constraint_values, z_raw,
+        colormap, colormap_reversed,
+    ) -> None:
+        is_new = self._pr.update_surface(
+            cell_id, x, y, z, color, opacity,
+            constraint_mask, constraint_values, z_raw,
+            colormap, colormap_reversed,
+        )
+        if is_new and cell_id not in self._seen_cell_ids:
             self._seen_cell_ids.add(cell_id)
             self._pr.fit_camera()
 
@@ -529,22 +544,24 @@ class PringleWindow(QMainWindow):
         cmap_rev  = style.colormap_reversed
 
         if result.render_type == "surface":
-            mesh = make_surface_mesh(
-                result.x, result.y, result.data, color=style.color, opacity=style.opacity,
+            vp.update_surface(
+                cell_id,
+                result.x, result.y, result.data,
+                color=style.color, opacity=style.opacity,
                 constraint_mask=result.constraint_mask,
                 constraint_values=result.constraint_values,
                 z_raw=result.data_unmasked,
                 colormap=cmap, colormap_reversed=cmap_rev,
             )
-            vp.add_object(cell_id, mesh)
 
         elif result.render_type == "surface_y":
-            # y = f(x,y) assigned a 2D array — render as a height surface
-            mesh = make_surface_mesh(
-                self._grid.x, self._grid.y, result.data, color=style.color, opacity=style.opacity,
+            vp.update_surface(
+                cell_id,
+                self._grid.x, self._grid.y, result.data,
+                color=style.color, opacity=style.opacity,
+                constraint_mask=None, constraint_values=None, z_raw=None,
                 colormap=cmap, colormap_reversed=cmap_rev,
             )
-            vp.add_object(cell_id, mesh)
 
         elif result.render_type == "curve":
             pts = np.column_stack([

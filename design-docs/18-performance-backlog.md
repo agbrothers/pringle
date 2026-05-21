@@ -44,9 +44,9 @@ After BUG-001 partial fix and PERF-003 vectorization. Geometry functions timed d
 
 ---
 
-## Current Benchmark — After PERF-011 (2026-05-20, n=128, 30 frames)
+## Current Benchmark — After PERF-002 (2026-05-21, n=128, 30 frames)
 
-After PERF-011 fix (Numba `@njit` boundary loop; `cache=True` persists across restarts).
+After PERF-002 fix (live GPU buffer update; index buffer never re-uploaded during animation).
 
 | Component | Mean ms | % of 33ms budget | vs baseline |
 |-----------|---------|-----------------|-------------|
@@ -54,9 +54,10 @@ After PERF-011 fix (Numba `@njit` boundary loop; `cache=True` persists across re
 | `_grid_gradients + _grid_normals` (FEAT-038) | 0.29 | 1% | — |
 | `_grid_indices` (PERF-003, closed) | 0.15 | 0% | 365× faster |
 | Cell evaluation chain (PERF-001, PERF-006) | **17.0** | **52%** | unchanged |
-| **Estimated total frame (CPU)** | **~18.9** | **57%** | **13.4× faster** |
+| Surface geometry (CPU, PERF-002 closed) | **0.22** | **1%** | **6.6× faster** |
+| **Estimated total frame (CPU)** | **~19.1** | **58%** | **13.2× faster** |
 
-**~36 fps CPU-side; ~28 ms wall-clock when combined with ~9 ms GPU render callback.**
+**~36 fps CPU-side; GPU render callback estimated ~4–5 ms faster (PERF-002 skips 387 KB index upload).**
 
 JIT warmup: ~2.1 s first call in a fresh process; ~323 ms when loading the compiled cache on subsequent starts. One-time cost per process after the cache is warm.
 
@@ -85,11 +86,19 @@ JIT warmup: ~2.1 s first call in a fresh process; ~323 ms when loading the compi
 | First-frame spike | ~1,055 ms | +~350 ms Numba JIT on top of Metal compile |
 | Subsequent starts (cached JIT) | ~984 ms | Numba loads from `__pycache__`; Metal still compiles |
 
+### Post-PERF-002 (2026-05-21)
+
+| Phase | Cost | Notes |
+|-------|------|-------|
+| GPU render callback (steady state, p95) | **~4–5 ms (est.)** | PERF-002 skips 387 KB index upload each frame |
+| CPU cell evaluation (headless benchmark) | **~19 ms** | geometry update: 1.44 ms → 0.22 ms |
+| **Total wall-clock frame (estimated)** | **~23–24 ms → ~42 fps** | |
+
 **Key findings:**
-- GPU render callback is ~9 ms in steady state regardless of CPU optimizations
-- PERF-002 (live buffer update, ~384 KB instead of 771 KB) estimated to save ~4–5 ms of that 9 ms
+- GPU render callback was ~9 ms; PERF-002 (live buffer update, skips 387 KB index re-upload) estimated to reduce to ~4–5 ms
+- CPU geometry path: full rebuild 1.44 ms → in-place 0.22 ms (6.6× faster CPU-side)
 - PERF-001 (DAG cache, ~3–5 ms CPU saving) is now the largest remaining CPU bottleneck
-- To reach ~50 fps: PERF-002 + PERF-001 together → estimated ~19 ms → ~53 fps
+- To reach ~50 fps: PERF-001 alone should push total to ~19–20 ms → ~50 fps
 
 ---
 
@@ -132,45 +141,6 @@ def _get_dag(self, evaluable: list) -> nx.DiGraph:
         self._dag_cache = build_dag(evaluable)
         self._dag_source_key = key
     return self._dag_cache
-```
-
----
-
-### PERF-002 — Full GPU geometry recreated on every surface update
-**Status:** Open  
-**Priority:** CRITICAL  
-**Logged:** 2026-05-19  
-**Discovered via:** Static analysis  
-**Files:** [renderer.py:162-231](../pringle/renderer.py#L162), [renderer.py:592-603](../pringle/renderer.py#L592)
-
-**Description:**  
-`make_surface_mesh` constructs brand-new `positions`, `indices`, and `normals` numpy arrays on every call, then wraps them in new `gfx.Geometry` and `gfx.Mesh` objects. `add_object` then removes the old scene object and adds the new one, triggering a full GPU buffer upload.
-
-During slider animation, only the z-values change. The mesh topology (index buffer) and the x/y positions are constant across all frames. Yet the entire ~770 KB of data (positions + indices + normals at n=128) is re-uploaded to the GPU every 16 ms.
-
-| Buffer | Size at n=128 | Changes per frame? |
-|--------|---------------|--------------------|
-| positions (N×3 float32) | 192 KB | z column only |
-| indices (T×3 int32) | ~387 KB | Never during animation |
-| normals (N×3 float32) | 192 KB | Yes (z-dependent) |
-| **Total** | **~771 KB** | — |
-
-**Measured cost (headless benchmark):** The CPU object-creation overhead (~9 ms difference between `geo/cpu_total` and `mesh/make_surface_mesh` at n=128) is small noise against PERF-003/004. **The GPU upload cost is not captured by the headless benchmark** — `gfx.Geometry` defers the actual wgpu buffer upload until the first `render()` call, which the benchmark never invokes. The ~771 KB upload cost is therefore a blind spot in the current numbers and must be measured via Instruments / wgpu timestamp queries (SOP Phase 5). This issue becomes the dominant bottleneck once PERF-003 and PERF-004 reduce CPU geometry time from ~227 ms to ~3 ms.
-
-**Fix (short-term):** Cache the index buffer (`_grid_indices` result) per grid shape — it never changes for a fixed n. Pass it into `make_surface_mesh` as an optional argument to avoid recomputing it.
-
-**Fix (long-term):** Maintain live `gfx.Geometry` objects per cell and update only the z-values and normals in-place using pygfx's buffer update API (`.data[...] = new_values` on a `gfx.Buffer`). The index buffer is never uploaded again after the first frame.
-
-```python
-# Pseudocode for buffer update path:
-if cell_id in self._live_geometry:
-    geo = self._live_geometry[cell_id]
-    geo.positions.data[:, 2] = z.ravel()  # update z in-place
-    geo.positions.update_range(0, len(z.ravel()))
-    # recompute and upload normals only
-else:
-    # first frame: full construction
-    ...
 ```
 
 ---

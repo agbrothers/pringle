@@ -564,6 +564,18 @@ class PringleRenderer:
         self._scene = gfx.Scene()
         self._objects: dict[str, gfx.WorldObject] = {}
 
+        # Live surface geometry cache (PERF-002)
+        # Keyed by cell_id; only populated for unconstrained surfaces.
+        # Stores the gfx.Geometry and gfx.Mesh from the last full build so
+        # that subsequent animation frames can update buffers in-place without
+        # rebuilding geometry or triggering a full GPU buffer upload.
+        self._surface_geo:  dict[str, gfx.Geometry] = {}
+        self._surface_mesh: dict[str, gfx.Mesh]     = {}
+        # Topology signature: (rows, cols, has_colormap).
+        # If this changes between frames, the cache is invalidated and a full
+        # rebuild is performed.
+        self._surface_sig:  dict[str, tuple]         = {}
+
         # Lighting
         self._scene.add(gfx.AmbientLight(intensity=0.4))
         sun = gfx.DirectionalLight(intensity=1.5)
@@ -813,12 +825,93 @@ class PringleRenderer:
             self._scene.remove(self._objects.pop(cell_id))
         if cell_id in self._shadow_objects:
             self._scene.remove(self._shadow_objects.pop(cell_id))
+        self._surface_geo.pop(cell_id, None)
+        self._surface_mesh.pop(cell_id, None)
+        self._surface_sig.pop(cell_id, None)
 
     def set_visible(self, cell_id: str, visible: bool) -> None:
         if cell_id in self._objects:
             self._objects[cell_id].visible = visible
         if cell_id in self._shadow_objects:
             self._shadow_objects[cell_id].visible = visible and self._shadow_visible
+
+    def update_surface(
+        self,
+        cell_id: str,
+        x: np.ndarray, y: np.ndarray, z: np.ndarray,
+        color: tuple, opacity: float,
+        constraint_mask, constraint_values, z_raw,
+        colormap: str | None, colormap_reversed: bool,
+    ) -> bool:
+        """Add or update a surface cell. Returns True if the cell is new (caller should fit camera).
+
+        When no constraint is active and the grid shape and colormap mode are
+        unchanged from the previous frame, geometry buffers are updated in-place:
+        only the z column of positions and the full normals array are re-uploaded
+        to the GPU. The index buffer (387 KB) is never re-uploaded on these frames.
+
+        Falls back to a full make_surface_mesh + add_object rebuild when:
+        - a constraint is active (topology may change)
+        - the grid shape changed
+        - colormap mode changed (MeshPhongMaterial ↔ MeshBasicMaterial)
+        - first frame for this cell
+        """
+        rows, cols = z.shape
+        sig = (rows, cols, colormap is not None)
+        has_constraint = constraint_mask is not None or constraint_values is not None
+
+        if (
+            not has_constraint
+            and cell_id in self._surface_geo
+            and self._surface_sig.get(cell_id) == sig
+        ):
+            self._update_surface_inplace(cell_id, x, y, z, color, opacity, colormap, colormap_reversed)
+            return False
+
+        # Full rebuild path
+        mesh = make_surface_mesh(
+            x, y, z, color, opacity,
+            constraint_mask, constraint_values, z_raw,
+            colormap, colormap_reversed,
+        )
+        is_new = self.add_object(cell_id, mesh)
+
+        # Cache live geometry for future in-place updates (not for constrained
+        # or degenerate meshes — placeholder has only 3 vertices).
+        if not has_constraint and mesh.geometry.positions.nitems > 3:
+            self._surface_geo[cell_id]  = mesh.geometry
+            self._surface_mesh[cell_id] = mesh
+            self._surface_sig[cell_id]  = sig
+
+        return is_new
+
+    def _update_surface_inplace(
+        self,
+        cell_id: str,
+        x: np.ndarray, y: np.ndarray, z: np.ndarray,
+        color: tuple, opacity: float,
+        colormap: str | None, colormap_reversed: bool,
+    ) -> None:
+        """Write z + normals (and optionally colors) into existing GPU buffers."""
+        geo  = self._surface_geo[cell_id]
+        mesh = self._surface_mesh[cell_id]
+
+        geo.positions.data[:, 2] = z.ravel()
+        geo.positions.update_full()
+
+        dz_dx, dz_dy = _grid_gradients(x, y, z)
+        geo.normals.data[:] = _grid_normals(dz_dx, dz_dy)
+        geo.normals.update_full()
+
+        if colormap is not None:
+            geo.colors.data[:] = _apply_colormap(z.ravel(), colormap, colormap_reversed)
+            geo.colors.update_full()
+
+        if opacity < 1.0:
+            mesh.material.opacity = opacity
+            mesh.material.alpha_mode = "weighted_blend"
+        else:
+            mesh.material.opacity = 1.0
 
     def set_background_color(self, color: tuple) -> None:
         self._bg.material = gfx.BackgroundMaterial(color)
