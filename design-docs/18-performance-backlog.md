@@ -62,23 +62,34 @@ JIT warmup: ~2.1 s first call in a fresh process; ~323 ms when loading the compi
 
 ---
 
-## GPU Frame Timer — First Measurement (2026-05-20, n=128, memory.yml)
+## GPU Frame Timer Measurements (n=128, memory.yml)
 
 **Method:** Qt frame-timer wrapper (`PRINGLE_FRAME_TIMING=1`). Times the `_pr.render()` callback wall-clock. Enabled via env var; zero overhead when unset. Cell evaluation runs in the Qt event loop *outside* this callback, so the two costs are additive.
 
-**Note on distribution:** Frame 1 always spikes (~984 ms) due to Metal pipeline compilation and initial 771 KB buffer allocation. Steady-state figures exclude that spike.
+### Pre-PERF-011 (2026-05-20)
 
 | Phase | Cost | Notes |
 |-------|------|-------|
 | GPU render callback (steady state, p95) | **~9 ms** | Upload 771 KB mesh + Metal render commands |
-| CPU cell evaluation (from headless benchmark) | **~30 ms** | Outside render callback; runs in Qt event loop |
-| **Total wall-clock frame (sum)** | **~39 ms** | **~25 fps actual vs ~33 fps CPU-only estimate** |
+| CPU cell evaluation (headless benchmark) | **~30 ms** | Outside render callback |
+| **Total wall-clock frame** | **~39 ms → ~25 fps** | |
+| First-frame spike | ~984 ms | Metal pipeline compile + initial buffer alloc |
+
+### Post-PERF-011 (2026-05-20)
+
+| Phase | Cost | Notes |
+|-------|------|-------|
+| GPU render callback (steady state, p95) | **~9.3 ms** | Unchanged — GPU work not affected by CPU fix |
+| CPU cell evaluation (headless benchmark) | **~19 ms** | clip: 12.5 ms → 1.6 ms |
+| **Total wall-clock frame** | **~28 ms → ~36 fps** | |
+| First-frame spike | ~1,055 ms | +~350 ms Numba JIT on top of Metal compile |
+| Subsequent starts (cached JIT) | ~984 ms | Numba loads from `__pycache__`; Metal still compiles |
 
 **Key findings:**
-- GPU upload + render of the full 771 KB mesh costs ~9 ms per frame — meaningful but not dominant
-- PERF-002 (live buffer update, uploading only z-column + normals ~384 KB) could save ~4–5 ms of that 9 ms
-- CPU work (~30 ms) is still the primary bottleneck; PERF-011 (Numba) targeting `_clip_mesh_to_mask` reduces it by ~11 ms → combined frame ~28 ms → ~36 fps
-- To reach ~50 fps, both PERF-002 and PERF-011 need to land together
+- GPU render callback is ~9 ms in steady state regardless of CPU optimizations
+- PERF-002 (live buffer update, ~384 KB instead of 771 KB) estimated to save ~4–5 ms of that 9 ms
+- PERF-001 (DAG cache, ~3–5 ms CPU saving) is now the largest remaining CPU bottleneck
+- To reach ~50 fps: PERF-002 + PERF-001 together → estimated ~19 ms → ~53 fps
 
 ---
 
