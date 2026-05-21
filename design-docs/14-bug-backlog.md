@@ -121,20 +121,67 @@ Not without modifying or replacing the `OrbitController`. Its spherical-coordina
 
 ### BUG-001 — Constraint edge clipping still jagged
 **Status:** Open  
-**Logged:** 2026-05-15
+**Logged:** 2026-05-15  
+**Severity:** CRITICAL — `_clip_mesh_to_mask` is the single largest frame-time bottleneck (170 ms at n=128, 516% of the 33 ms budget) AND produces no visible quality improvement over NaN masking; absorbs PERF-004
 
 **Description:**  
-The triangle-clipping patch (`_clip_mesh_to_mask` in `renderer.py`) is not producing visibly smoother edges at the current grid resolution. The staircase pattern remains prominent.
+The triangle-clipping patch (`_clip_mesh_to_mask` in `renderer.py`) is not producing visibly smoother edges at the current grid resolution. The staircase pattern remains prominent. At the same time, the function is extremely expensive: it loops over every triangle in Python, making it the dominant bottleneck in the entire rendering pipeline.
+
+The function has two independent defects that must both be fixed:
+
+1. **Quality defect (root cause of jagged edges):** Boundary vertices are placed at the edge midpoint `(A + B) * 0.5` rather than at the true constraint zero-crossing. The midpoint lies on the grid edge but not on the constraint boundary, so the clipped mesh boundary does not follow the constraint curve. The improvement is negligible because the inserted vertex is in the wrong place.
+
+2. **Performance defect (root cause of 170 ms cost):** The function iterates every triangle — all ~32,258 of them at n=128 — in a Python `for tri in indices` loop with per-triangle dict lookups and list appends. The vast majority of triangles are entirely inside or entirely outside the constraint and require no clipping. Only the perimeter triangles (O(n), not O(n²)) actually straddle the boundary.
 
 **Reproduction:**  
-Add a constrained surface, e.g. `z = x**2 - y**2` with constraint `x**2 + y**2 < 1`. Rotate to view the boundary edge.
+Add a constrained surface, e.g. `z = x**2 - y**2` with constraint `x**2 + y**2 < 1`. Rotate to view the boundary edge. Enable profiling or run `python tests/bench_slider_animation.py --n 128` to see the 170 ms cost.
 
-**Hypothesis / investigation needed:**  
-- The clipping logic may be correct but the grid step size is too coarse for the improvement to be visible.
-- Or: clipped boundary vertices are not being interpolated correctly along the true constraint boundary.
-- Or: the midpoint interpolation in `_bv()` does not move the vertex to the actual constraint boundary.
+**Measured performance impact (2026-05-19, n=128):**
 
-**Possible approaches:**  
-- Compute the exact zero-crossing position along each boundary edge rather than the midpoint (linear interpolation on the signed distance).
-- Adaptive grid refinement near the boundary.
-- Smoothing at the shader/material level (anti-aliased edges via alpha).
+| Metric | Value |
+|--------|-------|
+| Mean frame time for `_clip_mesh_to_mask` | **170.2 ms** |
+| % of 33 ms frame budget | **516%** |
+| Effective frame rate with this bottleneck present | ~4 fps |
+| Expected frame rate after fix (estimated) | ~45 fps |
+
+**Root cause — midpoint interpolation:**  
+`_bv()` computes the boundary vertex as `(positions[a] + positions[b]) * 0.5`. This midpoint is halfway along the grid edge in 3D space, not at the point where the constraint function crosses zero. For a constraint like `x**2 + y**2 < 1`, the true boundary vertex should be at the point along the edge where `x**2 + y**2 = 1`. The midpoint misses this location by up to half a grid cell width, which is the same order as the staircase artifact being corrected.
+
+**Required fix — implement both corrections together:**
+
+**Step 1 — correct zero-crossing interpolation (quality fix):**  
+Replace the midpoint with a linear interpolation along the signed distance to the constraint boundary. If vertex A has constraint value `f_A` and vertex B has `f_B` (signed: positive = inside, negative = outside), the crossing parameter is:
+
+```python
+t = f_A / (f_A - f_B)          # t ∈ (0, 1), crossing point fraction along A→B
+crossing = A + t * (B - A)     # 3D position on constraint boundary
+```
+
+This requires `_clip_mesh_to_mask` to receive the constraint evaluation values (not just the boolean mask) so that `f_A` and `f_B` are available per vertex. The boolean `inside` mask can be derived from `f >= 0`; `f` itself is needed for interpolation.
+
+**Step 2 — numpy vectorized fast-path (performance fix):**  
+Classify triangles before entering any loop using boolean array indexing:
+
+```python
+inside_count = inside[indices].sum(axis=1)   # shape (T,), values 0–3
+all_in  = inside_count == 3   # boolean mask, shape (T,)
+all_out = inside_count == 0
+boundary = ~all_in & ~all_out   # only ~O(n) triangles at perimeter
+
+# Fast paths — no Python loop:
+kept_indices = indices[all_in]   # all-inside triangles pass through unchanged
+
+# Slow path — Python loop only over boundary triangles:
+for tri in indices[boundary]:
+    ...   # split using linear interpolation
+```
+
+At n=128, `boundary` triangles number roughly 4 × 128 = ~512 (perimeter), not 32,258. The Python loop cost drops from O(n²) to O(n).
+
+**Step 3 — function signature change:**  
+Change `_clip_mesh_to_mask(positions, indices, normals, inside: bool[])` to accept `f_values: float[]` (the raw constraint evaluation, pre-threshold). Derive `inside = f_values >= 0` inside the function. The call site in `make_surface_mesh` already has the raw z-values and constraint expression available.
+
+**Possible stretch improvements (after the above fix):**
+- Adaptive grid refinement near the boundary for even smoother edges.
+- Fragment shader alpha fade on boundary triangles (anti-aliased edges without mesh changes).

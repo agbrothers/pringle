@@ -15,7 +15,7 @@ Run via `python tests/bench_slider_animation.py --n 128 --frames 30`.
 
 | Component | Mean ms | % of 33ms budget |
 |-----------|---------|-----------------|
-| `_clip_mesh_to_mask` (PERF-004) | **170.2** | **516%** |
+| `_clip_mesh_to_mask` (→ BUG-001) | **170.2** | **516%** |
 | `_grid_indices` (PERF-003) | **54.7** | **166%** |
 | Cell evaluation chain (PERF-001, PERF-006) | **17.0** | **52%** |
 | ↳ z_surface computation alone | 10.9 | 33% |
@@ -26,7 +26,7 @@ Run via `python tests/bench_slider_animation.py --n 128 --frames 30`.
 
 **Current effective frame rate: ~4 fps at n=128.**
 
-The two Python-loop geometry functions dominate the budget by an order of magnitude. Fixing PERF-003 and PERF-004 alone would cut the geometry cost from 227 ms to under 5 ms (numpy vectorized). Combined with the 17 ms evaluation chain, that puts us at ~22 ms per frame — inside the 30fps budget.
+The two Python-loop geometry functions dominate the budget by an order of magnitude. Fixing PERF-003 and BUG-001 alone would cut the geometry cost from 227 ms to under 5 ms (numpy vectorized). Combined with the 17 ms evaluation chain, that puts us at ~22 ms per frame — inside the 30fps budget.
 
 ---
 
@@ -109,30 +109,6 @@ else:
     # first frame: full construction
     ...
 ```
-
----
-
-### PERF-004 — Python loop in constraint mesh clipping
-**Status:** Open  
-**Priority:** CRITICAL  
-**Logged:** 2026-05-19  
-**Discovered via:** Static analysis  
-**Measured impact:** 170.2 ms at n=128 (516% of frame budget); the single largest bottleneck  
-**Files:** [renderer.py:63-137](../pringle/renderer.py#L63)
-
-**Description:**  
-`_clip_mesh_to_mask` iterates over every triangle in a Python `for tri in indices` loop to classify triangles as fully inside, fully outside, or crossing the constraint boundary, and inserts midpoint vertices on boundary edges using a Python `dict` cache. At n=128 with a `z < 3` constraint, this loop runs over ~32,258 triangles per frame.
-
-The memory.yml visible surface has `z < 3` constraint active, so this path executes on every animation tick.
-
-**Estimated cost:** ~10–20 ms per call at n=128 (Python loop with dict lookups and list appends per triangle).
-
-**Fix options (in order of complexity):**  
-1. **numpy vectorized pass for fully-inside/outside triangles:** Identify triangles where all 3 vertices are inside or all are outside using boolean array indexing. Only the boundary triangles (~perimeter) need the Python loop. This removes the loop for the majority of triangles.  
-2. **numba @jit:** Add `@numba.njit` to the function body for a near-C-speed result with minimal code change.  
-3. **Full numpy rewrite:** Possible but complex due to the variable number of output triangles per input triangle (1-in → 1 out, 2-in → 2 out).
-
-Short-term recommendation: implement option 1 (vectorized fast path for pure-inside and pure-outside triangles; Python loop only for the ~perimeter triangles).
 
 ---
 
