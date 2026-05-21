@@ -239,7 +239,7 @@ class CellListWidget(QWidget):
             idx = self._index_of(after_id)
             if idx >= 0:
                 self._cells.insert(idx + 1, cell)
-                self._layout.insertWidget(idx + 1, cell)
+                self._layout.insertWidget(idx + 2, cell)
                 if not self._skip_folder_inference:
                     self._assign_folder(cell, self._infer_folder(idx + 1))
                 if source and not is_sl:
@@ -291,7 +291,7 @@ class CellListWidget(QWidget):
             idx = self._index_of(after_id)
             if idx >= 0:
                 self._cells.insert(idx + 1, cell)
-                self._layout.insertWidget(idx + 1, cell)
+                self._layout.insertWidget(idx + 2, cell)
                 if not self._skip_folder_inference:
                     self._assign_folder(cell, self._infer_folder(idx + 1))
                 if source:
@@ -334,7 +334,7 @@ class CellListWidget(QWidget):
             idx = self._index_of(after_id)
             if idx >= 0:
                 self._cells.insert(idx + 1, cell)
-                self._layout.insertWidget(idx + 1, cell)
+                self._layout.insertWidget(idx + 2, cell)
                 if not self._skip_folder_inference:
                     self._assign_folder(cell, self._infer_folder(idx + 1))
                 cell.focus()
@@ -375,7 +375,7 @@ class CellListWidget(QWidget):
             idx = self._index_of(after_id)
             if idx >= 0:
                 self._cells.insert(idx + 1, folder)
-                self._layout.insertWidget(idx + 1, folder)
+                self._layout.insertWidget(idx + 2, folder)
                 self._update_placeholder()
                 return folder
 

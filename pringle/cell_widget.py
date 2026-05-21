@@ -25,7 +25,7 @@ from PyQt6.QtWidgets import (
     QLabel, QPlainTextEdit, QLineEdit, QSizePolicy, QFrame,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QKeyEvent
+from PyQt6.QtGui import QKeyEvent, QFont
 
 from pringle.style import CellStyle
 
@@ -134,7 +134,8 @@ class ConstraintSubCell(QWidget):
         )
         self._edit.setStyleSheet(
             "QLineEdit { border: 1px dashed #666; border-radius: 3px; "
-            "padding: 1px 4px; font-size: 12px; color: #ddd; }"
+            "padding: 1px 4px; font-size: 12px; "
+            "font-family: 'Menlo', 'Consolas', 'Courier New'; color: #ddd; }"
         )
         self._edit.textChanged.connect(self.content_changed)
         row.addWidget(self._edit, 1)
@@ -174,6 +175,10 @@ class CellTextEdit(QPlainTextEdit):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        _font = QFont()
+        _font.setFamilies(['Menlo', 'Consolas', 'Courier New'])
+        _font.setStyleHint(QFont.StyleHint.Monospace)
+        self.setFont(_font)
         self.document().contentsChanged.connect(self._adjust_height)
         self._adjust_height()
 

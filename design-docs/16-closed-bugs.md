@@ -6,6 +6,16 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-024 — New cell inserted above the active cell instead of below
+**Status:** Closed (fixed 2026-05-20)  
+**Severity:** Medium
+
+**Root cause:** Off-by-one between `_cells` list index and layout index. The layout has a hidden placeholder at index 0, so `_cells[idx]` lives at layout index `idx + 1`. All four `add_*` methods used `insertWidget(idx + 1, cell)`, which placed the new cell at the focused cell's slot — inserting before it instead of after.
+
+**Fix:** Changed `insertWidget(idx + 1, ...)` → `insertWidget(idx + 2, ...)` in `add_cell`, `add_data_cell`, `add_comment_cell`, and `add_folder` (`cell_list.py`).
+
+---
+
 ### BUG-021 — Startup font warning: 174 ms alias scan for missing "Monospace" family
 **Status:** Closed (fixed 2026-05-20)  
 **Severity:** Low

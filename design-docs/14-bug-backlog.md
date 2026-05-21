@@ -44,33 +44,6 @@ Similarly, skip hidden cells when computing the indicator Y position so it alway
 
 ---
 
-### BUG-024 — New cell inserted above the active cell instead of below
-**Status:** Open  
-**Logged:** 2026-05-20  
-**Severity:** Medium — FEAT-029 (insert below focused cell) regression; inserts in wrong direction
-
-**Description:**  
-When a cell has keyboard focus and the user presses `+ Expression` or `+ Folder`, the new cell appears immediately above the focused cell rather than below it.
-
-**Root cause — off-by-one between `_cells` list index and layout index** (`cell_list.py:241–242`):  
-The QVBoxLayout for the cell panel has an additional placeholder label at index 0:
-```
-layout: [placeholder(0), cell0(1), cell1(2), ..., cellN-1(N), stretch(N+1)]
-```
-`_cells[idx]` therefore lives at layout index `idx + 1`. To insert a new cell after `_cells[idx]`, it must go at layout index `idx + 2`. The current code uses `idx + 1`:
-```python
-self._cells.insert(idx + 1, cell)       # correct: new cell after focused in the list
-self._layout.insertWidget(idx + 1, cell) # wrong: idx+1 = focused cell's slot → inserts before it
-```
-`insertWidget(idx + 1, ...)` places the new widget at the focused cell's layout slot, pushing the focused cell one slot down. The layout then shows the new cell above the focused cell — the opposite of the intended order.
-
-**Fix** (`cell_list.py:242` and equivalent lines in `add_data_cell`, `add_comment_cell`, `add_folder`):  
-```python
-self._layout.insertWidget(idx + 2, cell)   # +2 to skip placeholder at index 0
-```
-Apply the same `+2` correction in every `add_*` method that takes an `after_id` parameter.
-
----
 
 ### BUG-023 — Dragging a folder does not move its member cells
 **Status:** Open  
