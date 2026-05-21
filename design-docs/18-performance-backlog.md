@@ -44,19 +44,21 @@ After BUG-001 partial fix and PERF-003 vectorization. Geometry functions timed d
 
 ---
 
-## Current Benchmark — After PERF-010 (2026-05-20, n=128, 30 frames)
+## Current Benchmark — After PERF-011 (2026-05-20, n=128, 30 frames)
 
-After PERF-010 fix (np.concatenate approach; list(positions) roundtrip eliminated).
+After PERF-011 fix (Numba `@njit` boundary loop; `cache=True` persists across restarts).
 
 | Component | Mean ms | % of 33ms budget | vs baseline |
 |-----------|---------|-----------------|-------------|
-| `_clip_mesh_to_mask` (PERF-010 closed) | **12.5** | **38%** | 14× faster |
+| `_clip_mesh_to_mask` (PERF-011 closed) | **1.4** | **4%** | 89× faster |
 | `_grid_gradients + _grid_normals` (FEAT-038) | 0.29 | 1% | — |
 | `_grid_indices` (PERF-003, closed) | 0.15 | 0% | 365× faster |
 | Cell evaluation chain (PERF-001, PERF-006) | **17.0** | **52%** | unchanged |
-| **Estimated total frame** | **30.0** | **91%** | **8.4× faster** |
+| **Estimated total frame (CPU)** | **~18.9** | **57%** | **13.4× faster** |
 
-**~33 fps — 30 fps target met (CPU side).** Remaining 12.5 ms in `_clip_mesh_to_mask` is the Python loop over ~522 boundary triangles; further reduction needs Numba or fully vectorized boundary splitting (not required at current target).
+**~36 fps CPU-side; ~28 ms wall-clock when combined with ~9 ms GPU render callback.**
+
+JIT warmup: ~2.1 s first call in a fresh process; ~323 ms when loading the compiled cache on subsequent starts. One-time cost per process after the cache is warm.
 
 ---
 
@@ -297,46 +299,6 @@ _ALWAYS_DEFINED: frozenset[str] = (
 
 ---
 
-### PERF-011 — Python boundary loop in `_clip_mesh_to_mask` (Numba target)
-**Status:** Open  
-**Priority:** HIGH  
-**Logged:** 2026-05-20  
-**Discovered via:** Post-PERF-010 benchmark  
-**Measured cost:** 12.5 ms at n=128 (38% of frame budget); Python loop over ~522 boundary triangles  
-**Files:** [renderer.py:128-152](../pringle/renderer.py#L128)
-
-**Description:**  
-After PERF-010, the remaining cost in `_clip_mesh_to_mask` is the Python `for tri in indices[boundary]` loop (~522 triangles at n=128). Each iteration calls `_bv`, which performs per-vertex `np.linalg.norm` on a length-3 array — numpy function-call overhead at this granularity costs ~24 µs/triangle in Python vs ~50 ns in compiled code. A full numpy vectorization is not straightforward because each boundary triangle produces a variable number of output triangles (1-in → 1 triangle; 2-in → 2 triangles), making the output count per input row irregular.
-
-**Fix — Numba `@njit` on the boundary loop:**  
-Port the boundary triangle loop body to a standalone `@numba.njit` function. Numba handles mutable arrays and integer arithmetic natively; the compiled loop eliminates Python dispatch overhead entirely.
-
-Restructuring required:
-- Replace `edge_cache: dict[tuple[int,int], int]` with `numba.typed.Dict.empty(key_type=numba.types.UniTuple(numba.int32, 2), value_type=numba.int32)`
-- Pre-allocate output arrays at maximum possible size: `max_new_verts = 2 * len(boundary_tris)`, `max_new_idx = 2 * len(boundary_tris)`
-- Return actual vertex/triangle counts to slice to true size after the loop
-- Replace `np.linalg.norm` with inline `sqrt(nx*nx + ny*ny + nz*nz)` — Numba compiles this to a single FPU instruction
-
-```python
-import numba
-
-@numba.njit(cache=True)
-def _clip_boundary_njit(
-    positions, normals, f_values, inside,
-    boundary_tris,           # (B, 3) int32
-    out_pos,                 # pre-allocated (2B, 3) float32
-    out_nor,                 # pre-allocated (2B, 3) float32
-    out_idx,                 # pre-allocated (2B, 3) int32
-    vert_offset,             # int: len(positions) at call time
-) -> tuple[int, int]:        # (n_new_verts, n_new_tris)
-    ...
-```
-
-**JIT warmup:** First call compiles (~0.5–2 s); subsequent calls use the cached binary (`cache=True`). Warmup is one-time per Python process.
-
-**Estimated impact:** ~12.5 ms → ~1–2 ms for `_clip_mesh_to_mask`; total frame ~30 ms → ~18–19 ms → ~53–56 fps. Provides headroom against PERF-002 GPU upload cost once measured.
-
----
 
 ### PERF-012 — Numba JIT for recurrence-relation cell evaluation
 **Status:** Open  

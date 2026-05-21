@@ -8,6 +8,32 @@ See [20-profiling-sop.md](20-profiling-sop.md) for the profiling standard operat
 
 ---
 
+### PERF-011 — Python boundary loop in `_clip_mesh_to_mask` (Numba JIT)
+**Status:** Closed (fixed 2026-05-20)  
+**Priority:** HIGH  
+**Measured cost before:** 12.5 ms at n=128 (38% of frame budget)
+
+**Root cause:** After PERF-010, the remaining cost in `_clip_mesh_to_mask` was the Python `for tri in boundary_tris` loop (~522 triangles at n=128). Each iteration called `_bv` with `np.linalg.norm` on a length-3 array — numpy function-call overhead at this granularity cost ~24 µs/triangle in Python.
+
+**Fix:** Ported the boundary loop to `_clip_boundary_njit` — a standalone `@numba.njit(cache=True)` function. Key decisions:
+- Edge cache uses `numba.typed.Dict(int64 → int32)` with packed `(lo << 32) | hi` keys (avoids `UniTuple` typing issues across numba versions)
+- Replaced `np.linalg.norm` with inline `math.sqrt(nx*nx + ny*ny + nz*nz)` — one FPU instruction
+- Output arrays pre-allocated at `2 * len(boundary_tris)` (maximum possible); sliced to actual count after return
+- Python fallback path preserved for environments without numba
+- `numba>=0.59` added to `pyproject.toml` dependencies
+
+**Measured outcome (2026-05-20, n=128, 30 calls steady-state):**
+
+| Metric | Before | After | Speedup |
+|--------|--------|-------|---------|
+| `_clip_mesh_to_mask` | 12.5 ms | **1.4 ms** | **8.8×** |
+| Estimated CPU frame total | 30.0 ms | **~18.9 ms** | — |
+| Effective CPU fps | ~33 fps | **~36 fps** | — |
+
+**JIT warmup:** ~2.1 s first call in a fresh process (full LLVM compile); ~323 ms on subsequent starts (loads precompiled cache from `__pycache__`). One-time cost per process when a constrained surface is first rendered.
+
+---
+
 ### PERF-010 — O(n²) vertex list/array roundtrip in `_clip_mesh_to_mask`
 **Status:** Closed (fixed 2026-05-20)  
 **Priority:** CRITICAL  

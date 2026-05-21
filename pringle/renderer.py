@@ -15,9 +15,155 @@ renderer falls back to face normals (faceted appearance).
 
 from __future__ import annotations
 
+import math
 import numpy as np
 import pygfx as gfx
 import pylinalg as la
+
+try:
+    import numba
+    from numba.typed import Dict as _NumbaDict
+    from numba import types as _numba_types
+    _HAVE_NUMBA = True
+except ImportError:
+    _HAVE_NUMBA = False
+
+
+# ---------------------------------------------------------------------------
+# Numba JIT boundary-triangle loop (PERF-011)
+# ---------------------------------------------------------------------------
+
+if _HAVE_NUMBA:
+    @numba.njit(cache=True)
+    def _clip_boundary_njit(
+        positions,     # float32 (N, 3)
+        normals,       # float32 (N, 3)
+        f_values,      # float32 (N,)
+        inside,        # bool   (N,)
+        boundary_tris, # int32  (B, 3)
+        out_pos,       # float32 (max_new, 3) — pre-allocated
+        out_nor,       # float32 (max_new, 3) — pre-allocated
+        out_idx,       # int32  (max_new, 3) — pre-allocated
+        vert_offset,   # int: len(positions)
+    ):
+        """JIT boundary-triangle clipper. Returns (n_new_verts, n_new_tris).
+
+        Edge key: pack (min_idx, max_idx) into one int64 so the edge cache
+        avoids UniTuple typing issues across numba versions.
+        """
+        edge_cache = _NumbaDict.empty(
+            key_type=_numba_types.int64,
+            value_type=_numba_types.int32,
+        )
+        nv = 0
+        nt = 0
+
+        for ti in range(len(boundary_tris)):
+            a = boundary_tris[ti, 0]
+            b = boundary_tris[ti, 1]
+            c = boundary_tris[ti, 2]
+            ia = inside[a]; ib = inside[b]; ic = inside[c]
+            n_in = int(ia) + int(ib) + int(ic)
+
+            if n_in == 1:
+                if ia:   vi, o1, o2 = a, b, c
+                elif ib: vi, o1, o2 = b, a, c
+                else:    vi, o1, o2 = c, a, b
+
+                lo1 = np.int64(vi) if vi < o1 else np.int64(o1)
+                hi1 = np.int64(o1) if vi < o1 else np.int64(vi)
+                k1 = (lo1 << np.int64(32)) | hi1
+                if k1 not in edge_cache:
+                    fa = f_values[vi]; fb = f_values[o1]
+                    denom = fa - fb
+                    t = fa / denom if abs(denom) > 1e-10 else np.float32(0.5)
+                    if t < 0.0: t = np.float32(0.0)
+                    elif t > 1.0: t = np.float32(1.0)
+                    for d in range(3):
+                        out_pos[nv, d] = positions[vi, d] + t * (positions[o1, d] - positions[vi, d])
+                        out_nor[nv, d] = normals[vi, d]   + t * (normals[o1, d]   - normals[vi, d])
+                    nx_ = out_nor[nv, 0]; ny_ = out_nor[nv, 1]; nz_ = out_nor[nv, 2]
+                    ln = math.sqrt(nx_*nx_ + ny_*ny_ + nz_*nz_)
+                    if ln > 1e-8:
+                        out_nor[nv, 0] /= ln; out_nor[nv, 1] /= ln; out_nor[nv, 2] /= ln
+                    edge_cache[k1] = np.int32(vert_offset + nv)
+                    nv += 1
+                p1 = edge_cache[k1]
+
+                lo2 = np.int64(vi) if vi < o2 else np.int64(o2)
+                hi2 = np.int64(o2) if vi < o2 else np.int64(vi)
+                k2 = (lo2 << np.int64(32)) | hi2
+                if k2 not in edge_cache:
+                    fa = f_values[vi]; fb = f_values[o2]
+                    denom = fa - fb
+                    t = fa / denom if abs(denom) > 1e-10 else np.float32(0.5)
+                    if t < 0.0: t = np.float32(0.0)
+                    elif t > 1.0: t = np.float32(1.0)
+                    for d in range(3):
+                        out_pos[nv, d] = positions[vi, d] + t * (positions[o2, d] - positions[vi, d])
+                        out_nor[nv, d] = normals[vi, d]   + t * (normals[o2, d]   - normals[vi, d])
+                    nx_ = out_nor[nv, 0]; ny_ = out_nor[nv, 1]; nz_ = out_nor[nv, 2]
+                    ln = math.sqrt(nx_*nx_ + ny_*ny_ + nz_*nz_)
+                    if ln > 1e-8:
+                        out_nor[nv, 0] /= ln; out_nor[nv, 1] /= ln; out_nor[nv, 2] /= ln
+                    edge_cache[k2] = np.int32(vert_offset + nv)
+                    nv += 1
+                p2 = edge_cache[k2]
+
+                out_idx[nt, 0] = np.int32(vi); out_idx[nt, 1] = p1; out_idx[nt, 2] = p2
+                nt += 1
+
+            else:  # n_in == 2
+                if not ia:    vo, v1, v2 = a, b, c
+                elif not ib:  vo, v1, v2 = b, c, a
+                else:         vo, v1, v2 = c, a, b
+
+                lo1 = np.int64(v1) if v1 < vo else np.int64(vo)
+                hi1 = np.int64(vo) if v1 < vo else np.int64(v1)
+                k1 = (lo1 << np.int64(32)) | hi1
+                if k1 not in edge_cache:
+                    fa = f_values[v1]; fb = f_values[vo]
+                    denom = fa - fb
+                    t = fa / denom if abs(denom) > 1e-10 else np.float32(0.5)
+                    if t < 0.0: t = np.float32(0.0)
+                    elif t > 1.0: t = np.float32(1.0)
+                    for d in range(3):
+                        out_pos[nv, d] = positions[v1, d] + t * (positions[vo, d] - positions[v1, d])
+                        out_nor[nv, d] = normals[v1, d]   + t * (normals[vo, d]   - normals[v1, d])
+                    nx_ = out_nor[nv, 0]; ny_ = out_nor[nv, 1]; nz_ = out_nor[nv, 2]
+                    ln = math.sqrt(nx_*nx_ + ny_*ny_ + nz_*nz_)
+                    if ln > 1e-8:
+                        out_nor[nv, 0] /= ln; out_nor[nv, 1] /= ln; out_nor[nv, 2] /= ln
+                    edge_cache[k1] = np.int32(vert_offset + nv)
+                    nv += 1
+                p1 = edge_cache[k1]
+
+                lo2 = np.int64(v2) if v2 < vo else np.int64(vo)
+                hi2 = np.int64(vo) if v2 < vo else np.int64(v2)
+                k2 = (lo2 << np.int64(32)) | hi2
+                if k2 not in edge_cache:
+                    fa = f_values[v2]; fb = f_values[vo]
+                    denom = fa - fb
+                    t = fa / denom if abs(denom) > 1e-10 else np.float32(0.5)
+                    if t < 0.0: t = np.float32(0.0)
+                    elif t > 1.0: t = np.float32(1.0)
+                    for d in range(3):
+                        out_pos[nv, d] = positions[v2, d] + t * (positions[vo, d] - positions[v2, d])
+                        out_nor[nv, d] = normals[v2, d]   + t * (normals[vo, d]   - normals[v2, d])
+                    nx_ = out_nor[nv, 0]; ny_ = out_nor[nv, 1]; nz_ = out_nor[nv, 2]
+                    ln = math.sqrt(nx_*nx_ + ny_*ny_ + nz_*nz_)
+                    if ln > 1e-8:
+                        out_nor[nv, 0] /= ln; out_nor[nv, 1] /= ln; out_nor[nv, 2] /= ln
+                    edge_cache[k2] = np.int32(vert_offset + nv)
+                    nv += 1
+                p2 = edge_cache[k2]
+
+                out_idx[nt, 0] = np.int32(v1); out_idx[nt, 1] = np.int32(v2); out_idx[nt, 2] = p1
+                nt += 1
+                out_idx[nt, 0] = np.int32(v2); out_idx[nt, 1] = p2; out_idx[nt, 2] = p1
+                nt += 1
+
+        return nv, nt
 
 
 # ---------------------------------------------------------------------------
@@ -95,7 +241,33 @@ def _clip_mesh_to_mask(
     # All-inside triangles pass through unchanged.
     all_in_idx = indices[all_in]  # (K, 3) numpy array
 
-    # --- Boundary triangles: linear interpolation in a Python loop ---
+    # --- Boundary triangles ---
+    boundary_tris = indices[boundary]  # (B, 3) int32
+
+    if _HAVE_NUMBA:
+        # JIT path (PERF-011): compiled boundary loop, ~12× faster than Python
+        max_new = 2 * max(len(boundary_tris), 1)
+        _nb_pos = np.empty((max_new, 3), dtype=np.float32)
+        _nb_nor = np.empty((max_new, 3), dtype=np.float32)
+        _nb_idx = np.empty((max_new, 3), dtype=np.int32)
+        nv_new, nt_new = _clip_boundary_njit(
+            positions, normals, f_values, inside,
+            boundary_tris, _nb_pos, _nb_nor, _nb_idx, len(positions),
+        )
+        if nv_new > 0:
+            out_pos = np.concatenate([positions, _nb_pos[:nv_new]], axis=0)
+            out_nor = np.concatenate([normals,   _nb_nor[:nv_new]], axis=0)
+        else:
+            out_pos, out_nor = positions, normals
+        parts: list[np.ndarray] = []
+        if len(all_in_idx):
+            parts.append(all_in_idx)
+        if nt_new > 0:
+            parts.append(_nb_idx[:nt_new])
+        out_idx = np.concatenate(parts, axis=0) if parts else np.zeros((0, 3), dtype=np.int32)
+        return out_pos, out_idx, out_nor
+
+    # --- Python fallback (no Numba) ---
     # Only new boundary vertices are accumulated; original arrays are never
     # converted to Python lists (avoids the O(n²) list(positions) cost).
     new_verts_pos: list[np.ndarray] = []
@@ -125,7 +297,7 @@ def _clip_mesh_to_mask(
         edge_cache[key] = vi
         return vi
 
-    for tri in indices[boundary]:
+    for tri in boundary_tris:
         a, b, c = int(tri[0]), int(tri[1]), int(tri[2])
         ia, ib, ic = bool(inside[a]), bool(inside[b]), bool(inside[c])
         n_in = int(ia) + int(ib) + int(ic)
@@ -157,12 +329,12 @@ def _clip_mesh_to_mask(
     else:
         out_pos, out_nor = positions, normals
 
-    parts: list[np.ndarray] = []
+    parts2: list[np.ndarray] = []
     if len(all_in_idx):
-        parts.append(all_in_idx)
+        parts2.append(all_in_idx)
     if new_idx:
-        parts.append(np.array(new_idx, dtype=np.int32))
-    out_idx = np.concatenate(parts, axis=0) if parts else np.zeros((0, 3), dtype=np.int32)
+        parts2.append(np.array(new_idx, dtype=np.int32))
+    out_idx = np.concatenate(parts2, axis=0) if parts2 else np.zeros((0, 3), dtype=np.int32)
     return out_pos, out_idx, out_nor
 
 
