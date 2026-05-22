@@ -65,31 +65,42 @@ JIT warmup: ~2.1 s first call in a fresh process; ~323 ms when loading the compi
 
 ---
 
-## Current Benchmark — After PERF-001 (2026-05-22, n=128, 60 frames, GC disabled)
+## Current Benchmark — After PERF-001 + PERF-015 + PERF-016 (independently verified 2026-05-22, n=128, 60 frames, GC disabled)
 
 Run via `python tests/bench_slider_animation.py --n 128 --frames 60 --no-gc`.
 
-**PERF-001 closed:** DAG cache hit cost is **<0.01 ms** (dict key comparison only), down from **2.23 ms** per tick (full AST rebuild). Total estimated frame drops to **~13.2 ms** (40% of 33 ms budget).
+**All three fixes independently verified. Developer claims confirmed within timing variance.**
+
+| Component | Dev claimed | Measured | Verdict |
+|-----------|------------|----------|---------|
+| DAG cache hit (PERF-001) | <0.01 ms | **0.00 ms** | ✓ |
+| Cell eval chain | 5.35 ms | **5.14 ms** | ✓ |
+| `make_surface_mesh` | 4.07 ms | **4.09 ms** | ✓ |
+| `execute_recurrence` | 3.35 ms | **3.32 ms** | ✓ |
+| `make_scatter_mesh` (path) | 0.75 ms | **0.80 ms** | ✓ |
+| **Total CPU frame** | **~13.2 ms** | **13.34 ms** | ✓ |
 
 **Animation frame budget (β-slider, constrained surface, full accounting):**
 
 | Component | Mean ms | P95 ms | % of 33ms budget | Notes |
 |-----------|---------|--------|-----------------|-------|
-| DAG cache hit (PERF-001 closed) | **<0.01** | <0.01 | 0% | Was 2.23 ms (full rebuild) |
-| Cell evaluation chain (β downstream) | **5.35** | 6.89 | 16% | |
-| ↳ `z_surface` computation | 3.10 | 4.70 | 9% | |
-| `make_surface_mesh` (full, includes clip) | **4.07** | 4.93 | 12% | |
-| ↳ `_clip_mesh_to_mask` (Numba, PERF-011 closed) | 1.26 | 1.61 | 4% | |
-| ↳ `_grid_gradients + _grid_normals` | 1.24 | 1.28 | 4% | |
-| ↳ `_grid_indices` | 0.17 | 0.25 | 1% | |
-| AST pipeline (6 downstream cells, PERF-006) | 1.12 | 1.38 | 3% | |
-| `execute_recurrence` (200 steps, PERF-013 closed) | **3.35** | 3.61 | 10% | |
-| `make_scatter_mesh` (200-pt path output, PERF-014) | **0.75** | 0.86 | 2% | |
-| **Estimated total CPU frame** | **~13.2** | ~15.1 | **40%** | |
+| DAG cache hit (PERF-001 closed) | **0.00** | 0.00 | 0% | Was 2.18 ms (full rebuild, >200× speedup) |
+| Cell evaluation chain (β downstream) | **5.14** | 7.04 | 16% | |
+| ↳ `z_surface` computation | 2.96 | 4.82 | 9% | |
+| `make_surface_mesh` (full, includes clip) | **4.09** | 4.93 | 12% | |
+| ↳ `_clip_mesh_to_mask` (Numba, PERF-011 closed) | 1.16 | 1.41 | 4% | |
+| ↳ `_grid_gradients + _grid_normals` | 0.49 | 0.64 | 2% | |
+| ↳ `_grid_indices` | 0.14 | 0.18 | 0% | |
+| AST pipeline (6 downstream cells, PERF-006) | 1.09 | 1.23 | 3% | |
+| `execute_recurrence` (200 steps, PERF-013 closed) | **3.32** | 3.70 | 10% | When path_xy visible |
+| `make_scatter_mesh` (200-pt path output, PERF-014) | **0.80** | 0.91 | 2% | When path_xy visible |
+| **Estimated total CPU frame** | **13.34** | 14.99 | **40%** | |
 
 **Result: PASS at 40% of 33 ms budget.** With GPU (~9–10 ms) estimated wall-clock is **~22 ms → ~45 fps**.
 
-**Camera feel:** Eval runs off the main thread (PERF-015 closed). Camera events are processed continuously at 60 fps regardless of eval cost. The ~13 ms CPU eval time is now background work only.
+**Camera feel:** Eval runs off the main thread (PERF-015 closed). Camera events processed at 60 fps regardless of eval cost; `_eval_busy` flag coalesces rapid animation ticks so queued frames are never accumulated. PERF-015 cannot be directly benchmarked headless — verified structurally: `_EvalWorker` / `QThread` worker, generation counter for stale result discard, `eval_threaded=False` in test suite for deterministic synchronous execution.
+
+**PERF-016 invisible skip:** When path_xy is toggled off, `execute_recurrence` (3.32 ms) + `make_scatter_mesh` (0.80 ms) are skipped entirely → total drops to **~9.2 ms** (~28% of budget). Two tests confirm skip case and ancestor-still-evaluated case.
 
 **Cumulative optimization summary:**
 
