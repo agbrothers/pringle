@@ -6,6 +6,29 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-014 — Vector / arrow rendering (flow chains and explicit tail+head pairs)
+**Status:** Closed (implemented 2026-05-22)
+
+**Implementation:**
+
+Two distinct render modes:
+
+1. **Vector field mode** — an `(N, 6)` array (columns 0–2 = tail, 3–5 = head) detected via `_detect_shape` in `evaluator.py` produces `render_type = "vectors"`. An `(N, 4)` array produces `render_type = "vectors_2d"` (2D tail+head pairs; z columns are zero-padded before dispatch). `_detect_shape` checks for `(N, 6)` and `(N, 4)` before the existing `(N, 3)` / `(N, 2)` scatter checks so a 6-column array is never misread.
+
+2. **Flow mode** — when `scatter_render_mode == "arrows"` on a scatter cell, consecutive scatter points are converted to N−1 arrows via `np.concatenate([pts[:-1], pts[1:]], axis=1)` in `_on_cell_result`.
+
+**Arrow geometry** (`renderer.py`): `_build_unit_arrow_geometry()` builds a shaft cylinder + cone head combined into a single `gfx.Geometry` (unit arrow pointing along +Z, z ∈ [0, 1]). Stored as a module-level singleton `_ARROW_GEO`. `_arrow_matrix(tail, head)` produces the 4×4 float32 instance transform (Rodrigues rotation + Z-column scale by length, translation = tail). `make_arrow_mesh(arrows, color, opacity, normalize)` creates a `gfx.InstancedMesh` — one draw call for all N arrows.
+
+**`CellStyle`**: added `normalize_arrows: bool = False` — pins all arrows to equal length (mean magnitude). Shown as a "Normalize lengths" checkbox in `StylePopoverWidget`: always visible when `show_normalize=True` (vector cells), dynamically shown/hidden when Arrows radio is selected (scatter cells). `scatter_render_mode` extended with `"arrows"` as a fourth option.
+
+**Tracking**: `cell_widget.py` / `cell_list.py` maintain `_is_vector_cell` on `CellWidget` (analogous to `_data_mode`) and set it from `_CellWorkerResult.is_vector` in both the synchronous and threaded eval paths.
+
+**Session**: `normalize_arrows` serialized to YAML alongside other style fields; read back with `False` fallback for old files.
+
+**Tests**: `tests/test_vectors.py` — shape detection, run_cell end-to-end, `_arrow_matrix` correctness, `make_arrow_mesh` GPU tests (skipped when GPU unavailable), flow-mode consecutive-pair logic.
+
+---
+
 ### FEAT-026 — Drop shadow projected onto bottom plane of bounding box
 **Status:** Closed (implemented prior to 2026-05-21)
 

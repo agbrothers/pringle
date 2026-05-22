@@ -360,6 +360,108 @@ def _apply_colormap(
     return cmap(norm).astype(np.float32)
 
 
+def _build_unit_arrow_geometry(
+    shaft_r: float = 0.03,
+    head_r: float = 0.09,
+    head_frac: float = 0.25,
+    segments: int = 8,
+) -> gfx.Geometry:
+    """Shaft cylinder + cone head, combined into one Geometry. Unit arrow points along +Z, z ∈ [0, 1]."""
+    shaft_h = 1.0 - head_frac
+    head_h  = head_frac
+
+    sg = gfx.cylinder_geometry(radius_bottom=shaft_r, radius_top=shaft_r,
+                               height=shaft_h, radial_segments=segments)
+    sp = sg.positions.data.copy(); sp[:, 2] += shaft_h / 2
+    sn = sg.normals.data.copy()
+
+    cg = gfx.cylinder_geometry(radius_bottom=head_r, radius_top=0.0,
+                               height=head_h, radial_segments=segments)
+    cp = cg.positions.data.copy(); cp[:, 2] += shaft_h + head_h / 2
+    cn = cg.normals.data.copy()
+
+    positions = np.concatenate([sp, cp], axis=0)
+    normals   = np.concatenate([sn, cn], axis=0)
+    indices   = np.concatenate([sg.indices.data,
+                                cg.indices.data + len(sp)], axis=0)
+    return gfx.Geometry(positions=positions.astype(np.float32),
+                        normals=normals.astype(np.float32),
+                        indices=indices.astype(np.int32))
+
+
+_ARROW_GEO: gfx.Geometry | None = None  # module-level singleton; built once
+
+
+def _arrow_matrix(tail: np.ndarray, head: np.ndarray) -> np.ndarray | None:
+    """
+    4×4 float32 transform that rotates/scales the unit +Z arrow to point from tail to head.
+    Returns None for zero-length arrows (skipped by caller).
+    """
+    d = np.asarray(head, dtype=np.float64) - np.asarray(tail, dtype=np.float64)
+    L = float(np.linalg.norm(d))
+    if L < 1e-10:
+        return None
+    d_hat = d / L
+
+    z = np.array([0.0, 0.0, 1.0])
+    axis = np.cross(z, d_hat)
+    s = float(np.linalg.norm(axis))
+    c = float(np.dot(z, d_hat))
+
+    if s < 1e-8:  # parallel or anti-parallel
+        R = np.eye(3) if c > 0 else np.diag([1.0, -1.0, -1.0])
+    else:
+        axis /= s
+        K = np.array([[ 0,       -axis[2],  axis[1]],
+                       [ axis[2],  0,       -axis[0]],
+                       [-axis[1],  axis[0],  0      ]])
+        R = np.eye(3) + s * K + (1 - c) * (K @ K)  # Rodrigues
+
+    M = np.eye(4, dtype=np.float32)
+    M[:3, 0] = R[:, 0]
+    M[:3, 1] = R[:, 1]
+    M[:3, 2] = R[:, 2] * L  # Z column scaled by length
+    M[:3, 3] = tail.astype(np.float32)
+    return M
+
+
+def make_arrow_mesh(
+    arrows: np.ndarray,               # (N, 6): [tail_x,y,z, head_x,y,z]
+    color: tuple = (0.9, 0.6, 0.1, 1.0),
+    opacity: float = 1.0,
+    normalize: bool = False,
+) -> gfx.InstancedMesh:
+    """
+    Build a pygfx InstancedMesh of 3D arrows from an (N, 6) array of tail+head pairs.
+
+    normalize=True pins all arrows to equal length (mean magnitude) so that
+    vector field direction is visually dominant over magnitude.
+    """
+    global _ARROW_GEO
+    if _ARROW_GEO is None:
+        _ARROW_GEO = _build_unit_arrow_geometry()
+
+    arrows = np.asarray(arrows, dtype=np.float32)
+    tails, heads = arrows[:, :3], arrows[:, 3:]
+
+    if normalize:
+        mags = np.linalg.norm(heads - tails, axis=1, keepdims=True)
+        mean_mag = float(np.nanmean(mags))
+        dirs = (heads - tails) / np.maximum(mags, 1e-10)
+        heads = tails + dirs * mean_mag
+
+    mat = gfx.MeshPhongMaterial(color=color, side="front")
+    if opacity < 1.0:
+        mat.opacity = opacity
+        mat.alpha_mode = "weighted_blend"
+    mesh = gfx.InstancedMesh(_ARROW_GEO, mat, len(arrows))
+    for i, (t, h) in enumerate(zip(tails, heads)):
+        M = _arrow_matrix(t, h)
+        if M is not None:
+            mesh.set_matrix_at(i, M)
+    return mesh
+
+
 def make_surface_mesh(
     x: np.ndarray,
     y: np.ndarray,

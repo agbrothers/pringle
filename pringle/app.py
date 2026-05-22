@@ -26,7 +26,7 @@ from PyQt6.QtGui import QKeySequence, QShortcut, QKeyEvent
 from rendercanvas.qt import QRenderWidget
 
 import pygfx as gfx
-from pringle.renderer import PringleRenderer, make_line_mesh, make_scatter_mesh
+from pringle.renderer import PringleRenderer, make_line_mesh, make_scatter_mesh, make_arrow_mesh
 from pringle.grid import GridConfig, Grid, make_grid
 from pringle.evaluator import run_cell, CellResult
 from pringle.style import CellStyle
@@ -628,12 +628,34 @@ class PringleWindow(QMainWindow):
                                       thickness=style.line_width,
                                       colormap=cmap, colormap_reversed=cmap_rev)
                 vp.add_object(cell_id, line)
+            elif mode == "arrows":
+                # Flow mode: N−1 arrows between consecutive scatter points
+                pts = result.data
+                if len(pts) >= 2:
+                    arrows = np.concatenate([pts[:-1], pts[1:]], axis=1)  # (N-1, 6)
+                    obj = make_arrow_mesh(arrows, color=style.color, opacity=style.opacity,
+                                         normalize=style.normalize_arrows)
+                    vp.add_object(cell_id, obj)
+                else:
+                    vp.remove_object(cell_id)
             else:
                 scatter = make_scatter_mesh(result.data, color=style.color, opacity=style.opacity,
                                             size=style.point_size,
                                             as_spheres=(mode == "spheres"),
                                             colormap=cmap, colormap_reversed=cmap_rev)
                 vp.add_object(cell_id, scatter)
+
+        elif result.render_type in ("vectors", "vectors_2d"):
+            data = result.data
+            if result.render_type == "vectors_2d":
+                # Promote 2D tail+head (N, 4) to 3D (N, 6) by inserting z=0 columns
+                data = np.column_stack([
+                    data[:, :2], np.zeros(len(data), dtype=np.float32),
+                    data[:, 2:], np.zeros(len(data), dtype=np.float32),
+                ])
+            obj = make_arrow_mesh(data, color=style.color, opacity=style.opacity,
+                                  normalize=style.normalize_arrows)
+            vp.add_object(cell_id, obj)
 
         else:
             # No renderable output (comment, slider, error, or hidden) — clear

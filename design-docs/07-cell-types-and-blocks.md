@@ -28,7 +28,7 @@ Output type is determined by which magic name is assigned. These take priority o
 | `x` | Curve (implicit role) | `(N,)` float, matching `y` grid | `x = sin(y)` |
 | `xyz` | Parametric surface or curve | `(3, N, M)` or `(3, N)` float | `xyz = array([cos(u), sin(u), v])` |
 | `points` | Scatter plot | `(N, 3)` or `(N, 2)` float | `points = d` |
-| `vectors` | Vector field | future | |
+| `vectors` | Vector field | `(N, 6)` float — tail+head pairs | via shape inference (see below) |
 
 ---
 
@@ -87,6 +87,8 @@ A cell whose content is a bare expression (no assignment) is auto-detected and p
 
 | Return shape | Render type | Preview shown |
 |---|---|---|
+| `(N, 6)` | Vectors (3D tail+head pairs) | shape |
+| `(N, 4)` | Vectors 2D (2D tail+head pairs, z=0) | shape |
 | `(N, 3)` | 3D scatter | shape e.g. `(100, 3)` |
 | `(N, 2)` | 2D scatter | shape |
 | `(3,)` | Single 3D point (scatter) | element values + shape `(1, 3)` |
@@ -95,6 +97,8 @@ A cell whose content is a bare expression (no assignment) is auto-detected and p
 | `(N,)` | No render | first k element values |
 | `(N, M)` not matching grid | No render | — |
 | Python list | No render | — |
+
+Vector arrays are detected before scatter so `(N, 6)` is never misread as `(N, 3)`. `(N, 6)` arrays render as 3D arrows (tail and head in columns 0–2 and 3–5). `(N, 4)` arrays render as 2D arrows in the z=0 plane. Setting `scatter_render_mode = "arrows"` on a scatter cell converts N consecutive scatter points into N−1 flow arrows (each point → next).
 
 This applies to cells like `dx(p)` (bare function call returning a scalar) or `array([dx(p), dy(p), dz(p)])` (bare expression returning a 1D array). The return value is captured via `eval` after `exec` and formatted for the preview label.
 

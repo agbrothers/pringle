@@ -41,6 +41,7 @@ class CellStyle:
     scatter_render_mode: str = "circles"  # "circles" | "line" | "spheres"
     colormap: str | None = None       # None = uniform color; one of COLORMAPS for gradient
     colormap_reversed: bool = False   # reverse colormap direction
+    normalize_arrows: bool = False    # pin all arrows to equal length
 
     def color_hex(self) -> str:
         r, g, b, _ = self.color

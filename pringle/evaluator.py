@@ -107,9 +107,14 @@ def _detect_shape(val: Any) -> tuple[str | None, Any]:
     Infer render type from the shape of a bare expression return value.
 
     Returns (render_type, data) or (None, None) if not plottable.
+    Vector shapes take priority over scatter so (N, 6) is never misread as (N, 3).
     """
     if not isinstance(val, np.ndarray):
         return None, None
+    if val.ndim == 2 and val.shape[1] == 6:
+        return "vectors", val       # 3D tail+head pairs
+    if val.ndim == 2 and val.shape[1] == 4:
+        return "vectors_2d", val    # 2D tail+head pairs (z=0 plane)
     if val.ndim == 2 and val.shape[1] == 3:
         return "scatter", val
     if val.ndim == 2 and val.shape[1] == 2:
@@ -419,9 +424,10 @@ def run_cell(
 
     # --- Output detection ---
     render_type, data = _detect_magic(local_ns, grid, user_stores)
-    # Scatter detected via shape (not explicit `points = ...`) → data-array mode
+    # Scatter/vector detected via shape (not explicit `points = ...`) → data-array mode
     result.from_shape_inference = (
-        render_type in ("scatter", "scatter_2d") and "points" not in user_stores
+        render_type in ("scatter", "scatter_2d", "vectors", "vectors_2d")
+        and "points" not in user_stores
     )
 
     # Auto-render for function definitions: f(x,y) = expr → evaluate as surface
@@ -530,6 +536,13 @@ def run_cell(
             data = np.asarray(data, dtype=np.float32)
         except (TypeError, ValueError):
             result.error = f"Scatter data must be numeric (got {type(data).__name__})"
+            return result
+
+    elif render_type in ("vectors", "vectors_2d"):
+        try:
+            data = np.asarray(data, dtype=np.float32)
+        except (TypeError, ValueError):
+            result.error = f"Vector data must be numeric (got {type(data).__name__})"
             return result
 
     elif render_type == "parametric":

@@ -262,6 +262,7 @@ class CellWidget(QWidget):
         self._visible: bool = True
         self._sub_cells: list[SubCell] = []
         self._data_mode: bool = False
+        self._is_vector_cell: bool = False
         self._debounce_connected: bool = True  # textChanged → debounce connected
 
         self._build_ui()
@@ -558,6 +559,12 @@ class CellWidget(QWidget):
     def is_data_mode(self) -> bool:
         return self._data_mode
 
+    def set_vector_cell(self, enabled: bool) -> None:
+        self._is_vector_cell = enabled
+
+    def is_vector_cell(self) -> bool:
+        return self._is_vector_cell
+
     def set_style(self, style: CellStyle) -> None:
         self.style = style
         self._update_color_dot()
@@ -624,7 +631,8 @@ class CellWidget(QWidget):
 
     def _on_color_dot_clicked(self):
         from pringle.style_popover import StylePopoverWidget
-        popover = StylePopoverWidget(self.style, parent=self, show_render_mode=self._data_mode)
+        popover = StylePopoverWidget(self.style, parent=self, show_render_mode=self._data_mode,
+                                     show_normalize=self._is_vector_cell)
         popover.style_changed.connect(self._on_style_changed)
         pos = self._color_dot.mapToGlobal(self._color_dot.rect().bottomLeft())
         popover.move(pos)

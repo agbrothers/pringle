@@ -47,7 +47,8 @@ cells:
       point_size: 0.1
       colormap: null                    # null or matplotlib colormap name
       colormap_reversed: false
-      scatter_render_mode: "circles"    # "circles" | "line" | "spheres"
+      scatter_render_mode: "circles"    # "circles" | "line" | "spheres" | "arrows"
+      normalize_arrows: false
     sub_cells:
       - type: constraint           # constraint | condition | initial_condition | recursion
         source: "x**2 + y**2 < 4"
@@ -131,7 +132,8 @@ All `CellStyle` fields are persisted per cell. Fields added after the initial v1
 | `point_size` | float | `0.1` | World-space units |
 | `colormap` | str or null | `null` | matplotlib colormap name; null = flat color |
 | `colormap_reversed` | bool | `false` | |
-| `scatter_render_mode` | str | `"circles"` | `"circles"` \| `"line"` \| `"spheres"` |
+| `scatter_render_mode` | str | `"circles"` | `"circles"` \| `"line"` \| `"spheres"` \| `"arrows"` |
+| `normalize_arrows` | bool | `false` | Pin all flow/vector arrows to equal length |
 
 Old session files with boolean `scatter_as_line` or `scatter_as_spheres` flags are migrated to `scatter_render_mode` by a `_load_scatter_mode()` helper in `session.py`.
 

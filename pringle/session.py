@@ -78,6 +78,7 @@ def cell_to_dict(cell, folder_id: str | None = None) -> dict:
             "scatter_render_mode": cell.style.scatter_render_mode,
             "colormap":           cell.style.colormap,
             "colormap_reversed":  cell.style.colormap_reversed,
+            "normalize_arrows":   cell.style.normalize_arrows,
         },
     }
 
@@ -237,6 +238,7 @@ def restore_cell_list(
             scatter_render_mode=_load_scatter_mode(style_data),
             colormap=style_data.get("colormap", None),
             colormap_reversed=bool(style_data.get("colormap_reversed", False)),
+            normalize_arrows=bool(style_data.get("normalize_arrows", False)),
         )
         cell_id = data.get("id")
         folder_id = data.get("folder_id")

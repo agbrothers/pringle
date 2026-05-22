@@ -11,7 +11,7 @@ import numpy as np
 from dataclasses import replace
 from PyQt6.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QLabel,
-    QDoubleSpinBox, QLineEdit, QPushButton, QButtonGroup, QRadioButton,
+    QDoubleSpinBox, QLineEdit, QPushButton, QButtonGroup, QRadioButton, QCheckBox,
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap, QIcon
@@ -44,10 +44,12 @@ class StylePopoverWidget(QFrame):
 
     style_changed = pyqtSignal(object)  # CellStyle
 
-    def __init__(self, style: CellStyle, parent=None, show_render_mode: bool = False):
+    def __init__(self, style: CellStyle, parent=None, show_render_mode: bool = False,
+                 show_normalize: bool = False):
         super().__init__(parent)
         self._style = replace(style)  # work on a copy
         self._show_render_mode = show_render_mode
+        self._show_normalize = show_normalize
         self.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
         self.setFrameShape(QFrame.Shape.Box)
         self.setLineWidth(1)
@@ -62,7 +64,7 @@ class StylePopoverWidget(QFrame):
         )
         self._build_ui()
 
-    _RENDER_MODES = ["circles", "line", "spheres"]
+    _RENDER_MODES = ["circles", "line", "spheres", "arrows"]
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
@@ -141,7 +143,7 @@ class StylePopoverWidget(QFrame):
             self._render_group = QButtonGroup(self)
             _rb_style = "QRadioButton { color: #ccc; font-size: 12px; }"
             for i, (label, mode) in enumerate([
-                ("Circles", "circles"), ("Line", "line"), ("Spheres", "spheres")
+                ("Circles", "circles"), ("Line", "line"), ("Spheres", "spheres"), ("Arrows", "arrows")
             ]):
                 btn = QRadioButton(label)
                 btn.setChecked(self._style.scatter_render_mode == mode)
@@ -153,6 +155,23 @@ class StylePopoverWidget(QFrame):
             top_row.addLayout(left_col)
             top_row.addLayout(right_col)
             layout.addLayout(top_row)
+
+            # Normalize checkbox — shown only when Arrows mode is active
+            self._norm_cb = QCheckBox("Normalize lengths")
+            self._norm_cb.setChecked(self._style.normalize_arrows)
+            self._norm_cb.setStyleSheet("QCheckBox { color: #ccc; font-size: 12px; }")
+            self._norm_cb.toggled.connect(self._on_normalize_changed)
+            self._norm_row = self._norm_cb
+            layout.addWidget(self._norm_cb)
+            self._norm_cb.setVisible(self._style.scatter_render_mode == "arrows")
+
+        elif self._show_normalize:
+            # Standalone normalize row for vector-type cells (always arrows, no mode choice)
+            self._norm_cb = QCheckBox("Normalize lengths")
+            self._norm_cb.setChecked(self._style.normalize_arrows)
+            self._norm_cb.setStyleSheet("QCheckBox { color: #ccc; font-size: 12px; }")
+            self._norm_cb.toggled.connect(self._on_normalize_changed)
+            layout.addWidget(self._norm_cb)
 
         # --- Colormap section ---
         cmap_label_row = QHBoxLayout()
@@ -232,7 +251,14 @@ class StylePopoverWidget(QFrame):
     def _on_render_mode_changed(self, btn_id: int, checked: bool) -> None:
         if checked:
             self._style = replace(self._style, scatter_render_mode=self._RENDER_MODES[btn_id])
+            if hasattr(self, "_norm_cb"):
+                self._norm_cb.setVisible(self._style.scatter_render_mode == "arrows")
+                self.adjustSize()
             self.style_changed.emit(self._style)
+
+    def _on_normalize_changed(self, checked: bool) -> None:
+        self._style = replace(self._style, normalize_arrows=checked)
+        self.style_changed.emit(self._style)
 
     def _on_cmap_selected(self, name: str):
         new_cmap = None if self._style.colormap == name else name

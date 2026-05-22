@@ -51,7 +51,7 @@ class CellStyle:
     point_size: float = 0.1    # world-space units; scatter dots
     colormap: str | None = None             # matplotlib colormap name; None = flat color
     colormap_reversed: bool = False
-    scatter_render_mode: str = "circles"    # "circles" | "line" | "spheres"
+    scatter_render_mode: str = "circles"    # "circles" | "line" | "spheres" | "arrows"
     normalize_arrows: bool = False          # pin all flow/vector arrows to equal length
     show_critical_points: bool = False      # overlay critical point markers on surfaces
 ```
@@ -60,7 +60,7 @@ class CellStyle:
 
 All `CellStyle` fields are serialized to YAML on save and restored on load. Default colors are assigned from a preset palette (cycling as cells are added).
 
-The style popover (`StylePopoverWidget`) shows a two-column layout when `show_render_mode=True` (data cells): the left column holds Color/Opacity/Size spinboxes; the right column holds Circles/Line/Spheres radio buttons. A colormap swatch row (5 gradient buttons, 48×28 px each, rendered via matplotlib) and a ⇄ reverse toggle appear below. Clicking the active swatch deselects it (reverts to flat color).
+The style popover (`StylePopoverWidget`) shows a two-column layout when `show_render_mode=True` (data cells): the left column holds Color/Opacity/Size spinboxes; the right column holds Circles/Line/Spheres/Arrows radio buttons. When Arrows is selected, a "Normalize lengths" checkbox appears below the radio column. A `show_normalize=True` flag (passed for vector-type cells) renders the normalize checkbox as a standalone row without the mode radios. A colormap swatch row (5 gradient buttons, 48×28 px each, rendered via matplotlib) and a ⇄ reverse toggle appear below. Clicking the active swatch deselects it (reverts to flat color).
 
 ## Implementation: pygfx
 

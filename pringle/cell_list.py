@@ -69,6 +69,7 @@ class _CellWorkerResult:
     preview: str | None
     shape_preview: str | None
     should_be_data: bool
+    is_vector: bool
     is_visible: bool
 
 
@@ -78,7 +79,7 @@ def _eval_spec(spec: _CellSpec, shared: dict, grid: Grid) -> _CellWorkerResult:
         return _CellWorkerResult(
             cell_id=spec.cell_id, result=CellResult(), style=spec.style,
             error=None, warning=None, preview=None, shape_preview=None,
-            should_be_data=False, is_visible=spec.is_visible,
+            should_be_data=False, is_vector=False, is_visible=spec.is_visible,
         )
     try:
         result = run_cell(
@@ -129,6 +130,7 @@ def _eval_spec(spec: _CellSpec, shared: dict, grid: Grid) -> _CellWorkerResult:
         result.from_shape_inference
         and result.render_type in ("scatter", "scatter_2d")
     )
+    is_vector = result.render_type in ("vectors", "vectors_2d")
     return _CellWorkerResult(
         cell_id=spec.cell_id,
         result=result,
@@ -138,6 +140,7 @@ def _eval_spec(spec: _CellSpec, shared: dict, grid: Grid) -> _CellWorkerResult:
         preview=result.preview,
         shape_preview=result.shape_preview,
         should_be_data=should_be_data,
+        is_vector=is_vector,
         is_visible=spec.is_visible,
     )
 
@@ -770,6 +773,10 @@ class CellListWidget(QWidget):
         if should_be_data != cell.is_data_mode():
             cell.set_data_mode(should_be_data)
 
+        is_vector = result.render_type in ("vectors", "vectors_2d")
+        if is_vector != cell.is_vector_cell():
+            cell.set_vector_cell(is_vector)
+
         return result
 
     # ------------------------------------------------------------------
@@ -1008,6 +1015,8 @@ class CellListWidget(QWidget):
                     cell._last_result = wr.result
                     if wr.should_be_data != cell.is_data_mode():
                         cell.set_data_mode(wr.should_be_data)
+                    if wr.is_vector != cell.is_vector_cell():
+                        cell.set_vector_cell(wr.is_vector)
                 if wr.is_visible:
                     self._on_cell_result(wr.cell_id, wr.result, wr.style)
                 else:

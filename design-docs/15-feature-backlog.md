@@ -7,139 +7,6 @@ See [17-closed-features.md](17-closed-features.md) for implemented features.
 
 ---
 
-### FEAT-037 — GPU-accelerated expression evaluation (design decision log)
-**Status:** Open — decision pending  
-**Logged:** 2026-05-20  
-**Related:** PERF-002, PERF-003, PERF-004 in [18-performance-backlog.md](18-performance-backlog.md)
-
-**Background:**  
-The expression evaluation pipeline (numpy CPU → numpy arrays → wgpu GPU upload) has three distinct cost layers: the expression computation itself, the Python-loop geometry construction, and the GPU buffer upload. PERF-003/004 address the geometry loops. This entry documents the options for accelerating the computation layer and reducing the GPU upload cost, and records why each option was or was not selected.
-
-**The core constraint: GPU-to-GPU transfer is not free.**  
-Moving expression evaluation to a GPU-accelerated library (JAX, PyTorch, CuPy) does not automatically enable sharing data with wgpu. Each library exposes tensors backed by GPU memory (CUDA or Metal), but wgpu's buffer API accepts numpy arrays or raw bytes — not foreign GPU tensors. The practical path for all of these libraries is still `tensor.cpu().numpy()` → `gfx.Geometry` → wgpu upload. At n=128 the CPU roundtrip costs ~0.5ms; this is a real overhead but small compared to the compute savings.
-
-True zero-copy GPU-to-GPU transfer would require either DLPack interop (not currently implemented in pygfx/wgpu-py) or writing compute shaders inside wgpu itself (see option G below).
-
----
-
-**Option A — JAX**  
-`jax.numpy` is nearly API-compatible with numpy. Supports JIT compilation, GPU via XLA (CUDA or Metal via `jax-metal`), and full autodiff via `jax.grad`.
-
-*Advantages:* Near-identical API; autograd opens new mathematical capabilities (parameter-space gradients, implicit surface finding); JIT compilation can speed expression evaluation by 5–50×.
-
-*Blockers for Pringle:*  
-- **Immutability.** JAX arrays are immutable; in-place operations (`arr[n] = f(arr[n-1])`) silently fail or raise. The recurrence relation engine (`recurrence.py`) is built around mutable numpy arrays — rewriting it for `jax.lax.scan` would be a major redesign.  
-- **Cross-platform uncertainty.** `jax-metal` (macOS) is an experimental backend with inconsistent coverage of JAX ops. Linux/Windows CUDA installs require matching driver versions.  
-- **Dependency weight.** JAX adds ~500MB of compiled XLA binaries. Current pringle install is trivially lightweight.
-
-*Verdict: Not recommended as primary backend. Immutability blocks recurrence.*
-
----
-
-**Option B — PyTorch**  
-Widely used GPU tensor library with MPS (Metal) and CUDA backends.
-
-*Advantages:* Mature, widely supported, large ecosystem.
-
-*Blockers for Pringle:*  
-- **Immutability.** PyTorch tensors support in-place ops syntactically (`a[i] = x`) but these don't compose with autograd. Same recurrence problem as JAX.  
-- **API divergence.** `torch.sum(x, dim=0)` vs `np.sum(x, axis=0)` — argument names differ; the namespace whitelist would need significant reworking.  
-- **CUDA version fragmentation.** PyTorch ships different wheels per CUDA version; users must match their driver. This complexity is incompatible with `pip install pringle`.  
-- **Size.** PyTorch CPU-only is ~250MB; GPU variant is ~1.5GB.
-
-*Verdict: Not recommended. Worse than JAX on every relevant dimension for this use case.*
-
----
-
-**Option C — CuPy**  
-A near-exact numpy drop-in (`import cupy as np`) for CUDA GPUs. Minimal API changes — most expressions would work unmodified.
-
-*Advantages:* Essentially zero expression-layer refactor; no immutability issue; recurrence engine works as-is; mutable arrays; identical numpy semantics.
-
-*Blockers for Pringle:*  
-- **CUDA-only.** CuPy has no Metal or CPU fallback. macOS users (the current development platform) get nothing. A numpy fallback could be made automatic, but this creates a two-code-path maintenance burden.  
-- **CUDA dependency.** Same driver-matching problem as PyTorch.
-
-*Verdict: The cleanest API story, but platform exclusion is a hard blocker for now. Worth revisiting if cross-platform GPU compute becomes a requirement and WGSL shaders are not yet ready.*
-
----
-
-**Option D — Numba**  
-JIT compiler for Python + numpy code. Can target CPU (LLVM) or CUDA GPU. Does **not** require changing the expression namespace at all — applies to the renderer's Python-loop bottlenecks rather than user expressions.
-
-*Advantages:*  
-- `@numba.njit` on `_clip_mesh_to_mask` (PERF-004, 170ms at n=128) would likely reduce it to ~1ms with zero changes to the public API or user-facing expression semantics.  
-- No immutability issue — numba compiles standard Python with mutable numpy arrays.  
-- Lightweight dependency; CPU-mode requires no GPU driver.  
-- Could accelerate expression evaluation via `@numba.njit` on lambdas, though eval'd lambdas from `exec()` don't compose directly with numba's AOT compilation model.
-
-*Verdict: **Best near-term option for geometry acceleration.** Does not address expression computation on GPU, but PERF-004 is the dominant bottleneck before expression compute matters. Investigate as part of PERF-004 fix.*
-
----
-
-**Option E — MLX (Apple)**  
-Apple's open-source ML framework. Metal-native, numpy-like API, runs on Apple Silicon GPU. Has autograd.
-
-*Advantages:* Native Metal GPU; numpy-like; would achieve zero-copy with wgpu on macOS (both use Metal) if DLPack support were added to pygfx.
-
-*Blockers:*  
-- macOS/Apple Silicon only — not usable on Linux or Windows.  
-- DLPack interop with wgpu not currently implemented.
-
-*Verdict: Interesting for macOS-only optimization, but platform exclusion makes it unsuitable as a primary backend.*
-
----
-
-**Option F — Taichi**  
-A Python-embedded DSL that compiles to Metal, CUDA, Vulkan, OpenGL, or CPU. Designed for physics simulation and visualization.
-
-*Advantages:* Truly cross-platform GPU (covers macOS, Linux, Windows); could in principle share Metal/Vulkan buffers with wgpu since both target the same backends; data-oriented programming model suits grid computations.
-
-*Blockers:*  
-- Not numpy-compatible — users write Taichi kernels, not numpy expressions. The expression namespace would need a complete redesign.  
-- Large dependency; less mature than numpy/scipy ecosystem.
-
-*Verdict: Interesting for the geometry layer (compute shaders for `_clip_mesh_to_mask`), less so for user-facing expressions.*
-
----
-
-**Option G — WGSL compute shaders (native wgpu) — Recommended long-term path**  
-Write the surface evaluation and geometry construction as compute shaders executing directly inside wgpu. Results live in `GPUBuffer` objects that feed the vertex shader with zero CPU involvement. This is the "v2 GLSL compile" path referenced in the architecture design docs.
-
-*Advantages:*  
-- True zero-copy: compute result → vertex buffer, no CPU roundtrip at all.  
-- Cross-platform: wgpu targets Metal, Vulkan, DX12 — all major platforms.  
-- No new dependencies: wgpu is already a dependency.  
-- Eliminates both PERF-002 (GPU upload) and the expression compute cost in one architecture.
-
-*Cost:*  
-- Requires an expression → WGSL transpiler. The current `exec()`-based eval model cannot be used; a compilable subset of expressions must be defined.  
-- User expressions would be restricted to what can be represented in WGSL (no arbitrary Python, no scipy calls).  
-- Significant implementation effort — effectively a v2 eval engine.  
-- Data cells and recurrence relations would remain on CPU/numpy regardless.
-
-*Verdict: The correct long-term architecture. Should be designed as an optional fast path alongside the existing numpy eval engine rather than a replacement — so that arbitrary Python expressions remain supported for correctness and scipy/recurrence use cases, while simple grid expressions opt into the WGSL path for animation performance.*
-
----
-
-**Summary table:**
-
-| Option | Platform | API change | Recurrence | Dependency | Zero-copy GPU | Recommendation |
-|--------|----------|-----------|------------|------------|--------------|----------------|
-| JAX | CUDA + Metal (exp.) | Low | ✗ breaks | Heavy | No | Blocked by recurrence |
-| PyTorch | CUDA + MPS | Medium | ✗ breaks | Very heavy | No | Not recommended |
-| CuPy | CUDA only | Near-zero | ✓ works | Medium | No | Blocked by platform |
-| **Numba** | **All (CPU+CUDA)** | **None** | **✓ works** | **Light** | **No** | **Best near-term** |
-| MLX | macOS only | Low | ✓ works | Medium | Possible | Platform blocker |
-| Taichi | All | High | ✓ works | Medium | Possible | Complex |
-| **WGSL shaders** | **All** | **N/A (opt-in)** | **✓ unchanged** | **None** | **✓ Yes** | **Best long-term** |
-
-**Recommended path:**  
-1. **Now:** Fix PERF-004 (`_clip_mesh_to_mask`) with Numba `@njit` as a targeted optimization — no architecture change, no new user-facing API.  
-2. **Later:** Design the WGSL compute shader path as an opt-in fast path for simple grid expressions, keeping numpy eval as the fallback for arbitrary Python and scipy/recurrence cells.
-
----
-
 ### FEAT-036 — Critical point markers on surfaces (toggle for animation performance)
 **Status:** Open  
 **Logged:** 2026-05-20
@@ -487,195 +354,6 @@ Add a custom icon for the application window and macOS Dock entry.
 
 ---
 
-### FEAT-014 — Vector / arrow rendering (flow chains and explicit tail+head pairs)
-**Status:** Open  
-**Logged:** 2026-05-16  
-**Updated:** 2026-05-20
-
-**Description:**  
-Render 3D arrows for two distinct use cases:
-
-1. **Flow mode** — given an (N, 3) scatter array, draw N−1 arrows between consecutive pairs of points, visualizing directionality along a path or trajectory.
-2. **Vector field mode** — given an (N, 6) array (columns 0–2 = tail, 3–5 = head), draw N independent arrows as an arbitrary vector field. An (N, 4) array is the 2D version: tail (x, y) and head (x, y) with z=0.
-
-A third option — treating (N, 6) as position + direction vector rather than tail + head — is intentionally not included: it reduces to vector field mode by computing `head = tail + direction`, so no separate mode is needed.
-
----
-
-**Arrow geometry — pygfx backend:**
-
-pygfx has no built-in arrow primitive. The correct approach is a single combined unit-arrow mesh rendered via `gfx.InstancedMesh` — one GPU draw call for all N arrows. The unit arrow points along +Z from `z=0` (tail) to `z=1` (head):
-
-```python
-def _build_unit_arrow_geometry(shaft_r=0.03, head_r=0.09,
-                                head_frac=0.25, segments=8):
-    """Shaft cylinder + cone head, combined into one Geometry."""
-    shaft_h = 1.0 - head_frac   # e.g. 0.75
-    head_h  = head_frac         # e.g. 0.25
-
-    # Shaft: cylinder centered at origin → shift so z ∈ [0, shaft_h]
-    sg = gfx.cylinder_geometry(
-        radius_bottom=shaft_r, radius_top=shaft_r,
-        height=shaft_h, radial_segments=segments)
-    sp = sg.positions.data.copy();  sp[:, 2] += shaft_h / 2
-    sn = sg.normals.data.copy()
-
-    # Head: cone (top radius=0) centered at origin → shift to z ∈ [shaft_h, 1]
-    cg = gfx.cylinder_geometry(
-        radius_bottom=head_r, radius_top=0.0,
-        height=head_h, radial_segments=segments)
-    cp = cg.positions.data.copy();  cp[:, 2] += shaft_h + head_h / 2
-    cn = cg.normals.data.copy()
-
-    positions = np.concatenate([sp, cp], axis=0)
-    normals   = np.concatenate([sn, cn], axis=0)
-    indices   = np.concatenate([sg.indices.data,
-                                 cg.indices.data + len(sp)], axis=0)
-    return gfx.Geometry(positions=positions, normals=normals, indices=indices)
-```
-
-This geometry is built once and cached (module-level singleton). Changing arrow count or direction does not require rebuilding it.
-
-**Per-arrow transform matrix:**
-
-Each arrow is placed by a 4×4 matrix that rotates the unit +Z arrow to the desired direction, scales it to the arrow length, and translates it to the tail position:
-
-```python
-def _arrow_matrix(tail, head):
-    d = np.asarray(head, dtype=np.float64) - tail
-    L = np.linalg.norm(d)
-    if L < 1e-10:
-        return None          # zero-length arrow — skip
-    d_hat = d / L
-
-    z = np.array([0.0, 0.0, 1.0])
-    axis = np.cross(z, d_hat)
-    s = np.linalg.norm(axis)
-    c = float(np.dot(z, d_hat))
-
-    if s < 1e-8:             # parallel or anti-parallel
-        R = np.eye(3) if c > 0 else np.diag([1.0, -1.0, -1.0])
-    else:
-        axis /= s
-        K = np.array([[ 0,       -axis[2],  axis[1]],
-                       [ axis[2],  0,       -axis[0]],
-                       [-axis[1],  axis[0],  0      ]])
-        R = np.eye(3) + s * K + (1 - c) * (K @ K)   # Rodrigues
-
-    # Scale: multiply the Z column by L so the unit arrow becomes length L
-    M = np.eye(4, dtype=np.float32)
-    M[:3, 0] = R[:, 0]
-    M[:3, 1] = R[:, 1]
-    M[:3, 2] = R[:, 2] * L   # Z column scaled by arrow length
-    M[:3, 3] = tail           # tail is the origin of the unit arrow (z=0)
-    return M
-```
-
-**`make_arrow_mesh` function (`renderer.py`):**
-
-```python
-_ARROW_GEO = None   # module-level cache
-
-def make_arrow_mesh(arrows: np.ndarray,   # (N, 6): [tail_x,y,z, head_x,y,z]
-                    color=(0.9, 0.6, 0.1, 1.0),
-                    normalize: bool = False) -> gfx.InstancedMesh:
-    global _ARROW_GEO
-    if _ARROW_GEO is None:
-        _ARROW_GEO = _build_unit_arrow_geometry()
-
-    tails, heads = arrows[:, :3], arrows[:, 3:]
-    if normalize:
-        # Pin all arrows to the same length (mean magnitude)
-        mags = np.linalg.norm(heads - tails, axis=1, keepdims=True)
-        mean_mag = float(np.nanmean(mags))
-        dirs = (heads - tails) / np.maximum(mags, 1e-10)
-        heads = tails + dirs * mean_mag
-
-    mat = gfx.MeshPhongMaterial(color=color, side="front")
-    mesh = gfx.InstancedMesh(_ARROW_GEO, mat, len(arrows))
-    valid = 0
-    for i, (t, h) in enumerate(zip(tails, heads)):
-        M = _arrow_matrix(t, h)
-        if M is not None:
-            mesh.set_matrix_at(i, M)
-            valid += 1
-    return mesh
-```
-
----
-
-**Shape detection and render types:**
-
-Extend `_detect_shape` (`evaluator.py`) to recognise vector arrays before the existing scatter checks:
-
-```python
-if val.ndim == 2 and val.shape[1] == 6:
-    return "vectors", val       # 3D tail+head pairs
-if val.ndim == 2 and val.shape[1] == 4:
-    return "vectors_2d", val    # 2D tail+head pairs (z=0 plane)
-```
-
-Priority: `(N, 6)` → vectors before `(N, 3)` → scatter, so a 6-column array is never misread as scatter.
-
-For 2D vectors, promote to 3D before passing to `make_arrow_mesh`:
-```python
-arrows_3d = np.column_stack([val[:, :2],
-                              np.zeros(len(val)),
-                              val[:, 2:4],
-                              np.zeros(len(val))])
-```
-
-**Flow mode — consecutive-pair arrows:**
-
-Flow mode is a fourth option in the scatter render mode radio selector (FEAT-033), alongside "Circles", "Line", "Spheres". When `scatter_render_mode == "arrows"`:
-
-```python
-pts = result.data   # (N, 3) scatter array
-arrows = np.concatenate([pts[:-1], pts[1:]], axis=1)   # (N-1, 6)
-obj = make_arrow_mesh(arrows, color=style.color,
-                      normalize=style.normalize_arrows)
-```
-
-This converts a trajectory into N−1 flow arrows with no change to the evaluator — just the render dispatch in `_on_cell_result`.
-
----
-
-**`CellStyle` additions:**
-
-```python
-normalize_arrows: bool = False   # pin all arrows to equal length
-```
-
-The normalize toggle appears in the style popover alongside the render mode radio buttons (only visible when render mode is "arrows" or render type is "vectors"/"vectors_2d"). Persisted to YAML.
-
----
-
-**`_on_cell_result` dispatch (`app.py`):**
-
-```python
-elif result.render_type in ("vectors", "vectors_2d"):
-    data = result.data
-    if result.render_type == "vectors_2d":
-        data = np.column_stack([data[:, :2], np.zeros(len(data)),
-                                data[:, 2:], np.zeros(len(data))])
-    obj = make_arrow_mesh(data, color=style.color,
-                          normalize=style.normalize_arrows)
-    vp.add_object(cell_id, obj)
-```
-
-Flow mode is handled in the existing `scatter` dispatch block by switching on `style.scatter_render_mode == "arrows"` and converting consecutive pairs as above.
-
----
-
-**Performance:**
-
-- Unit geometry: ~160 vertices and ~280 triangles (8 segments, shaft + cone). Fixed cost.
-- `InstancedMesh` with N instances: one draw call. Scales to thousands of arrows with no meaningful overhead.
-- Per-arrow matrix computation: one cross-product, one Rodrigues rotation, one 4×4 fill — O(N) CPU work, takes < 1 ms for N ≤ 1000.
-- The bottleneck for large vector fields (N > 10K) is the Python loop over `set_matrix_at`. This can be pre-vectorized if needed by constructing all matrices as a batched numpy operation and uploading in one call (requires checking pygfx's InstancedMesh API for bulk matrix upload).
-
----
-
 ### FEAT-018 — Load external data files into data cells
 **Status:** Open  
 **Logged:** 2026-05-17
@@ -732,3 +410,138 @@ if m:
 - **Large file / memory exhaustion**: Even legitimate files can be arbitrarily large. The 500 MB cap above applies here too. Surface the file size in the cell's `ok` preview (e.g. `(1000000, 3) — 22.9 MB`) so the user has visibility.
 
 - **`open()` is currently blocked in equation cells** (`safety.py:23`) but data cells are explicitly more permissive. File loading must stay confined to data cells and the dedicated loader path — it should not be possible to trigger file I/O from an equation cell expression.
+
+---
+
+### FEAT-037 — GPU-accelerated expression evaluation (design decision log)
+**Status:** Open — decision pending  
+**Logged:** 2026-05-20  
+**Related:** PERF-002, PERF-003, PERF-004 in [18-performance-backlog.md](18-performance-backlog.md)
+
+**Background:**  
+The expression evaluation pipeline (numpy CPU → numpy arrays → wgpu GPU upload) has three distinct cost layers: the expression computation itself, the Python-loop geometry construction, and the GPU buffer upload. PERF-003/004 address the geometry loops. This entry documents the options for accelerating the computation layer and reducing the GPU upload cost, and records why each option was or was not selected.
+
+**The core constraint: GPU-to-GPU transfer is not free.**  
+Moving expression evaluation to a GPU-accelerated library (JAX, PyTorch, CuPy) does not automatically enable sharing data with wgpu. Each library exposes tensors backed by GPU memory (CUDA or Metal), but wgpu's buffer API accepts numpy arrays or raw bytes — not foreign GPU tensors. The practical path for all of these libraries is still `tensor.cpu().numpy()` → `gfx.Geometry` → wgpu upload. At n=128 the CPU roundtrip costs ~0.5ms; this is a real overhead but small compared to the compute savings.
+
+True zero-copy GPU-to-GPU transfer would require either DLPack interop (not currently implemented in pygfx/wgpu-py) or writing compute shaders inside wgpu itself (see option G below).
+
+---
+
+**Option A — JAX**  
+`jax.numpy` is nearly API-compatible with numpy. Supports JIT compilation, GPU via XLA (CUDA or Metal via `jax-metal`), and full autodiff via `jax.grad`.
+
+*Advantages:* Near-identical API; autograd opens new mathematical capabilities (parameter-space gradients, implicit surface finding); JIT compilation can speed expression evaluation by 5–50×.
+
+*Blockers for Pringle:*  
+- **Immutability.** JAX arrays are immutable; in-place operations (`arr[n] = f(arr[n-1])`) silently fail or raise. The recurrence relation engine (`recurrence.py`) is built around mutable numpy arrays — rewriting it for `jax.lax.scan` would be a major redesign.  
+- **Cross-platform uncertainty.** `jax-metal` (macOS) is an experimental backend with inconsistent coverage of JAX ops. Linux/Windows CUDA installs require matching driver versions.  
+- **Dependency weight.** JAX adds ~500MB of compiled XLA binaries. Current pringle install is trivially lightweight.
+
+*Verdict: Not recommended as primary backend. Immutability blocks recurrence.*
+
+---
+
+**Option B — PyTorch**  
+Widely used GPU tensor library with MPS (Metal) and CUDA backends.
+
+*Advantages:* Mature, widely supported, large ecosystem.
+
+*Blockers for Pringle:*  
+- **Immutability.** PyTorch tensors support in-place ops syntactically (`a[i] = x`) but these don't compose with autograd. Same recurrence problem as JAX.  
+- **API divergence.** `torch.sum(x, dim=0)` vs `np.sum(x, axis=0)` — argument names differ; the namespace whitelist would need significant reworking.  
+- **CUDA version fragmentation.** PyTorch ships different wheels per CUDA version; users must match their driver. This complexity is incompatible with `pip install pringle`.  
+- **Size.** PyTorch CPU-only is ~250MB; GPU variant is ~1.5GB.
+
+*Verdict: Not recommended. Worse than JAX on every relevant dimension for this use case.*
+
+---
+
+**Option C — CuPy**  
+A near-exact numpy drop-in (`import cupy as np`) for CUDA GPUs. Minimal API changes — most expressions would work unmodified.
+
+*Advantages:* Essentially zero expression-layer refactor; no immutability issue; recurrence engine works as-is; mutable arrays; identical numpy semantics.
+
+*Blockers for Pringle:*  
+- **CUDA-only.** CuPy has no Metal or CPU fallback. macOS users (the current development platform) get nothing. A numpy fallback could be made automatic, but this creates a two-code-path maintenance burden.  
+- **CUDA dependency.** Same driver-matching problem as PyTorch.
+
+*Verdict: The cleanest API story, but platform exclusion is a hard blocker for now. Worth revisiting if cross-platform GPU compute becomes a requirement and WGSL shaders are not yet ready.*
+
+---
+
+**Option D — Numba**  
+JIT compiler for Python + numpy code. Can target CPU (LLVM) or CUDA GPU. Does **not** require changing the expression namespace at all — applies to the renderer's Python-loop bottlenecks rather than user expressions.
+
+*Advantages:*  
+- `@numba.njit` on `_clip_mesh_to_mask` (PERF-004, 170ms at n=128) would likely reduce it to ~1ms with zero changes to the public API or user-facing expression semantics.  
+- No immutability issue — numba compiles standard Python with mutable numpy arrays.  
+- Lightweight dependency; CPU-mode requires no GPU driver.  
+- Could accelerate expression evaluation via `@numba.njit` on lambdas, though eval'd lambdas from `exec()` don't compose directly with numba's AOT compilation model.
+
+*Verdict: **Best near-term option for geometry acceleration.** Does not address expression computation on GPU, but PERF-004 is the dominant bottleneck before expression compute matters. Investigate as part of PERF-004 fix.*
+
+---
+
+**Option E — MLX (Apple)**  
+Apple's open-source ML framework. Metal-native, numpy-like API, runs on Apple Silicon GPU. Has autograd.
+
+*Advantages:* Native Metal GPU; numpy-like; would achieve zero-copy with wgpu on macOS (both use Metal) if DLPack support were added to pygfx.
+
+*Blockers:*  
+- macOS/Apple Silicon only — not usable on Linux or Windows.  
+- DLPack interop with wgpu not currently implemented.
+
+*Verdict: Interesting for macOS-only optimization, but platform exclusion makes it unsuitable as a primary backend.*
+
+---
+
+**Option F — Taichi**  
+A Python-embedded DSL that compiles to Metal, CUDA, Vulkan, OpenGL, or CPU. Designed for physics simulation and visualization.
+
+*Advantages:* Truly cross-platform GPU (covers macOS, Linux, Windows); could in principle share Metal/Vulkan buffers with wgpu since both target the same backends; data-oriented programming model suits grid computations.
+
+*Blockers:*  
+- Not numpy-compatible — users write Taichi kernels, not numpy expressions. The expression namespace would need a complete redesign.  
+- Large dependency; less mature than numpy/scipy ecosystem.
+
+*Verdict: Interesting for the geometry layer (compute shaders for `_clip_mesh_to_mask`), less so for user-facing expressions.*
+
+---
+
+**Option G — WGSL compute shaders (native wgpu) — Recommended long-term path**  
+Write the surface evaluation and geometry construction as compute shaders executing directly inside wgpu. Results live in `GPUBuffer` objects that feed the vertex shader with zero CPU involvement. This is the "v2 GLSL compile" path referenced in the architecture design docs.
+
+*Advantages:*  
+- True zero-copy: compute result → vertex buffer, no CPU roundtrip at all.  
+- Cross-platform: wgpu targets Metal, Vulkan, DX12 — all major platforms.  
+- No new dependencies: wgpu is already a dependency.  
+- Eliminates both PERF-002 (GPU upload) and the expression compute cost in one architecture.
+
+*Cost:*  
+- Requires an expression → WGSL transpiler. The current `exec()`-based eval model cannot be used; a compilable subset of expressions must be defined.  
+- User expressions would be restricted to what can be represented in WGSL (no arbitrary Python, no scipy calls).  
+- Significant implementation effort — effectively a v2 eval engine.  
+- Data cells and recurrence relations would remain on CPU/numpy regardless.
+
+*Verdict: The correct long-term architecture. Should be designed as an optional fast path alongside the existing numpy eval engine rather than a replacement — so that arbitrary Python expressions remain supported for correctness and scipy/recurrence use cases, while simple grid expressions opt into the WGSL path for animation performance.*
+
+---
+
+**Summary table:**
+
+| Option | Platform | API change | Recurrence | Dependency | Zero-copy GPU | Recommendation |
+|--------|----------|-----------|------------|------------|--------------|----------------|
+| JAX | CUDA + Metal (exp.) | Low | ✗ breaks | Heavy | No | Blocked by recurrence |
+| PyTorch | CUDA + MPS | Medium | ✗ breaks | Very heavy | No | Not recommended |
+| CuPy | CUDA only | Near-zero | ✓ works | Medium | No | Blocked by platform |
+| **Numba** | **All (CPU+CUDA)** | **None** | **✓ works** | **Light** | **No** | **Best near-term** |
+| MLX | macOS only | Low | ✓ works | Medium | Possible | Platform blocker |
+| Taichi | All | High | ✓ works | Medium | Possible | Complex |
+| **WGSL shaders** | **All** | **N/A (opt-in)** | **✓ unchanged** | **None** | **✓ Yes** | **Best long-term** |
+
+**Recommended path:**  
+1. **Now:** Fix PERF-004 (`_clip_mesh_to_mask`) with Numba `@njit` as a targeted optimization — no architecture change, no new user-facing API.  
+2. **Later:** Design the WGSL compute shader path as an opt-in fast path for simple grid expressions, keeping numpy eval as the fallback for arbitrary Python and scipy/recurrence cells.
+
+---
