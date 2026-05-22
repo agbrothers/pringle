@@ -65,29 +65,43 @@ JIT warmup: ~2.1 s first call in a fresh process; ~323 ms when loading the compi
 
 ---
 
-## Current Benchmark — After BUG-030 recurrence integration + memory.yml gradient-path cell (2026-05-22, n=128, 60 frames, GC disabled)
+## Current Benchmark — After PERF-013 (independently verified 2026-05-22, n=128, 60 frames, GC disabled)
 
 Run via `python tests/bench_slider_animation.py --n 128 --frames 60 --no-gc`.
 
-memory.yml now includes a recurrence cell (`path_xy = zeros((200, 2))`) that computes a 200-step gradient-descent path. Although this cell is in data-mode (shows a run button and stale indicator), **`_on_slider_value_changed` has no data-mode guard** — it re-evaluates all DAG descendants of the changed slider, including data-mode cells. Because `path_xy`'s sub-cell references `dE` which depends on β, it IS in the β descendant set and runs on every animation tick.
+**PERF-013 independently verified:** `execute_recurrence` measured at **3.49 ms** (developer projected ~3.3 ms — within timing variance, confirmed). Two previously unmeasured components are now tracked: `build_dag` (PERF-001, called every tick) and `make_scatter_mesh` for scatter output cells (path output).
 
-**Animation frame budget (β-slider, constrained surface, including recurrence):**
+**Animation frame budget (β-slider, constrained surface, full accounting):**
 
-| Component | Mean ms | P95 ms | % of 33ms budget |
-|-----------|---------|--------|-----------------|
-| Cell evaluation chain (β downstream) | **5.57** | 7.70 | 17% |
-| ↳ `z_surface` computation | 3.31 | 5.39 | 10% |
-| `make_surface_mesh` (full, includes clip) | **4.40** | 5.74 | 13% |
-| ↳ `_clip_mesh_to_mask` (Numba, PERF-011 closed) | 1.52 | 2.03 | 5% |
-| ↳ `_grid_gradients + _grid_normals` | 0.50 | 0.84 | 2% |
-| ↳ `_grid_indices` | 0.17 | 0.23 | 1% |
-| AST pipeline (6 downstream cells, PERF-006) | 1.00 | 1.51 | 3% |
-| `execute_recurrence` (200 steps, PERF-013 closed) | ~~14.0~~ → **~3.3** | — | **~10%** |
-| **Estimated total CPU frame** | **~13.3** | — | **~40%** |
+| Component | Mean ms | P95 ms | % of 33ms budget | Notes |
+|-----------|---------|--------|-----------------|-------|
+| `build_dag + downstream_of` (PERF-001) | **2.18** | 2.68 | 7% | Called every tick; was missing from prior estimates |
+| Cell evaluation chain (β downstream) | **5.68** | 7.37 | 17% | |
+| ↳ `z_surface` computation | 3.36 | 5.05 | 10% | |
+| `make_surface_mesh` (full, includes clip) | **4.91** | 6.17 | 15% | |
+| ↳ `_clip_mesh_to_mask` (Numba, PERF-011 closed) | 1.70 | 2.09 | 5% | |
+| ↳ `_grid_gradients + _grid_normals` | 0.59 | 1.00 | 2% | |
+| ↳ `_grid_indices` | 0.16 | 0.27 | 0% | |
+| AST pipeline (6 downstream cells, PERF-006) | 1.11 | 1.58 | 3% | |
+| `execute_recurrence` (200 steps, PERF-013 closed) | **3.49** | 4.11 | 11% | **Verified** (was ~14 ms) |
+| `make_scatter_mesh` (200-pt path output, PERF-014) | **0.73** | 1.18 | 2% | Was missing from prior estimates |
+| **Estimated total CPU frame** | **~17.0** | ~18.9 | **52%** | |
 
-**Result after PERF-013: ~45 fps.** Recurrence cost reduced from ~14 ms to ~3.3 ms (4.2× speedup). With GPU (~9–10 ms) wall-clock estimate is **~22–23 ms → ~45 fps**.
+**Result: PASS at 52% of 33 ms budget (surface update fps).** With GPU (~9–10 ms) estimated wall-clock is **~26 ms → ~38 fps**.
 
-**Recurrence per-step breakdown (measured at individual component level):**
+**Why camera still feels laggy despite PERF-013:**  
+The PASS metric measures surface update fps, not camera responsiveness. The main thread is blocked for ~17 ms per animation tick. Since the animation timer fires every 16 ms, camera orbit/zoom mouse events are queued during those 17 ms blocking windows and processed in the sub-millisecond gaps between ticks. Average camera event latency ≈ 8–9 ms; worst-case ≈ 17 ms. This is above the ~5 ms threshold for "smooth" feel. PERF-013 helped surface fps (prior total ~28 ms → 17 ms) but the camera lag is structural: **eval runs synchronously in the Qt main thread**. The fix is threading (PERF-015 proposed) or a pause-on-interact interaction pattern.
+
+**Breakdown before vs after PERF-013 (full accounting):**
+
+| State | Total CPU blocking | Surface fps | Camera feel |
+|-------|--------------------|-------------|-------------|
+| Before PERF-013 | ~28 ms | ~36 fps | Laggy (28 ms block) |
+| After PERF-013 | ~17 ms | ~59 fps | Still laggy (~17 ms block) |
+| After PERF-001 (projected) | ~14.8 ms | ~67 fps | Marginal improvement |
+| With eval threading (PERF-015) | ~0 ms block | ~60 fps | Smooth |
+
+**Recurrence per-step breakdown (measured at individual component level, pre-PERF-013):**
 
 | Per-step overhead | Mean µs | × 200 steps | Notes |
 |-------------------|---------|------------|-------|
@@ -99,7 +113,6 @@ memory.yml now includes a recurrence cell (`path_xy = zeros((200, 2))`) that com
 
 Compile-once speedup: `eval(code_object)` = 16.3 µs vs `eval(string)` = 56.9 µs → **3.5× on eval alone**.
 Post-loop NaN check: `np.all(np.isfinite(result[1:]))` = 4.2 µs (once) vs 3.7 µs × 200 = 732 µs → **174× on NaN checks**.
-Projected result after PERF-013: ~3.3 ms (200 steps) → **4.2× speedup → total CPU frame ~13.3 ms**.
 
 ---
 
@@ -144,19 +157,20 @@ Projected result after PERF-013: ~3.3 ms (200 steps) → **4.2× speedup → tot
 - To reach ~50 fps on unconstrained surfaces: PERF-001 → estimated ~20 ms → ~50 fps
 - To reach ~50 fps on constrained surfaces: needs PERF-001 + constrained in-place path (new work)
 
-### Post-BUG-030 (2026-05-22) — memory.yml with gradient-path recurrence cell
+### Post-PERF-013 (2026-05-22) — memory.yml with gradient-path recurrence cell, full accounting
 
-The recurrence cell IS in the animation path: `_on_slider_value_changed` re-evaluates all DAG descendants without a data-mode guard, and `path_xy` is a β-descendant via its `dE` sub-cell dependency. Total CPU frame rises from ~10 ms to ~24 ms.
+Full-stack accounting after PERF-013 verification. Prior estimates omitted `build_dag` (2.18 ms) and `make_scatter_mesh` for the path output (0.73 ms).
 
 | Phase | Cost | Notes |
 |-------|------|-------|
-| CPU cell evaluation (animation path) | **~10 ms** | eval chain 5.6 ms + geometry 4.4 ms |
-| Recurrence cell (on every β tick) | **~14 ms** | runs in `_eval_cell` for all descendants |
-| **Total CPU frame** | **~24 ms** | |
-| GPU render callback (estimated, unchecked) | **~9–10 ms** | same constrained surface |
-| **Estimated wall-clock frame** | **~33–34 ms → ~30 fps** | borderline; explains observed lag |
-
-After PERF-013 (closed 2026-05-22): recurrence ~3.3 ms → CPU ~13.3 ms → wall-clock ~22–23 ms → **~45 fps**.
+| `build_dag + downstream_of` (PERF-001) | **~2.2 ms** | Unconditional every tick; newly measured |
+| Cell eval chain (β downstream) | **~5.7 ms** | |
+| `make_surface_mesh` (constrained) | **~4.9 ms** | Full rebuild, no in-place path for constrained |
+| `execute_recurrence` (200 steps) | **~3.5 ms** | After PERF-013; was ~14 ms |
+| `make_scatter_mesh` (path output) | **~0.7 ms** | Newly measured; recreated every frame |
+| **Total CPU blocking per tick** | **~17.0 ms** | |
+| GPU render callback (estimated) | **~9–10 ms** | Same constrained surface |
+| **Estimated wall-clock frame** | **~26 ms → ~38 fps** | Camera lag persists (see current benchmark note) |
 
 ---
 
@@ -355,6 +369,50 @@ Numba `@njit` is the correct solution for this pattern: it compiles mutable-arra
 - **Numba-aware helper functions in the namespace:** Add a `@numba.njit`-compiled `cumulate(fn, x0, n)` or similar utility to `build_equation_namespace()`. Users write the body as a lambda; Numba JITs it on first call. Simpler than a new cell type but limited to fixed-structure recurrences.
 
 **Why it matters:** Recurrence relations are a natural Pringle use case (Fibonacci, Lorenz attractor, Mandelbrot iteration count, forward Euler ODE). Without Numba, large N makes these prohibitively slow. With it, they become competitive with MATLAB/Julia.
+
+---
+
+### PERF-014 — `make_scatter_mesh` recreated from scratch every frame for recurrence output cells
+**Status:** Open  
+**Priority:** LOW  
+**Logged:** 2026-05-22  
+**Discovered via:** Independent profiling (benchmark section 8)  
+**Files:** [app.py:617-629](../pringle/app.py#L617), [renderer.py](../pringle/renderer.py)
+
+**Description:**  
+After each `execute_recurrence` call in `_on_slider_value_changed`, `_on_cell_result` calls `make_scatter_mesh` (or `make_line_mesh`) to rebuild the full pygfx geometry object for the scatter/line output — allocating new `gfx.Geometry` and `gfx.Mesh` objects on every animation tick. For a 200-point path this costs ~0.73 ms per frame.
+
+The surface cells already have an in-place update path (`update_surface` / PERF-002). Scatter/line cells currently always go through `add_object`, which discards and recreates the geometry.
+
+**Measured cost:** 0.73 ms per frame for a 200-pt scatter; 0.77 ms for line. At 17 ms total blocking time per tick, this is 4–5% of the frame.
+
+**Fix:** Add an `update_scatter` / `update_line` path in `PringleRenderer` analogous to `update_surface`: update the position buffer in-place if the point count hasn't changed; only rebuild the geometry object on count change. Gate in `app.py`'s `_on_cell_result` similar to `update_surface`.
+
+---
+
+### PERF-015 — Cell evaluation blocks Qt main thread; camera orbit laggy during animation
+**Status:** Open  
+**Priority:** HIGH  
+**Logged:** 2026-05-22  
+**Discovered via:** Independent profiling + user observation  
+**Files:** [cell_list.py:720-765](../pringle/cell_list.py#L720), [slider_widget.py:317-331](../pringle/slider_widget.py#L317)
+
+**Description:**  
+The slider animation timer (`_anim_timer`, 16 ms interval) fires `_anim_tick` → `value_changed` → `_on_slider_value_changed`. The entire cell evaluation chain (~17 ms: DAG rebuild 2.2 ms + eval chain 5.7 ms + surface mesh 4.9 ms + recurrence 3.5 ms + scatter mesh 0.7 ms) runs synchronously in the Qt main thread.
+
+Because evaluation takes ~17 ms and the timer interval is 16 ms, the main thread is blocked for essentially 100% of the animation cycle. Camera orbit/zoom mouse events queue up in the Qt event loop during evaluation and can only be processed in the ~0 ms windows between ticks. This manifests as "framey/laggy" camera rotation even when the surface update fps is acceptable.
+
+**This is the root cause of the camera lag.** PERF-013 improved surface fps (28 ms → 17 ms per tick) but did not cross the ~5–8 ms threshold needed for smooth camera feel because the blocking period is still longer than the timer interval.
+
+**Measured impact:** Average camera event latency ~8–9 ms; worst-case ~17 ms. Smooth threshold is ~5 ms.
+
+**Fix options (in order of complexity):**
+
+1. **Pause animation on mouse press (pragmatic, low effort):** Detect `mousePressEvent` / `mouseReleaseEvent` on `PringleViewport`. While mouse button is held, stop `_anim_timer`. Resume on release. Trades animation continuity during orbit for smooth camera — acceptable for interactive use. ~20 lines of code.
+
+2. **Throttle animation to leave headroom (simple, imperfect):** Change `_ANIM_INTERVAL_MS` from 16 ms to e.g. 33 ms (30 fps animation). Between ticks, the event loop processes mouse events. Halves animation smoothness but nearly eliminates camera lag.
+
+3. **Off-thread evaluation (correct, complex):** Move `_on_slider_value_changed` evaluation to a `QThread`. The eval thread posts results back to the main thread via a queued signal. Main thread handles camera events continuously at 60 fps. Requires thread-safety audit for namespace dict access and pygfx object creation (which may need to stay on the main thread).
 
 ---
 

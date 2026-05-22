@@ -365,6 +365,90 @@ def bench_recurrence(n_frames: int) -> dict[str, list[float]]:
 
 
 # ---------------------------------------------------------------------------
+# Section 7 — DAG rebuild overhead (PERF-001)
+#
+# build_dag is called on EVERY slider tick inside _on_slider_value_changed,
+# unconditionally, even though the graph hasn't changed.  This parses ASTs
+# for every evaluable cell in the session just to reconstruct a static DAG.
+# ---------------------------------------------------------------------------
+
+def bench_dag_overhead(n_frames: int) -> dict[str, list[float]]:
+    """
+    Time build_dag + downstream_of for a realistic memory.yml cell list.
+
+    Simulates the call in _on_slider_value_changed before any cell evaluation.
+    """
+    from pringle.dag import build_dag, downstream_of
+
+    sources = [
+        "β = 0.4",
+        "F(v) = exp(v)",
+        "Q(v) = log(v)",
+        "S(m, v) = -sum((m-v)**2, axis=0)",
+        "InvDistSq(m, v) = -sum((m-v)**2, axis=0)",
+        "InvDistSqBatch(m, v) = -sum((m[..., None]-v[None, ...])**2, axis=1)",
+        "M = random.uniform(-3, 3, size=(10,2))",
+        "η = 0.1",
+        "grid = array([x, y]).reshape(2, -1)",
+        "shape = x.shape",
+        "β_inv = 1/β",
+        "E(v) = -β_inv * Q( sum( [F ( β*(  S(m[:, None], v)  ) ) for m in M], axis=0))",
+        "E_batch(v) = -β_inv * Q( sum( F( β*(  InvDistSqBatch(M, v)  ) ), axis=0))",
+        "dF(m, v) = F(β*S(m, v)) * β",
+        "dS(m, v) = -2*(m - v)",
+        "dE(m, v) = (dF(m, v) * dS(m, v)).sum(axis=0)",
+        "z = E_batch(grid).reshape(*shape)",
+        "M_z = E_batch(M.T)",
+        "M_e = concatenate((M, M_z[:,None]), axis=1)",
+        "path_xy = zeros((200, 2))",
+    ]
+
+    class _MockCell:
+        def __init__(self, i: int, src: str) -> None:
+            self.cell_id = f"cell_{i}"
+            self._src = src
+        def source(self) -> str:
+            return self._src
+
+    cells = [_MockCell(i, s) for i, s in enumerate(sources)]
+    slider_id = cells[0].cell_id  # β cell
+
+    results: dict[str, list[float]] = {}
+    results["build_dag_only"] = _timeit(lambda: build_dag(cells), n_frames)
+    results["build_dag+downstream"] = _timeit(
+        lambda: downstream_of(build_dag(cells), slider_id, cells), n_frames
+    )
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Section 8 — Scatter/line mesh creation for output cells
+#
+# After each execute_recurrence call, _on_cell_result calls make_scatter_mesh
+# (or make_line_mesh) for the path output.  This cost is per-frame during
+# animation and is NOT captured by the make_surface_mesh section above.
+# ---------------------------------------------------------------------------
+
+def bench_scatter_mesh(n_frames: int) -> dict[str, list[float]]:
+    """Time make_scatter_mesh / make_line_mesh for a 200-pt path (path_xy shape)."""
+    from pringle.renderer import make_scatter_mesh, make_line_mesh
+
+    path_3d = np.random.default_rng(0).random((200, 3)).astype(np.float32)
+    path_2d = path_3d[:, :2]
+
+    results: dict[str, list[float]] = {}
+    results["make_scatter_mesh_200pt"] = _timeit(
+        lambda: make_scatter_mesh(path_3d, color=(1, 0.4, 0, 1), opacity=1.0, size=0.05),
+        n_frames,
+    )
+    results["make_line_mesh_200pt"] = _timeit(
+        lambda: make_line_mesh(path_3d, color=(1, 0.4, 0, 1), opacity=1.0, thickness=2.0),
+        n_frames,
+    )
+    return results
+
+
+# ---------------------------------------------------------------------------
 # Memory snapshot helper
 # ---------------------------------------------------------------------------
 
@@ -449,6 +533,8 @@ def _print_report(
     mesh_res: dict,
     ns_res: dict,
     rec_res: dict,
+    dag_res: dict,
+    scatter_res: dict,
 ) -> bool:
     """Print formatted benchmark report. Returns True if within budget."""
     budget = _BUDGET_MS
@@ -459,6 +545,12 @@ def _print_report(
     print(f"  {'Section':<36} │  {'Mean ms':>8}  │  {'P95 ms':>7}  │  {'% budget':>8}")
     print("  " + "─" * 36 + "─┼─" + "─" * 10 + "─┼─" + "─" * 9 + "─┼─" + "─" * 9)
 
+    print("  [DAG rebuild overhead — called before eval each tick (PERF-001)]")
+    for key in ("build_dag+downstream", "build_dag_only"):
+        label = f"  {key}" if key != "build_dag+downstream" else key
+        print(_fmt_row(f"  dag/{label}", dag_res.get(key, [])))
+
+    print()
     print("  [AST pipeline — per tick across all downstream cells]")
     for key in ("total_ast", "preprocess", "get_free_names", "get_store_names", "check_ast"):
         label = f"  {key}" if key != "total_ast" else key
@@ -491,24 +583,46 @@ def _print_report(
     for key in ("recurrence_200steps", "recurrence_per_step"):
         print(_fmt_row(f"  rec/{key}", rec_res.get(key, [])))
 
-    # Estimated total frame: eval chain + geometry + recurrence
+    print()
+    print("  [Scatter/line mesh creation — path output cell per frame]")
+    for key, times in scatter_res.items():
+        print(_fmt_row(f"  scatter/{key}", times))
+
+    # Estimated total frame: dag + eval chain + geometry + recurrence + scatter output
     # Note: recurrence cells (e.g. memory.yml path_xy) are re-evaluated on every
     # animation tick because _on_slider_value_changed has no data-mode guard.
+    # build_dag is called before every eval chain (PERF-001 not yet fixed).
     eval_chain = eval_res.get("chain_total", [])
     geo_cpu = geo_res.get("cpu_total", [])
     mesh_times = mesh_res.get("make_surface_mesh", [])
     rec_times  = rec_res.get("recurrence_200steps", [])
+    dag_times  = dag_res.get("build_dag+downstream", [])
+    scatter_times = scatter_res.get("make_scatter_mesh_200pt", [])
+
     if mesh_times:
         combined = [e + m for e, m in zip(eval_chain, mesh_times)] if eval_chain and mesh_times else []
     elif eval_chain and geo_cpu:
         combined = [e + g for e, g in zip(eval_chain, geo_cpu)]
     else:
         combined = eval_chain or geo_cpu
+
     # Add recurrence cost (runs on every β tick in memory.yml)
     if combined and rec_times:
         rec_mean = statistics.mean(rec_times)
         combined = [c + rec_mean for c in combined]
         print(f"  [note] recurrence mean ({rec_mean:.1f} ms) added to frame estimate")
+
+    # Add DAG rebuild cost (PERF-001: called unconditionally every tick)
+    if combined and dag_times:
+        dag_mean = statistics.mean(dag_times)
+        combined = [c + dag_mean for c in combined]
+        print(f"  [note] build_dag mean ({dag_mean:.1f} ms) added — PERF-001 not yet fixed")
+
+    # Add scatter mesh creation for output cells (path_xy → make_scatter_mesh each frame)
+    if combined and scatter_times:
+        scatter_mean = statistics.mean(scatter_times)
+        combined = [c + scatter_mean for c in combined]
+        print(f"  [note] scatter mesh mean ({scatter_mean:.1f} ms) added for path output cell")
 
     print()
     print("  " + "─" * 36 + "─┼─" + "─" * 10 + "─┼─" + "─" * 9 + "─┼─" + "─" * 9)
@@ -565,28 +679,37 @@ def main() -> None:
     print(f"[bench] grid shape: {grid.x.shape}  ({grid.x.size:,} vertices)")
     print()
 
-    print("[bench] Section 1/6: AST pipeline overhead ...")
+    print("[bench] Section 1/8: AST pipeline overhead ...")
     ast_res = bench_ast_pipeline(args.frames)
 
-    print("[bench] Section 2/6: Cell evaluation chain ...")
+    print("[bench] Section 2/8: Cell evaluation chain ...")
     eval_res = bench_cell_eval(grid, args.frames)
 
-    print("[bench] Section 3/6: Geometry CPU functions ...")
+    print("[bench] Section 3/8: Geometry CPU functions ...")
     geo_res = bench_geometry_cpu(grid, args.frames)
 
-    print("[bench] Section 4/6: Full make_surface_mesh ...")
+    print("[bench] Section 4/8: Full make_surface_mesh ...")
     mesh_res = bench_make_surface_mesh(grid, args.frames)
 
-    print("[bench] Section 5/6: Namespace construction ...")
+    print("[bench] Section 5/8: Namespace construction ...")
     ns_res = bench_namespace(args.frames)
 
-    print("[bench] Section 6/6: Recurrence execution ...")
+    print("[bench] Section 6/8: Recurrence execution ...")
     rec_res = bench_recurrence(args.frames)
+
+    print("[bench] Section 7/8: DAG rebuild overhead (PERF-001) ...")
+    dag_res = bench_dag_overhead(args.frames)
+
+    print("[bench] Section 8/8: Scatter/line mesh creation ...")
+    scatter_res = bench_scatter_mesh(args.frames)
 
     if args.no_gc:
         gc.enable()
 
-    _print_report(args.n, args.frames, ast_res, eval_res, geo_res, mesh_res, ns_res, rec_res)
+    _print_report(
+        args.n, args.frames, ast_res, eval_res, geo_res, mesh_res, ns_res,
+        rec_res, dag_res, scatter_res,
+    )
 
     if args.mem:
         print("[bench] Running memory audit ...")
