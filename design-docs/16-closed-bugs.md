@@ -6,6 +6,22 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-014 — `RuntimeError: CallerHelper has been deleted` on app close
+**Status:** Closed (fixed 2026-05-21)  
+**Severity:** Low — stderr noise only; app has already exited cleanly, no data loss
+
+**Root cause:** Shutdown ordering race between Qt object teardown and a pending GPU async callback. rendercanvas's `CallerHelper` (`QObject`) is destroyed when Qt tears down `QObject`s after `aboutToQuit`. The render pipeline issues `map_async("READ_NOSYNC")` every frame; the wgpu-native background thread fires its callback after `CallerHelper` is already deleted, so Shiboken raises `RuntimeError`. The error is caught and printed as "Exception ignored" — the app is already gone.
+
+**Fix:** Added `closeEvent` to `PringleWindow` (`app.py`):
+```python
+def closeEvent(self, event) -> None:
+    QApplication.processEvents()
+    super().closeEvent(event)
+```
+`processEvents()` drains queued `map_async` callbacks before Qt destroys `QObjects`, eliminating the race in the common case.
+
+---
+
 ### BUG-026 — `error messaging the mach port for IMKCFRunLoopWakeUpReliable` printed on startup
 **Status:** Closed (fixed 2026-05-21)  
 **Severity:** Low — stderr noise only

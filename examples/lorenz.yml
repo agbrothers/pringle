@@ -18,7 +18,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   type: folder
@@ -36,7 +36,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   type: comment
@@ -52,7 +52,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   folder_id: 53079b25-6819-49cd-821d-1d5fd81abbcf
@@ -76,7 +76,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   folder_id: 53079b25-6819-49cd-821d-1d5fd81abbcf
@@ -100,7 +100,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   folder_id: 53079b25-6819-49cd-821d-1d5fd81abbcf
@@ -124,7 +124,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   folder_id: 53079b25-6819-49cd-821d-1d5fd81abbcf
@@ -148,7 +148,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   type: folder
@@ -166,7 +166,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   type: comment
@@ -182,7 +182,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   folder_id: 856e61ba-4577-4bac-af9f-b64a5c676df0
@@ -206,14 +206,14 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   folder_id: 856e61ba-4577-4bac-af9f-b64a5c676df0
   type: slider
-  source: time = 1.0
+  source: time = 16.0
   name: time
-  value: 1.0
+  value: 16.0
   min_val: 0.0
   max_val: 2000.0
   step: 1.0
@@ -230,7 +230,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   type: folder
@@ -248,7 +248,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   type: comment
@@ -264,7 +264,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   folder_id: 2005f886-515d-4f53-bd0b-7400ea0621e0
@@ -282,7 +282,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   folder_id: 2005f886-515d-4f53-bd0b-7400ea0621e0
@@ -300,7 +300,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   folder_id: 2005f886-515d-4f53-bd0b-7400ea0621e0
@@ -318,7 +318,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   folder_id: 2005f886-515d-4f53-bd0b-7400ea0621e0
@@ -336,7 +336,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   type: folder
@@ -354,7 +354,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   type: comment
@@ -372,7 +372,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: true
+    scatter_render_mode: line
     colormap: null
     colormap_reversed: false
   folder_id: 66fedd76-2772-4b34-b08c-9063783fdb2c
@@ -394,12 +394,12 @@ cells:
     opacity: 1.0
     line_width: 0.5
     point_size: 0.5
-    scatter_as_line: true
+    scatter_render_mode: line
     colormap: inferno
     colormap_reversed: false
   folder_id: 66fedd76-2772-4b34-b08c-9063783fdb2c
   type: equation
-  source: anim = path[:time]
+  source: 'anim = path[:time] '
   visible: true
   sub_cells: []
 view:
@@ -410,10 +410,10 @@ view:
   show_shadow: true
   shadow_opacity: 0.5
   camera_position:
-  - -177.00351214495797
-  - 62.28474532920547
-  - 97.5829406968973
+  - -103.16588744673943
+  - 56.072208192863094
+  - 67.67493317649685
   orbit_target:
   - 0.0
   - 0.0
-  - 0.0
+  - 18.089508056640625

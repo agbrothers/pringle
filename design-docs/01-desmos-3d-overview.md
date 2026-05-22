@@ -30,6 +30,7 @@ Expressions are compiled to fast numerical functions — not evaluated symbolica
 4. **Phong shading**: directional light + ambient + specular. The surface color (blue/navy default) is a material property.
 5. **Transparency**: surfaces can be translucent; handled with depth-sorted rendering passes.
 6. **Camera**: arcball orbit controls (mouse drag → quaternion rotation), pan, zoom.
+7. **Inertia / momentum rotation**: releasing the mouse while rotating causes the figure to continue spinning at the release velocity and gradually decelerate to a stop. See below.
 
 ## Interactivity Model
 
@@ -38,6 +39,26 @@ Expressions are compiled to fast numerical functions — not evaluated symbolica
 - **Real-time compilation**: expression string → AST → JS code → evaluated in a loop. Fast enough to happen on every keystroke.
 - **View settings panel**: axis bounds, grid visibility, labels — separate from the expression system, just reconfigure the viewport.
 - **Parameter animation**: a parameter can be set to loop over a range, driving time-varying behavior without explicit animation logic.
+
+### Camera Inertia (Momentum Rotation)
+
+When the user releases the mouse during an orbit drag, Desmos does not stop the rotation instantly. Instead, the scene continues spinning at the release velocity and decelerates smoothly to a stop. The mechanics:
+
+1. **Velocity sampling during drag**: While the pointer is held, every `pointermove` event records a `(Δazimuth, Δelevation, Δtime)` sample. Only the most recent samples — typically covering a trailing window of ~80–150 ms — are kept. This filters out the initial acceleration phase and captures only the instantaneous "flick" velocity at the moment of release.
+
+2. **Velocity at release**: On `pointerup`, the sampled window is averaged to produce an angular velocity vector `(ω_az, ω_el)` in radians per second (spherical coordinates).
+
+3. **Coast loop**: Each animation frame after release, the scene is rotated by `ω_az * dt` and `ω_el * dt` (where `dt` is the frame delta in seconds). The velocity is then multiplied by an exponential decay factor:
+   ```
+   ω *= decay^dt     # e.g. decay = 0.90 per second, in the form pow(0.90, dt)
+   ```
+   This gives a frame-rate-independent exponential deceleration that feels natural at any display refresh rate.
+
+4. **Stop threshold**: When `|ω|` falls below a small threshold (e.g. `0.01 rad/s`), the coast loop terminates and the camera is fully at rest.
+
+5. **Interruption**: Any new pointer-down event immediately cancels the coast and transfers control back to direct drag. Touch pinch-zoom similarly cancels coasting.
+
+The net effect: slow deliberate releases produce a gentle glide; fast flicks produce a prolonged spin. This is the standard "throw" gesture pattern, also used in iOS list scrolling and most 3D design tools (Blender's "Auto Smooth" orbit, Three.js `OrbitControls.enableDamping`).
 
 ## Key Design Tradeoffs
 
@@ -82,6 +103,8 @@ Desmos allows expressions to be grouped into named, collapsible folders.
 - **Indentation:** member cells are visually indented under the folder header (a thin colored left border or left margin) when the folder is expanded.
 - **No nesting:** Desmos does not support folders inside folders.
 - **Drag to reorganize:** cells can be dragged out of a folder back to the top level or into a different folder. The folder itself can be dragged to reorder it within the panel.
+- **Folder drag moves members as a unit:** when a folder header is dragged to a new position, all of its member cells follow immediately after it — both when the folder is expanded and when it is collapsed. The member cells maintain their original relative order. After the move, the folder lands at the drop position with all members stacked below it, as if the folder+members are a single block. Dragging an individual member cell out of the block removes it from the folder and places it at the drop target as a top-level cell.
+- **Drop indicator placement:** the blue drop indicator line always represents where the folder header will land; members are implied to follow. The indicator never appears in the middle of a multi-line cell — it snaps to the gap between cells.
 
 ### Comment Cells
 

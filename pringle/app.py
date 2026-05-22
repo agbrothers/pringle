@@ -394,6 +394,15 @@ class PringleWindow(QMainWindow):
             self._modified = True
             self._update_title()
 
+    def closeEvent(self, event) -> None:
+        # Drain any pending GPU async callbacks (map_async completions) before
+        # Qt tears down QObjects. Without this, the wgpu-native background thread
+        # fires its callback after CallerHelper is deleted, printing a spurious
+        # "RuntimeError: wrapped C/C++ object of type CallerHelper has been deleted"
+        # to stderr on every clean exit. Best-effort — covers the common case.
+        QApplication.processEvents()
+        super().closeEvent(event)
+
     def _update_title(self) -> None:
         name = (
             self._session_path.rsplit("/", 1)[-1]

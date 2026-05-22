@@ -235,3 +235,11 @@ Line size
 save sizes not holding
 loop vs ping-pong
 Size and opacity visual settings don't save (or possibly load). 
+
+
+-------------------------------
+PROFILER:
+
+You are going to be responsible for profiling and identifying the biggest performance bottlenecks in the pringle scientific plotting tool we are developing. Please see the relevant documentation in design-docs/* for background. Please run and profile the pringle app with the memory.yml example config as the test case. In particular, when the constant slider for the beta parameter is playing, the application slows down noticeably. Please record your findings in whatever way is most appropriate in design-docs/. The goal is to eventually convert these findings into bug reports or feature requests to improve the application performance. In addition, if static code analysis can assist in identifying particular causes of inefficiency, please give that a try. Additionally, if there are perhaps more efficient ways to implement the equations in the cells of the application (i.e. stuff in the yaml), that would be very helpful to know. Those tricks could be compiled into another tips-and-tricks type of document for the user. 
+
+Let me know if anything is unclear or if you have any additional questions. 

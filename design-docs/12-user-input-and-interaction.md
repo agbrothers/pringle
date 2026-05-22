@@ -13,22 +13,24 @@ All three are handled by pygfx's `OrbitController` with default bindings — no 
 
 ## 3D Viewport: Keyboard Controls (WASD)
 
-WASD pans the **orbit target** — the point the camera orbits around and zooms toward — in world-space coordinates. The camera translates by the same delta so its angle and distance to the target are preserved.
+WASD pans the **orbit target** — the point the camera orbits around and zooms toward — in the **camera's horizontal reference frame**. The camera translates by the same delta so its angle and distance to the target are preserved.
 
-| Key | World-space movement |
+| Key | Movement |
 |---|---|
-| `W` | +Y (pan target forward / away) |
-| `S` | −Y |
-| `A` | −X (pan target left) |
-| `D` | +X |
-| `Space` | +Z (pan target up) |
-| `Shift` | −Z (pan target down) |
+| `W` | Forward in camera's horizontal frame (toward target projected onto XY) |
+| `S` | Backward |
+| `A` | Left (camera-relative) |
+| `D` | Right (camera-relative) |
+| `Space` | +Z (world up, unconditional) |
+| `Shift` | −Z (world down, unconditional) |
 
-**Step size** scales with the camera's current distance to the target (5% of that distance per keypress), so panning feels consistent whether zoomed in or out.
+"Forward" is the camera-to-target vector projected onto the XY plane and normalized. "Right" is forward rotated 90° clockwise. When the camera is directly overhead (forward XY magnitude < 1e-6), forward falls back to world +Y.
 
-**Focus gating:** key events are dispatched by the wgpu canvas widget. The canvas only receives events when it has Qt keyboard focus — i.e., only when the user has clicked into the 3D viewport, not the expression panel. No additional filtering is needed.
+**Step size** scales with the camera's current distance to the target (0.7% per frame at 60 fps), giving consistent feel whether zoomed in or out.
 
-**Known limitation:** pygfx's `OrbitController` mouse-pan (right-drag) moves the camera view but does not update `controller.target`. After a mouse pan, the WASD orbit target may differ from the visual center. WASD panning always operates relative to `controller.target` in world axes regardless of where the mouse panned to.
+**Key handling is at the Qt level** (`keyPressEvent`/`keyReleaseEvent` on `PringleViewport`), not through wgpu's event system. `event.accept()` suppresses the macOS press-and-hold accent character popover. `focusOutEvent` clears held keys to prevent stuck movement when focus switches to the expression panel.
+
+**Known limitation:** pygfx's `OrbitController` right-drag pan moves the camera view but does not update `controller.target`. After a mouse pan, the WASD orbit target may differ from the visual center. WASD always operates relative to `controller.target`.
 
 ### Orbit Target Crosshair
 
@@ -38,9 +40,9 @@ A small three-axis crosshair is rendered at `controller.target` and updated ever
 
 The crosshair makes the orbit pivot visible during WASD panning and mouse orbiting. It can be toggled independently via the **Crosshair** checkbox in the View Settings overlay section.
 
-## View Settings Panel (Axis Bounds and Viewport Config)
+## View Settings (Axis Settings Dialog)
 
-The View Settings panel is a collapsible section below the 3D viewport (or accessible via a gear icon). It replicates Desmos 3D's axis settings.
+Clicking the ⚙ gear icon in the top-right corner of the viewport opens a floating non-modal **Axis Settings dialog** (`AxisSettingsDialog`). It is not embedded in the left panel or below the viewport. Clicking ⚙ again or the dialog's X button closes it.
 
 ### Axis Bounds
 
@@ -84,6 +86,10 @@ Resolution  [ 64 ] ──●────  (8 – 256)
 | Axes | On | X/Y/Z axis lines through origin (red/green/blue) |
 | Wireframe | On | 12-edge bounding box at axis extents |
 | Crosshair | On | Small three-axis indicator at the orbit target |
+| Shadow | Off | Flat projection of scene objects onto the z_min floor plane |
+| Light bg | Off | Toggles viewport background between dark and light |
+
+All toggle states persist in the session `view` YAML block.
 
 ### Camera Presets
 
@@ -122,9 +128,9 @@ This matches Desmos behavior: Enter always advances to the next cell when you're
 
 ### Cell Reordering
 
-Each cell has a **drag handle** on its left edge (visible on hover, always visible when selected). Dragging the handle reorders cells within the panel. Visual order changes are cosmetic; the dependency graph re-sorts automatically on next evaluation.
+Each cell has a **drag handle** on its left edge. Dragging reorders cells within the unified cell list. A blue indicator line shows the insertion point during drag. Visual order is cosmetic; the dependency graph re-sorts automatically on next evaluation.
 
-Cells can be dragged between the Equation Panel and the Data Panel to change their panel membership. The cell type (equation vs. data) is tracked separately from visual position.
+Dragging a **folder header** moves the entire folder+members block as a unit. Members maintain their relative order after the move. Hidden (collapsed) members are skipped in drop-target computation so the indicator always lands at a visible cell boundary.
 
 ### Undefined Variable Suggestion
 
@@ -175,46 +181,55 @@ Selecting "Add Constraint" appends a constraint sub-cell below the primary cell,
 
 ## Panel Dividers (Draggable Splits)
 
-Three draggable splits:
+One draggable split:
 
-1. **Left/Right**: the vertical divider between the left panel (equation + data) and the 3D viewport. Drag left/right to resize.
-2. **Equation/Data split**: the horizontal divider within the left panel, separating the Equation Panel (top) from the Data Panel (bottom). Drag up/down to resize each section.
-3. **Viewport/View Settings split**: the horizontal divider between the 3D viewport and the View Settings panel below it. Drag to expand or collapse View Settings.
+1. **Left/Right**: the vertical divider between the left panel (unified cell list) and the 3D viewport. Default left-panel width is 480 px. Drag to resize.
 
-All three divider positions are serialized to the YAML session file so the layout is restored on reload.
+The View Settings is a floating dialog, not a panel section — no divider for it.
 
 ---
 
 ## Animation Controls
 
-The animation bar is a persistent strip between the viewport and View Settings:
+Animation is per-slider. Each slider cell has:
 
 ```
-[◀◀ Reset]  [▷ Play / ‖ Pause]   t: 0.00   [speed: 1.0×]   [loop ▾]
+[▷ Play / ‖ Pause]  [↔ / ⟳ mode toggle]  [min] [──●──] [max]  · step [step]
 ```
 
-- **Play/Pause** starts/stops incrementing `t`
-- **Reset** snaps `t` back to its minimum value
-- **Speed multiplier** scales `dt` per frame
-- **Loop mode** dropdown: Loop / Bounce / Once
+- **▷ / ‖**: starts/stops bouncing the value between min and max at the step interval (~60 fps via `QTimer`)
+- **↔ / ⟳**: toggles between ping-pong (bounces at boundaries) and loop (wraps directly back) mode
+- Play state and mode are persisted in the session YAML (`is_playing`, `anim_mode`)
+- On session load, sliders that were playing are restarted after the namespace is fully populated
 
-Per-slider animation controls are on the slider cells themselves — the global controls are for `t` only.
+There is no global animation bar or global `t` variable.
 
 ---
 
 ## Style Popover
 
-Clicking a cell's **color dot** (left of the cell text) opens a compact popover:
+Clicking a cell's **color dot** opens a compact popover. For data cells (`show_render_mode=True`), the popover uses a two-column layout:
 
 ```
-┌──────────────────────────────┐
-│  Color   [#3866e0] [■ swatch]│
-│  Opacity ──●──────────  1.00 │
-│  Size    ──●──────────   2.0 │  ← sets line width AND dot size
-└──────────────────────────────┘
+┌──────────────────────────────────────────┐
+│  Color   [#3866e0] [■]   (●) Circles     │
+│  Opacity ────────  1.00  ( ) Line        │
+│  Size    ────────  0.05  ( ) Spheres     │
+│                                          │
+│  Colormap:                               │
+│  [viridis][plasma][inferno][hot][hsv][⇄] │
+└──────────────────────────────────────────┘
 ```
 
-**Size** is a unified control — changing it updates both `line_width` (for curves) and `point_size` (for scatter dots). Range: 0.5–20. The popover closes when clicking outside it.
+For equation cells the render-mode column is omitted. Controls:
+
+- **Color** — hex input + live swatch (updates on each valid 7-char `#rrggbb` edit)
+- **Opacity** — range 0.05–1.0, step 0.05
+- **Size** — unified control: sets both `line_width` (curves) and `point_size` (scatter). Range 0.005–2.0, step 0.005, world-space units
+- **Render mode** — Circles / Line / Spheres radio buttons (data cells only; mutually exclusive)
+- **Colormap** — 5 gradient swatch buttons (48×28 px, rendered via matplotlib); clicking the active swatch deselects (reverts to flat color). ⇄ button reverses the colormap
+
+The popover is a `Qt.WindowType.Popup` frame; it closes on any click outside it.
 
 ---
 

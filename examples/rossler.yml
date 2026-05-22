@@ -18,7 +18,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   type: slider
@@ -41,7 +41,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   type: slider
@@ -64,7 +64,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   type: slider
@@ -87,7 +87,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   type: slider
@@ -110,7 +110,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   type: slider
@@ -133,7 +133,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   type: equation
@@ -150,7 +150,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   type: equation
@@ -167,7 +167,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   type: equation
@@ -184,7 +184,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   type: equation
@@ -201,7 +201,7 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: true
+    scatter_render_mode: line
     colormap: null
     colormap_reversed: false
   type: data
@@ -222,13 +222,13 @@ cells:
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   type: slider
-  source: time = 900.0
+  source: time = 750.0
   name: time
-  value: 900.0
+  value: 750.0
   min_val: 0.0
   max_val: 20000.0
   step: 50.0
@@ -245,7 +245,7 @@ cells:
     opacity: 1.0
     line_width: 1.0
     point_size: 1.0
-    scatter_as_line: false
+    scatter_render_mode: circles
     colormap: null
     colormap_reversed: false
   type: equation
@@ -260,9 +260,9 @@ cells:
     - 0.047058823529411764
     - 1.0
     opacity: 1.0
-    line_width: 0.1
-    point_size: 0.1
-    scatter_as_line: true
+    line_width: 0.15
+    point_size: 0.15
+    scatter_render_mode: line
     colormap: inferno
     colormap_reversed: false
   type: equation
@@ -274,6 +274,8 @@ view:
   show_bbox: true
   show_crosshair: false
   show_light_bg: false
+  show_shadow: false
+  shadow_opacity: 0.5
   camera_position:
   - -9.173166706757799
   - -99.5721244822371
