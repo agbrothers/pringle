@@ -7,42 +7,6 @@ See [16-closed-bugs.md](16-closed-bugs.md) for resolved bugs.
 
 ---
 
-### BUG-034 — `_eval_cell` can spawn a blocking `QMessageBox` dialog mid-rebuild
-
-**Status:** Closed (fixed 2026-05-22)  
-**Logged:** 2026-05-22  
-**Severity:** High — modal dialog can appear during a passive rebuild triggered by a slider drag or upstream edit; blocks the Qt event loop from inside a debounce timeout
-
-**Description:**  
-`_eval_cell` (cell_list.py:600) calls `cell.set_data_mode(should_be_data)` when the inferred render type of a cell changes between `scatter` (data-array mode) and surface/other (equation mode). `set_data_mode` (cell_widget.py:504) contains a `QMessageBox.question()` call that fires if the cell has incompatible sub-cells — e.g., a constraint sub-cell on a cell that is switching to data mode.
-
-The result is that a user who:
-1. Adds a constraint sub-cell to a cell, then
-2. Edits the expression so it now returns an `(N, 3)` array
-
-…will see a blocking modal dialog during the next passive rebuild (triggered by a slider tick or another cell's edit). The dialog appears from inside a debounce `QTimer` callback — a context where UI dialogs are not expected and where the user has no obvious reason why the dialog appeared.
-
-**Root cause:**  
-The decision to switch data mode and its UI side effect (dialog, signal rewiring, sub-cell cleanup) are bundled inside a single method called from the evaluation path. Evaluation should be free of UI side effects beyond updating inline labels.
-
-**Fix (two options):**
-
-*Option A — Defer mode-switch via `QTimer.singleShot(0, ...)`.*  
-In `_eval_cell`, replace the direct `cell.set_data_mode(should_be_data)` call with a deferred call. The dialog would still appear, but after the current rebuild completes and the event loop returns to an idle state.
-
-```python
-should_be_data = result.from_shape_inference and result.render_type in ("scatter", "scatter_2d")
-if should_be_data != cell.is_data_mode():
-    QTimer.singleShot(0, lambda c=cell, m=should_be_data: c.set_data_mode(m))
-```
-
-*Option B — Suppress dialog during passive mode transitions.*  
-Add a `force: bool = False` parameter to `set_data_mode`. When `force=False` (called from `_eval_cell`), silently remove incompatible sub-cells without asking. Reserve the confirmation dialog for explicit user actions (e.g., adding a sub-cell that would be incompatible with the current mode).
-
-Option B is the recommended fix — auto-switching data mode is always a passive inference from the return type, not a user-initiated action, so the dialog is always inappropriate in this path.
-
----
-
 ### BUG-013 — Camera locks and crosshair drifts when panning and rotating simultaneously
 
 **Status:** Open  
