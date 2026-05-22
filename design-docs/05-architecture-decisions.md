@@ -51,6 +51,10 @@ This document tracks the high-level design decisions for Pringle and the open qu
 | Camera fit on add | `PringleViewport.add_object()` only calls `fit_camera()` when the cell_id is new to the scene. Slider updates that replace an existing object leave the camera untouched. | Prevents camera jumping when dragging a slider |
 | CellWidget → SliderWidget morphing | When a plain `CellWidget` content changes to a bare scalar assignment (e.g., typing `a = 1`), `_maybe_morph_to_slider()` swaps it in-place for a `SliderWidget`, preserving cell_id and style. | Live slider creation without requiring the user to use a special "add slider" button |
 | Recurrence loop index | User writes `n`; internally renamed to `_pringle_loop_n` before execution | Prevents collision with any slider or variable named `n` |
+| Slider animation eval thread | Cell evaluation during slider animation runs on a `QThread`-backed `_EvalWorker`; results posted back to main thread via queued signal | Main thread is free to process camera events at 60 fps; no camera lag during animation. `eval_threaded=False` default keeps tests synchronous (avoids Python 3.13 incremental GC / QThread lifecycle issues). See `CellListWidget` in `cell_list.py` |
+| Animation tick coalescing | `_pending_eval` stores only the latest `(name, value)` tick; dispatched when the worker becomes free | Animation frames are never queued; if eval takes longer than 16 ms the display skips frames rather than building a backlog |
+| DAG caching | `CellListWidget._get_dag()` caches the `nx.DiGraph` keyed on `{cell_id: source()}` for all evaluable cells; rebuilds only when any source changes | Eliminates ~40 AST parses per animation tick (was 2.2 ms; now <0.01 ms per tick) |
+| Invisible cell pruning during animation | `_dispatch_pending_eval` uses backward-reachability from visible output cells to compute `required_ids`; invisible cells with no visible dependents are skipped entirely; invisible ancestors of visible cells are still evaluated | Avoids executing numpy work that is immediately discarded; saves ~3.5 ms/tick when a recurrence output cell is invisible |
 
 ## f(x,y) Auto-Render Rules
 

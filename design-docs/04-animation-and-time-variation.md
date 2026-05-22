@@ -23,43 +23,67 @@ Each parameter has:
 ## Animation Loop
 
 ```
-Tick (frame callback, ~60fps target)
+_anim_timer tick (16 ms interval, SliderWidget)
     ↓
-Advance t (and any other animating parameters) by dt
+_anim_tick → value_changed signal → _on_slider_value_changed (main thread, ~0 ms)
     ↓
-For each expression that references changed parameters:
-    Re-evaluate over the grid
-    Update the GPU buffer / uniform
+_dispatch_pending_eval (main thread):
+    • Look up cached DAG (key comparison only — PERF-001)
+    • Compute downstream_of(dag, slider_cell)
+    • Skip invisible cells with no visible dependents (PERF-016)
+    • Snapshot all cell state into _CellSpec dataclasses
+    • Emit eval_requested signal (returns immediately)
     ↓
-Render frame
+_EvalWorker.run_eval (background QThread — PERF-015):
+    • For each spec in topological order:
+        run_cell → surface/scatter data
+        execute_recurrence if applicable (compile-once — PERF-013)
+    • Emit results_ready signal
+    ↓
+_on_eval_results (main thread, queued connection):
+    • Apply diagnostics and render callbacks
+    • Drop stale results via generation counter
+    ↓
+PringleRenderer.render (GPU, driven by separate 16ms timer)
 ```
 
-The tick is driven by the display refresh (via a timer or `requestAnimationFrame` equivalent). The render step and the evaluation step are decoupled — if evaluation takes longer than one frame, the render still fires at the display rate using the last computed mesh.
+The main thread is free to handle camera events between `_dispatch_pending_eval` (which returns in microseconds) and `_on_eval_results`. Camera orbit, zoom, and WASD pan are processed continuously at 60 fps regardless of eval duration. If the worker is still busy when the next tick fires, the latest `(name, value)` is coalesced into `_pending_eval` and dispatched when the worker becomes free — animation frames are never queued.
+
+**DAG caching (PERF-001):** `CellListWidget._get_dag()` caches the `nx.DiGraph` keyed on `{cell_id: source()}` for all evaluable cells. On a cache hit (unchanged sources — the entire animation duration), only a dict key comparison runs. Rebuild triggers only when a cell source changes.
+
+**Invisible cell skipping (PERF-016):** After computing descendants, backward-reachability from visible output cells prunes the eval list. Invisible cells whose exports nothing visible depends on are skipped entirely. Invisible ancestors of visible cells remain in the eval set.
 
 ## Performance Model for Re-evaluation
 
-| Approach | Cost | When to use |
+| Approach | Cost at n=128 | Status |
 |---|---|---|
-| **CPU numpy eval + buffer re-upload** | 5–20ms at 256×256 | Default; sufficient for 30fps static-ish surfaces |
-| **GLSL/WGSL uniform** (t encoded in shader) | ~0.1ms | Expression compiled to GPU shader; ideal for smooth animation |
-| **GPU compute shader** (full grid eval on GPU) | ~1–2ms | Flexible; supports arbitrary math; later optimization |
+| **CPU numpy eval + off-thread dispatch** | ~13 ms CPU (background); 0 ms main-thread block | **Current v1** |
+| **GLSL/WGSL uniform** (t encoded in shader) | ~0.1ms | v2 — expression compiled to GPU shader |
+| **GPU compute shader** (full grid eval on GPU) | ~1–2ms | v2 — deferred to FEAT-037 |
 
-### Recommended progression:
+**Measured v1 budget at n=128 (memory.yml, constrained surface with recurrence path):**
 
-**v1**: CPU numpy evaluation + vertex buffer re-upload per frame. Simple, debuggable, fast enough for most surfaces at reasonable grid resolution.
-
-**v2**: Compile expression to GLSL (or WGSL for wgpu-py). Upload `t` and slider values as uniforms. The GPU evaluates the surface formula across all grid points in parallel. This enables smooth 60fps animation of complex parametric surfaces.
+| Component | Mean ms | % of 33 ms |
+|---|---|---|
+| DAG cache hit (PERF-001) | <0.01 | 0% |
+| Cell evaluation chain | 5.35 | 16% |
+| `make_surface_mesh` (constrained) | 4.07 | 12% |
+| `execute_recurrence` (200 steps) | 3.35 | 10% |
+| `make_scatter_mesh` (path output) | 0.75 | 2% |
+| **Total CPU (background thread)** | **~13.2** | **40%** |
+| GPU render callback (estimated) | ~9–10 | 30% |
+| **Wall-clock frame** | **~22 ms → ~45 fps** | |
 
 ## Grid Resolution vs. Frame Rate Tradeoff
 
 | Grid size | Vertices | CPU eval time (approx) | Notes |
 |---|---|---|---|
-| 64 × 64 | ~4K | < 1ms | Coarse; fine for fast prototyping |
-| 128 × 128 | ~16K | ~2–5ms | Good default |
-| 256 × 256 | ~65K | ~10–20ms | High quality; borderline for 60fps CPU eval |
-| 512 × 512 | ~260K | ~60–100ms | Needs GPU eval for smooth animation |
+| 64 × 64 | ~4K | < 2ms | Coarse; fine for fast prototyping |
+| 128 × 128 | ~16K | ~13ms | Good default; 40% of budget |
+| 256 × 256 | ~65K | ~50–80ms | High quality; exceeds 33ms budget; needs GPU eval for smooth animation |
+| 512 × 512 | ~260K | ~200–400ms | Needs GPU eval |
 
-A **multi-resolution strategy** (coarse while animating / dragging, fine when paused) mimics what Desmos does and is straightforward to implement.
+A **multi-resolution strategy** (coarse while animating, fine when paused) is straightforward to implement and deferred to v2.
 
 ## Parametric Surfaces with Time
 
@@ -90,7 +114,7 @@ Controls:
 
 ## Relationship to Expression Dependency Graph
 
-The animation system only needs to re-evaluate expressions that **reference** the parameter being animated. A static surface `z = sin(x) * cos(y)` (no parameters) never needs re-evaluation. This dependency tracking is determined at compile time by inspecting the expression AST for free variable names.
+The animation system only re-evaluates cells that **transitively depend on** the animated slider, determined by the cached DAG. A static surface `z = sin(x) * cos(y)` is never in the downstream set and is never evaluated during slider animation. Invisible cells that have no visible dependents are also skipped (PERF-016).
 
 ## Stretch Goals
 

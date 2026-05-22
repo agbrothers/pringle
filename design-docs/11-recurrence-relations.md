@@ -38,37 +38,35 @@ In the YAML session format:
 
 ## Execution Model
 
-The recurrence cell is executed when the user clicks ▶ Run. The execution sequence:
+Recurrence cells are **reactive**: they re-evaluate automatically whenever an upstream slider changes, identical to any other equation cell. The `execute_recurrence` function in `recurrence.py` runs inside `_eval_spec` on the background eval thread (PERF-015).
+
+The execution sequence in `execute_recurrence`:
 
 ```python
-# Step 1: allocate the array filled with NaN (not zeros) for error detection
-exec(primary_code, data_namespace)
-# Immediately overwrite with NaN so unset indices are detectable:
-array_name = extract_array_name(recursion_rule)
-data_namespace[array_name][:] = nan
+# Step 1: primary expression already evaluated by run_cell — array is in result.exports.
+#         execute_recurrence receives (array_name, array, initial_condition_exprs, rhs, namespace).
 
-# Step 2: apply all initial conditions (explicit index assignments)
+# Step 2: apply initial conditions
 for ic_expr in initial_condition_exprs:
-    exec(ic_expr, data_namespace)   # e.g., exec("path[0] = array([1.0, 0.1])", ...)
+    exec(ic_expr, {**namespace, array_name: array})
 
-# Step 3: determine loop start from the highest set initial condition index + 1
-# (parsed from the initial condition LHS subscripts)
-loop_start = max_initial_index + 1
+# Step 3: compile RHS once (PERF-013)
+code = compile(rhs, "<recurrence>", "eval")
+glob = {**namespace, "__builtins__": {}, array_name: array}
 
-# Step 4: run the recursion rule as a generated for loop
-array_name, index_var, rule_stmt = parse_recursion_rule(recursion_rule)
-loop_code = (
-    f"for {index_var} in range({loop_start}, len({array_name})):\n"
-    f"    if any(isnan({array_name}[{index_var}-1])):\n"
-    f"        break\n"
-    f"    {rule_stmt}"
-)
-exec(loop_code, data_namespace)
+# Step 4: run the loop; array is mutated in-place
+with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
+    for n in range(loop_start, array.shape[0]):
+        val = eval(code, glob, {"n": n})
+        array[n] = val
+
+# Step 5: single post-loop NaN check
+nan_found = not np.all(np.isfinite(array[loop_start:]))
 ```
 
-**NaN-fill error detection:** the array is pre-filled with NaN before initial conditions are applied. If the recursion rule ever reads a NaN value (because a required prior index was not set), the loop detects this, stops, and reports a warning: `"Recurrence halted at index N: prior value was NaN — check initial conditions."` This catches missing initial conditions (e.g., setting only `path[0]` for a two-step recurrence that reads `path[n-2]`).
+**Compile-once (PERF-013):** The RHS string is compiled to a code object once before the loop via `compile(rhs, "<recurrence>", "eval")`. The code object is passed to `eval` each step instead of re-compiling the string. This reduced per-step eval cost from 56.9 µs to ~16.3 µs (3.5×) and total recurrence time from ~14 ms to ~3.35 ms for a 200-step path.
 
-The `isnan` check is applied to the prior element before each iteration. For scalar arrays, it's `isnan(array[n-1])`; for vector arrays, `any(isnan(array[n-1]))`. The `isnan` function is in the numpy whitelist namespace.
+**Post-loop NaN check:** `np.all(np.isfinite(array[loop_start:]))` runs once after the loop instead of per-step. If NaN/Inf are detected, a warning is attached to the cell result.
 
 ## Shared Namespace Access in Recursion Rules
 
@@ -77,18 +75,18 @@ The recursion loop executes in the shared data namespace, which includes:
 - All equation panel lambda/helper functions (from the shared namespace)
 - Slider values
 
-This means recursion rules can call equation panel functions:
+This means recursion rules can call equation panel functions and reference slider values:
 ```python
 # Equation panel cell:
 f(x,y) = x**2 + y**2   # → f = lambda x, y: x**2 + y**2 in shared namespace
 
-# Data recurrence cell:
-path = zeros((50, 2))
-# initial_condition: path[0] = array([1.0, 0.5])
-# recursion: path[n] = path[n-1] + 0.01 * custom_step(path[n-1])
+# Recurrence cell — references slider η and lambda dE from shared namespace:
+path_xy = zeros((200, 2))
+# initial_condition: path_xy[0] = array([0.5, 0.5])
+# recursion: path_xy[n] = path_xy[n-1] - η * dE(path_xy[n-1])
 ```
 
-Functions must be defined (equation panel cells evaluated, or prior data cells run) before the recurrence cell is run. The ▶ Run button triggers evaluation at that moment in time.
+Upstream cells must appear earlier in the DAG. The recurrence re-evaluates reactively on every slider animation tick, so `η` above animates live.
 
 ## Loop Index Variable: `n` → `_pringle_loop_n`
 
@@ -174,41 +172,35 @@ lorenz = zeros((1000, 3))
 
 ## Using the Result in the Equation Panel
 
-After the recurrence cell is run, the array is in the shared namespace and can be referenced by any equation cell:
+After the recurrence cell evaluates, the array is in the shared namespace and can be referenced by any downstream equation cell:
 
 ```python
-# Equation panel — animate a point along the path
-particle = points[int(t)]   # t is the animation slider; points is the recurrence result
-
-# Or visualize the entire trajectory
+# Visualize the entire trajectory as a scatter/line
 points = path               # bare auto-plot as scatter (N,2) or (N,3)
+
+# Animate a point along a pre-computed path using a slider i
+particle = path[int(clip(i, 0, len(path) - 1))]
 ```
 
-Indexing with `int(t)` handles the float→int conversion when `t` is the continuous animation slider. A `round()` or `clip()` wrapper prevents out-of-bounds:
-```python
-idx = int(clip(round(t), 0, len(path) - 1))
-particle = path[idx]
-```
+Because the recurrence re-evaluates reactively on slider changes, you can use a slider directly in the recursion rule instead of indexing the output array:
 
 ## Performance Notes
 
-For recurrences with a few hundred to a few thousand steps, the Python for loop is fast enough — each iteration is a numpy array operation (vectorized over the array dimensions). Typical timings at interactive resolution:
+With the compile-once optimization (PERF-013), typical timings at n=128:
 
-| Array size | Steps | Loop time (approx) |
+| Array size | Steps | Loop time (measured) |
 |---|---|---|
-| (100, 2) | 100 | < 1ms |
-| (1000, 3) | 1000 | ~5ms |
-| (10000, 3) | 10000 | ~50ms |
+| (200, 2) | 200 | ~3.35 ms |
+| (1000, 3) | 1000 | ~16 ms (est.) |
+| (10000, 3) | 10000 | ~165 ms (est.) |
 
-For large recurrences, a Numba JIT-compiled loop (`@numba.jit`) can provide 10-100x speedup. This is a straightforward optimization if needed — the code structure is the same; just annotate the loop function. Deferred to v2.
+Per-step cost is ~16 µs with `eval(code_object, ...)`. For larger step counts, Numba JIT on the loop body is the correct path to near-C speed (PERF-012, deferred to v2).
 
-**Note:** recurrences are evaluated once (on ▶ Run), not per animation frame. The result is a static precomputed array. Animating over it uses the slider-indexing pattern (`path[int(t)]`), not re-evaluation of the loop.
+Recurrences re-evaluate on every slider animation tick. At 200 steps this is 3.35 ms per frame running on the background eval thread, leaving the main thread free for camera interaction.
 
 ## Limitations
 
 - The `recursion:` rule must be a single assignment statement `array[n] = expr`
 - The index variable must index the first axis: `path[n]`, not `path[:, n]`
 - Multi-step recurrences (depending on `n-2`, `n-3`, etc.) work as long as `n` starts from the appropriate offset
-  - For `path[n] = path[n-1] + path[n-2]`: change the loop to `range(2, len(path))` and set both `path[0]` and `path[1]` in the initial condition
-  - Multi-step initial conditions are a v2 UI feature; for now, set them manually in the primary expression
-- The recurrence rule cannot reference slider values or `t` — it runs once at ▶ Run time, not reactively. To make a recurrence parameter-dependent, re-run the data cell when the parameter changes (manual trigger).
+  - For `path[n] = path[n-1] + path[n-2]`: set both `path[0]` and `path[1]` in initial conditions; loop starts at `n=2` automatically
