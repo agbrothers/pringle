@@ -7,56 +7,6 @@ See [16-closed-bugs.md](16-closed-bugs.md) for resolved bugs.
 
 ---
 
-### BUG-026 — `error messaging the mach port for IMKCFRunLoopWakeUpReliable` printed on startup
-**Status:** Open  
-**Logged:** 2026-05-20  
-**Severity:** Low — stderr noise only; no functional impact, no data loss
-
-**Description:**  
-On macOS, running the app prints the following to stderr/terminal shortly after launch:
-
-```
-2026-05-20 22:30:05.423 python3[70697:7248220] error messaging the mach port for IMKCFRunLoopWakeUpReliable
-```
-
-The message appears once per session (occasionally multiple times if input focus changes rapidly at startup) and does not affect app behavior. It cannot be suppressed via Python logging configuration since it is emitted by a macOS system framework at the C level.
-
-**Root cause — macOS Input Method Kit (IMK) and Qt's event loop:**  
-`IMKCFRunLoopWakeUpReliable` is an Apple Input Method Kit (IMK) internal: it attempts to wake the main thread's `CFRunLoop` when the system input method daemon (e.g., the Chinese/Japanese input method server, or the universal text input layer) wants to notify the focused text widget. The message fires when the IMK framework cannot deliver this notification — because the `CFRunLoop` is either not yet running, has already stopped, or is being driven by a foreign event loop (Qt's own event loop, not Cocoa's `NSRunLoop`).
-
-PyQt6 uses Qt's native event loop integration (`QEventDispatcherMac`) which does pump `CFRunLoop` but with subtly different timing from a pure Cocoa app. The mismatch window during early startup — between the point where the first `QLineEdit` or `QPlainTextEdit` gains focus and the point where the Qt–Cocoa event loop integration is fully established — is when the IMK message fires.
-
-The message is generated inside `IMKInputSession` (a private Apple framework) and there is no public API to suppress or disable it. It is seen across many PyQt5/PyQt6 and PySide6 applications on macOS and is widely regarded as a non-actionable Apple framework bug.
-
-**Why it is not `BUG-021` (the font warning):**  
-BUG-021 is a Qt font alias scan triggered by `font-family: monospace` in stylesheets (174ms, fixed by using explicit font families). This message is unrelated — it comes from the macOS system input method layer, not from Qt's font subsystem.
-
-**Possible mitigations:**
-
-- **Defer first focus** (may reduce frequency): In `app.py closeEvent` or the end of `__init__`, avoid giving any text widget focus during initial layout construction — call `self.setFocus()` or `clearFocus()` on the main window before the event loop starts. This may reduce the window during which IMK tries to ping a not-yet-ready `CFRunLoop`. Not guaranteed to eliminate the message.
-
-- **Redirect stderr at process level** (suppresses all such messages): Wrap the process entry point to redirect file descriptor 2 before Qt initializes:
-  ```python
-  import os, sys
-  if sys.platform == "darwin":
-      devnull = os.open(os.devnull, os.O_WRONLY)
-      os.dup2(devnull, 2)   # redirect stderr → /dev/null for C-level messages
-      os.close(devnull)
-  ```
-  This silences the IMK message but also suppresses any other C-level stderr output (including genuine errors from wgpu-native or the GPU driver). Not recommended without a mechanism to re-enable stderr for debugging.
-
-- **Accept as known noise** (recommended for now): The message is cosmetically annoying but carries no information about app correctness. Document it here as a known macOS PyQt6 quirk and leave it unfixed until it is confirmed to affect real users or until Apple or Qt resolves the underlying IMK–CFRunLoop timing issue upstream.
-
-**Platform:** macOS only. Not reproducible on Linux or Windows.
-
----
-
----
-
-
----
-
-
 ### BUG-014 — `RuntimeError: CallerHelper has been deleted` on app close
 **Status:** Open  
 **Logged:** 2026-05-18  

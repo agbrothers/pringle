@@ -244,7 +244,8 @@ class CellListWidget(QWidget):
                     self._assign_folder(cell, self._infer_folder(idx + 1))
                 if source and not is_sl:
                     cell.set_source(source)
-                cell.focus()
+                if not self._skip_rebuild:
+                    cell.focus()
                 if source and not self._skip_rebuild:
                     self._rebuild_namespace()
                 self._update_placeholder()
@@ -259,7 +260,8 @@ class CellListWidget(QWidget):
 
         if source and not is_sl:
             cell.set_source(source)
-        cell.focus()
+        if not self._skip_rebuild:
+            cell.focus()
         if source and not self._skip_rebuild:
             self._rebuild_namespace()
         self._update_placeholder()
@@ -296,7 +298,8 @@ class CellListWidget(QWidget):
                     self._assign_folder(cell, self._infer_folder(idx + 1))
                 if source:
                     cell.set_source(source)
-                cell.focus()
+                if not self._skip_rebuild:
+                    cell.focus()
                 self._update_placeholder()
                 return cell
 
@@ -307,7 +310,8 @@ class CellListWidget(QWidget):
             self._assign_folder(cell, self._infer_folder(len(self._cells) - 1))
         if source:
             cell.set_source(source)
-        cell.focus()
+        if not self._skip_rebuild:
+            cell.focus()
         self._update_placeholder()
         return cell
 
@@ -337,7 +341,8 @@ class CellListWidget(QWidget):
                 self._layout.insertWidget(idx + 2, cell)
                 if not self._skip_folder_inference:
                     self._assign_folder(cell, self._infer_folder(idx + 1))
-                cell.focus()
+                if not self._skip_rebuild:
+                    cell.focus()
                 self._update_placeholder()
                 return cell
 
@@ -346,7 +351,8 @@ class CellListWidget(QWidget):
         self._cells.append(cell)
         if not self._skip_folder_inference:
             self._assign_folder(cell, self._infer_folder(len(self._cells) - 1))
-        cell.focus()
+        if not self._skip_rebuild:
+            cell.focus()
         self._update_placeholder()
         return cell
 

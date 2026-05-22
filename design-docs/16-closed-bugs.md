@@ -6,6 +6,16 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-026 — `error messaging the mach port for IMKCFRunLoopWakeUpReliable` printed on startup
+**Status:** Closed (fixed 2026-05-21)  
+**Severity:** Low — stderr noise only
+
+**Root cause:** During session restore, each `add_cell`/`add_data_cell`/`add_comment_cell` call unconditionally called `cell.focus()`, giving a `QPlainTextEdit` keyboard focus before Qt's Cocoa event loop integration was fully established. The IMK framework attempted to ping the `CFRunLoop` for the newly focused widget and failed.
+
+**Fix:** Gated all six `cell.focus()` call sites in `cell_list.py` on `not self._skip_rebuild`. Since `restore_cell_list` sets `_skip_rebuild = True` for its entire duration, no text widget receives focus during startup. Interactive `add_cell` calls (user-triggered) still focus the new cell normally.
+
+---
+
 ### BUG-023 — Dragging a folder does not move its member cells
 **Status:** Closed (fixed 2026-05-21)  
 **Severity:** High
