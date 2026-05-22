@@ -56,3 +56,52 @@ Not without modifying or replacing the `OrbitController`. Its spherical-coordina
 - **Full simultaneous pan+rotate** (larger refactor): Replace `gfx.OrbitController` with a custom controller that handles both mouse orbit and keyboard pan in a single unified update loop with no internal caching. This is the video-game-style approach and gives the best UX, but is a significant change to the navigation architecture.
 
 ---
+
+### BUG-037 — Renderer test suite crashes with SIGABRT under Python 3.13 incremental GC
+
+**Status:** Open  
+**Logged:** 2026-05-22  
+**Severity:** HIGH — all tests that instantiate `PringleRenderer` / wgpu are non-runnable in CI
+
+**Affected test files:**
+- `tests/test_phase1.py`
+- `tests/test_phase2.py`
+- `tests/test_phase3.py`
+- `tests/test_phase4_5.py`
+- `tests/test_phase10.py`
+- `tests/test_phase11.py`
+
+**Symptom:**  
+Tests abort mid-run with `Fatal Python error: Aborted`. The crash occurs in the wgpu-native poller thread while the Python main thread is in a GC cycle:
+
+```
+Thread 0x... (most recent call first):
+  ... wgpu/backends/wgpu_native/_poller.py line 101 in run  ← poller thread
+
+Current thread 0x... (most recent call first):
+  Garbage-collecting
+  ... renderstate.py in __init__   ← main thread inside wgpu/pygfx
+```
+
+**Root cause:**  
+Python 3.13 introduced incremental garbage collection. GC can fire at any instruction boundary, including inside `cffi`/wgpu C-extension calls. The wgpu-native poller thread holds resources that are also accessed by the main thread's GC cycle. The combination causes an internal abort in the native wgpu library (`wgpu_native`).
+
+Confirmed pre-existing: `git stash` of all current changes → same crash on all 6 test files. The crash is in `wgpu` / `pygfx`, not in Pringle code.
+
+**Workaround:**  
+Run tests excluding renderer test files:
+```
+python -m pytest tests/ --ignore=tests/test_rendering.py \
+  --ignore=tests/test_phase1.py --ignore=tests/test_phase2.py \
+  --ignore=tests/test_phase3.py --ignore=tests/test_phase4_5.py \
+  --ignore=tests/test_phase10.py --ignore=tests/test_phase11.py
+```
+157 tests pass cleanly.
+
+**Fix directions:**
+- Disable Python 3.13 incremental GC in tests via `gc.set_threshold(0)` or `gc.disable()` in a pytest plugin/conftest — may mask the crash but doesn't fix it
+- Upgrade wgpu-py / pygfx — the issue may be fixed in a newer wgpu-native release
+- Use Python 3.12 (no incremental GC) for CI until wgpu is fixed
+- File upstream bug with wgpu-py
+
+---

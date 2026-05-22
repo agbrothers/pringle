@@ -228,13 +228,17 @@ class CellListWidget(QWidget):
             )
             self._eval_worker.results_ready.connect(self._on_eval_results)
             self._eval_thread.start()
-            _t = self._eval_thread
-            self.destroyed.connect(lambda: (_t.quit(), _t.wait(2000)))
         else:
             self._eval_worker = None
             self._eval_thread = None
 
         self._build_ui()
+
+    def shutdown(self) -> None:
+        """Stop the eval thread gracefully. Must be called before Qt destroys widgets."""
+        if self._eval_thread and self._eval_thread.isRunning():
+            self._eval_thread.quit()
+            self._eval_thread.wait(3000)
 
     # ------------------------------------------------------------------
     # UI

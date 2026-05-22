@@ -396,6 +396,10 @@ class PringleWindow(QMainWindow):
             self._update_title()
 
     def closeEvent(self, event) -> None:
+        # Stop the eval thread before Qt destroys widgets. Without this the
+        # background thread can call results_ready.emit() after _EvalWorker's
+        # C++ object is deleted, producing a "wrapped C/C++ object deleted" crash.
+        self._cell_list.shutdown()
         # Drain any pending GPU async callbacks (map_async completions) before
         # Qt tears down QObjects. Without this, the wgpu-native background thread
         # fires its callback after CallerHelper is deleted, printing a spurious

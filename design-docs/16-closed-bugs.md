@@ -6,6 +6,13 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-036 — `_EvalWorker` C++ object deleted before eval thread stops on close
+**Status:** Closed (fixed 2026-05-22)
+
+**Fix:** Added `CellListWidget.shutdown()` that calls `_eval_thread.quit()` + `wait(3000)`. `PringleWindow.closeEvent` now calls `self._cell_list.shutdown()` as the first action before `processEvents()` and `super().closeEvent()`. The racy `self.destroyed` lambda (which fired after Qt had already started destroying widgets) was removed. See [cell_list.py](../pringle/cell_list.py) and [app.py](../pringle/app.py).
+
+---
+
 ### BUG-033 — Sub-cells in data mode trigger full rebuild on every keystroke
 **Status:** Closed (fixed 2026-05-22)
 
