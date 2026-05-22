@@ -149,6 +149,45 @@ class TestCellWidgetSubCells:
 
 
 # ---------------------------------------------------------------------------
+# set_data_mode silent sub-cell removal (BUG-034)
+# ---------------------------------------------------------------------------
+
+class TestSetDataMode:
+    def test_force_false_silently_removes_incompatible_sub_cells(self, qapp):
+        # Constraint sub-cells are incompatible with data mode; force=False must
+        # remove them without spawning a QMessageBox.
+        cell = CellWidget()
+        cell.add_sub_cell("constraint")
+        assert len(cell._sub_cells) == 1
+        cell.set_data_mode(True)  # force=False by default
+        assert len(cell._sub_cells) == 0
+        assert cell.is_data_mode()
+
+    def test_force_false_removes_recursion_when_leaving_data_mode(self, qapp):
+        cell = CellWidget()
+        cell._data_mode = True  # put cell in data mode without going through set_data_mode
+        cell.add_sub_cell("recursion")
+        assert len(cell._sub_cells) == 1
+        cell.set_data_mode(False)  # force=False by default
+        assert len(cell._sub_cells) == 0
+        assert not cell.is_data_mode()
+
+    def test_compatible_sub_cells_are_preserved(self, qapp):
+        # Recursion sub-cells are compatible with data mode; they must survive the switch.
+        cell = CellWidget()
+        cell._data_mode = True
+        cell.add_sub_cell("recursion")
+        cell.set_data_mode(True)  # no-op (already in data mode), sub-cell untouched
+        assert len(cell._sub_cells) == 1
+
+    def test_no_change_when_already_in_target_mode(self, qapp):
+        cell = CellWidget()
+        cell.add_sub_cell("constraint")
+        cell.set_data_mode(False)  # already False — must be a no-op
+        assert len(cell._sub_cells) == 1
+
+
+# ---------------------------------------------------------------------------
 # Backend: apply_constraints
 # ---------------------------------------------------------------------------
 

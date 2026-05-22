@@ -7,29 +7,9 @@ See [16-closed-bugs.md](16-closed-bugs.md) for resolved bugs.
 
 ---
 
-### BUG-035 — `ConstraintSubCell` class handles 4 sub-types but is named for one; `hasattr` guards in `_eval_cell` are unreachable dead code
-
-**Status:** Closed (fixed 2026-05-22)  
-**Logged:** 2026-05-22  
-**Severity:** Low — cosmetic/structural; no runtime impact
-
-**Description:**  
-Two naming/clarity issues in the expression cell implementation that accumulated during the DataCellWidget migration:
-
-**1. `ConstraintSubCell` (cell_widget.py:91) name does not match responsibilities.**  
-The class handles four sub-types: `constraint`, `condition`, `initial_condition`, and `recursion`. The name `ConstraintSubCell` reflects only the first sub-type. Downstream, `_sub_cells: list[ConstraintSubCell]` and method signatures like `_remove_sub_cell(sub: ConstraintSubCell)` imply a homogeneous constraint-only list, hiding the fact that the list may contain recursion rules or initial conditions. Rename to `SubCell` or `ExprSubCell` for accuracy.
-
-**2. `hasattr` guards in `_eval_cell` (cell_list.py:534) are unreachable.**  
-Every call to `constraint_exprs`, `condition_exprs`, `recurrence_expr`, `initial_condition_exprs`, `set_preview`, and `set_data_mode` is wrapped in `hasattr(cell, ...)`. In the actual control flow, `_eval_cell` only ever receives `CellWidget` instances — sliders `continue` before reaching it, and folders/comments are filtered from `evaluable` before the DAG run. The guards imply a heterogeneous type that does not exist and make the method harder to read.
-
-**Fix:**  
-Rename `ConstraintSubCell` → `SubCell` (global search-replace across `cell_widget.py`, `session.py`, and tests). Remove the `hasattr` wrappers in `_eval_cell` and replace with direct method calls.
-
----
-
 ### BUG-034 — `_eval_cell` can spawn a blocking `QMessageBox` dialog mid-rebuild
 
-**Status:** Open  
+**Status:** Closed (fixed 2026-05-22)  
 **Logged:** 2026-05-22  
 **Severity:** High — modal dialog can appear during a passive rebuild triggered by a slider drag or upstream edit; blocks the Qt event loop from inside a debounce timeout
 
@@ -86,8 +66,8 @@ Sub-cells bypass this contract entirely. `add_sub_cell` always connects `sub.con
 In `add_sub_cell`, check `self._data_mode` and connect to `_mark_data_stale` (not `_on_text_changed`) when in data mode, mirroring the main-cell signal swap. Also apply the same swap inside `set_data_mode` for any already-attached sub-cells.
 
 ```python
-def add_sub_cell(self, sub_type: str = "constraint") -> ConstraintSubCell:
-    sub = ConstraintSubCell(sub_type=sub_type, parent=self)
+def add_sub_cell(self, sub_type: str = "constraint") -> SubCell:
+    sub = SubCell(sub_type=sub_type, parent=self)
     if self._data_mode:
         sub.content_changed.connect(self._mark_data_stale)
     else:
@@ -97,133 +77,8 @@ def add_sub_cell(self, sub_type: str = "constraint") -> ConstraintSubCell:
 
 ---
 
-### BUG-032 — `test_phase10` tests use stale 4-arg `_on_bounds_changed` signature; current impl takes 6 args
-
-**Status:** Closed (fixed 2026-05-22)  
-**Logged:** 2026-05-22  
-**Severity:** Low — test failures only; no runtime impact on users
-
-**Description:**  
-5 tests in `tests/test_phase10.py` fail because they call `win._on_bounds_changed(x_min, x_max, y_min, y_max)` with 4 positional arguments, and unpack `bounds_changed` signal tuples as 4-tuples. The current implementation (app.py:639 and ViewSettingsWidget.bounds_changed signal) uses a 6-argument form that adds `z_min` and `z_max`.
-
-The mismatch is pre-existing from a prior bounds-widget expansion and was not caught when z-bounds were added. The docstring in `view_settings.py:6` still says `bounds_changed(x_min, x_max, y_min, y_max)` (4 args) while the `pyqtSignal` on line 28 is `pyqtSignal(float, float, float, float, float, float)` (6 args).
-
-**Failing tests:**  
-- `TestViewSettingsWidget::test_bounds_changed_signal_on_apply`  
-- `TestPringleWindowViewSettings::test_bounds_change_updates_grid`  
-- `TestPringleWindowViewSettings::test_bounds_preserves_resolution`  
-- `TestPringleWindowViewSettings::test_resolution_preserves_bounds`  
-- `TestPringleWindowViewSettings::test_bounds_change_triggers_cell_reevaluation`
-
-**Fix:**  
-Update the 5 failing tests to call `_on_bounds_changed` with 6 args and unpack received signals as 6-tuples. Also fix the stale docstring in `view_settings.py`.
-
----
-
-### BUG-031 — RNG seeding breaks CellWidget data-mode → run button (always produces same draws)
-**Status:** Closed (fixed 2026-05-22)  
-**Logged:** 2026-05-22  
-**Severity:** High — user's manual re-sample action has no effect
-
-**Description:**  
-After the BUG-029 RNG state fix, clicking the `→` button on a data-mode `CellWidget` (e.g., `M = random.random((10, 2)) * 6 - 3`) no longer produces new random draws. The scene does not update at all for random expressions. The intent of the → button is to let the user explicitly re-sample; the RNG fix inadvertently made all equation cells deterministic with no escape hatch.
-
-**Root cause:**  
-`_on_run_requested` ([cell_list.py](../pringle/cell_list.py)) calls `_rebuild_namespace()`. The RNG fix inside `_rebuild_namespace` restores `cell._rng_state` before every equation cell eval — including the cell the user just clicked →on. So the re-eval produces the same draws as before, making → a no-op for random cells.
-
-**Fix:**  
-In `_on_run_requested`, clear `_rng_state` on the specific cell **before** calling `_rebuild_namespace()`. This allows that cell's next eval to capture the current MT position (producing new draws) while all other cells retain their saved states:
-
-```python
-def _on_run_requested(self, cell_id: str) -> None:
-    idx = self._index_of(cell_id)
-    if idx >= 0:
-        self._cells[idx]._rng_state = None   # force fresh draws on explicit re-run
-    self._rebuild_namespace()
-```
-
----
-
-### BUG-030 — `DataCellWidget` is a zombie class; architecture docs describe old design
-**Status:** Closed (fixed 2026-05-22)  
-**Logged:** 2026-05-22  
-**Severity:** Medium — no runtime failure, but the code/docs mismatch creates confusion and leaves dead code in the codebase
-
-**Description:**  
-`CellWidget` now has a full `data_mode` that replicates the original role of `DataCellWidget` — stale indicator, `→` run button, sub-cell menu offering `recursion` / `initial_condition`, and render-mode style options. The `+ Data cell` UI button was removed. Despite this, `DataCellWidget` remains as a live class, reachable only via `restore_cell_list` when loading YAML files with `type: data`. The `_data_cell_ns` dict, `_run_data_cell`, `_on_data_cell_*` handlers, and `add_data_cell()` all still exist in `cell_list.py` but are never triggered from the UI.
-
-**Affected files:**  
-- `pringle/data_cell_widget.py` — zombie class  
-- `pringle/data_panel.py` — also appears to be dead (references old data panel widget)  
-- `pringle/cell_list.py` — `add_data_cell`, `_run_data_cell`, `_on_data_cell_visibility_toggled`, `_on_data_cell_render_mode_changed`, `_data_cell_ns`  
-- `pringle/session.py` — `restore_cell_list` still creates `DataCellWidget` instances for `type: data` YAML  
-- `pringle/app.py` — `_on_open` auto-run loop still targets `DataCellWidget` instances  
-
-**Design doc inaccuracies (multiple docs still describe the old architecture):**  
-- `design-docs/06-panel-architecture.md`: ASCII diagram lists `[data cells]` as a distinct type; "Data Cells" section describes the old per-cell run chain; boot sequence refers to `DataCellWidget` auto-run; Cell State table includes `data` as a valid `type`  
-- `design-docs/07-cell-types-and-blocks.md` (line 184): "Data cells are added via `+ Data cell`" — button no longer exists  
-- `design-docs/11-recurrence-relations.md` (line 5): "live in the data panel" — inaccurate  
-- `design-docs/12-user-input-and-interaction.md`: "Run All button", "Cell type label chip" — neither exists  
-- `design-docs/14-bug-backlog.md` (BUG-029): framed as a `DataCellWidget` bug, but the actual manifestation was on a data-mode `CellWidget`  
-
-**Remaining behavioral differences between the two paths (relevant to migration decision):**  
-
-| Aspect | `CellWidget` data mode | `DataCellWidget` |
-|---|---|---|
-| → click triggers | `_rebuild_namespace()` (all eq cells) | `_run_data_cell()` (this cell only) |
-| Namespace | Regular `shared` dict from eq eval pass | Separate `_data_cell_ns` (persists between rebuilds) |
-| AST safety check | Enforced | Bypassed (`is_data_cell=True`) |
-| `np` full alias | Not available | Available |
-| Auto-updates with sliders | Yes (re-runs in every rebuild) | No (stale until user clicks →) |
-
-**Migration plan (pending decision):**  
-1. For each `type: data` entry in existing YAML sessions: migrate to `type: equation` and verify the source is compatible with `build_equation_namespace()` (no bare `import`, no `np.*` calls outside the whitelist)  
-2. Remove `DataCellWidget`, `data_panel.py`, `add_data_cell`, `_run_data_cell`, `_data_cell_ns`, `_on_data_cell_*` from `cell_list.py`  
-3. Remove `DataCellWidget` branch from `session.py:cell_to_dict` and `restore_cell_list`  
-4. Remove `DataCellWidget` auto-run loop from `app.py:_on_open`  
-5. Update all five design docs listed above  
-
----
-
-### BUG-029 — Session load and passive rebuilds re-sample random equation cells
-**Status:** Closed (fixed 2026-05-21)  
-**Logged:** 2026-05-20  
-**Severity:** Medium — data loss from user's perspective; no crash, but the scene changes on every slider drag and every load
-
-**Description:**  
-When an equation cell contains a random sampling expression (e.g. `M = random.random((10, 2)) * 6 - 3`), the sampled array changes on every passive rebuild (slider drag, upstream edit) and on every session reload. This makes it impossible to build a stable scene around a particular random sample.
-
-**Root cause — no RNG state pinning in `_rebuild_namespace`:**  
-`_rebuild_namespace` re-evaluates all equation cells in DAG order. Each cell draws fresh random values from numpy's global MT19937 RNG at whatever position the MT is at that moment — which varies with every slider tick. On session load, `restore_cell_list` called `_rebuild_namespace` with no saved RNG context, producing a new sample on every open.
-
-**What randomness is accessible in cells:**  
-`random` in the cell namespace is `numpy.random`. All sampling functions (`random.random`, `random.randn`, `random.choice`, etc.) and scipy distributions draw from numpy's global MT19937 RNG. This makes global-state snapshotting effective for the vast majority of realistic usage. The only gap is `np.random.default_rng()`, which creates an independent PCG64 generator not affected by `np.random.set_state()`.
-
-**Fix — per-cell RNG state snapshot inside `_rebuild_namespace`:**  
-Before each equation cell's `_eval_cell` call, capture or restore the MT19937 state:
-- **First eval** (no `_rng_state` on cell): snapshot current MT state into `cell._rng_state`
-- **Subsequent evals** (saved state exists): restore that state before evaluating → same draws every time
-- **Explicit `→` click** (`_on_run_requested`): clears `cell._rng_state = None` before calling `_rebuild_namespace` → next eval captures a fresh MT position → new random sample
-
-The full 5-tuple state `('MT19937', uint32[624], pos, has_gauss, gauss_val)` is captured so that `randn`-style calls (which internally cache a Gaussian deviate) also reproduce correctly.
-
-**Session persistence:**  
-`cell_to_dict` serializes `rng_state` (624-element uint32 list), `rng_pos`, `rng_has_gauss`, and `rng_gauss` for any cell that has a pinned state. `restore_cell_list` stashes these into `cell._pending_rng_state`; the next `_rebuild_namespace` call promotes the pending state to `_rng_state` before evaluating.
-
-**Implementation touchpoints:**
-
-| File | Change |
-|---|---|
-| `cell_list.py:_rebuild_namespace` | Save/restore `_rng_state` before each equation cell eval; promote `_pending_rng_state` if present |
-| `cell_list.py:_on_run_requested` | Clear `_rng_state = None` on target cell before `_rebuild_namespace` to force fresh draws |
-| `session.py:cell_to_dict` | Serialize `rng_state` + `rng_pos` + `rng_has_gauss` + `rng_gauss` for cells that have a pinned state |
-| `session.py:restore_cell_list` | Stash deserialized state into `cell._pending_rng_state` for all cell types |
-
-**Known limitation:** `np.random.default_rng()` creates an independent PCG64 generator; `set_state` has no effect on it. Cells using `default_rng()` would produce different samples on each rebuild. Uncommon in practice.
-
----
-
 ### BUG-013 — Camera locks and crosshair drifts when panning and rotating simultaneously
+
 **Status:** Open  
 **Logged:** 2026-05-17
 
@@ -271,4 +126,3 @@ Not without modifying or replacing the `OrbitController`. Its spherical-coordina
 - **Full simultaneous pan+rotate** (larger refactor): Replace `gfx.OrbitController` with a custom controller that handles both mouse orbit and keyboard pan in a single unified update loop with no internal caching. This is the video-game-style approach and gives the best UX, but is a significant change to the navigation architecture.
 
 ---
-

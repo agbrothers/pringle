@@ -501,28 +501,33 @@ class CellWidget(QWidget):
         return [s.source() for s in self._sub_cells
                 if s.sub_type() == "initial_condition" and s.source().strip()]
 
-    def set_data_mode(self, enabled: bool) -> None:
-        """Switch cell between expression mode (auto-eval) and data-array mode (manual re-run)."""
+    def set_data_mode(self, enabled: bool, force: bool = False) -> None:
+        """Switch cell between expression mode (auto-eval) and data-array mode (manual re-run).
+
+        force=True: prompt user before removing incompatible sub-cells (explicit user action).
+        force=False: silently remove incompatible sub-cells (passive inference from eval result).
+        """
         if self._data_mode == enabled:
             return
 
-        # Warn about incompatible sub-cells before switching
+        # Identify sub-cells incompatible with the target mode
         if enabled:
             incompatible = [s for s in self._sub_cells if s.sub_type() in ("constraint", "condition")]
         else:
             incompatible = [s for s in self._sub_cells if s.sub_type() in ("recursion", "initial_condition")]
 
         if incompatible:
-            from PyQt6.QtWidgets import QMessageBox
-            mode_label = "data array" if enabled else "spatial expression"
-            reply = QMessageBox.question(
-                self,
-                "Clear sub-cells?",
-                f"This cell now returns a {mode_label}. "
-                f"{len(incompatible)} sub-cell(s) of the wrong type will be removed. Continue?",
-            )
-            if reply != QMessageBox.StandardButton.Yes:
-                return
+            if force:
+                from PyQt6.QtWidgets import QMessageBox
+                mode_label = "data array" if enabled else "spatial expression"
+                reply = QMessageBox.question(
+                    self,
+                    "Clear sub-cells?",
+                    f"This cell now returns a {mode_label}. "
+                    f"{len(incompatible)} sub-cell(s) of the wrong type will be removed. Continue?",
+                )
+                if reply != QMessageBox.StandardButton.Yes:
+                    return
             for sub in incompatible[:]:
                 self._remove_sub_cell(sub)
 

@@ -6,6 +6,13 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-034 — `_eval_cell` blocked by `QMessageBox` during passive mode transition
+**Status:** Closed (fixed 2026-05-22)
+
+**Fix:** Added `force: bool = False` parameter to `set_data_mode` (cell_widget.py). When `force=False` (the default, used by `_eval_cell`), incompatible sub-cells are silently removed with no dialog. The confirmation dialog is only shown when `force=True`, reserved for explicit future user-initiated calls. Added four regression tests in `test_phase8.py::TestSetDataMode`.
+
+---
+
 ### BUG-032 — `test_phase10` tests use stale 4-arg `_on_bounds_changed` signature
 **Status:** Closed (fixed 2026-05-22)
 
