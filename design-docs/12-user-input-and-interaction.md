@@ -242,13 +242,11 @@ These are the areas not captured elsewhere that v1 should address before shippin
 | **Undo/redo** | Qt's `QUndoStack`; track cell text changes, additions, deletions |
 | **Copy/paste cells** | `Ctrl+C` / `Ctrl+V` on a selected cell; paste inserts below current cell |
 | **Loading indicator** | Spinner or progress bar on cells actively computing (>100ms eval) |
-| **Stale indicator placement** | Orange dot or "↻ stale" badge at the cell's top-right corner (data cells only) |
+| **Stale indicator placement** | Orange dot in the data-mode row of equation cells that produce scatter arrays; goes orange when the expression or upstream deps changed since the last `→` click |
 | **Error display** | Red text below the cell showing the Python exception message (truncated to one line; expandable) |
-| **Run All button** | Prominent "▶▶ Run All" button at the top of the Data Panel; runs all data cells in dependency order |
-| **New cell button** | "+" button at the bottom of each panel (below all cells) to add a new empty cell |
+| **New cell button** | "+" button at the bottom of the cell list to add a new empty cell |
 | **Session title** | Editable title in the window title bar; defaults to filename |
 | **Unsaved changes indicator** | Asterisk (*) in title bar when session has unsaved changes |
-| **Cell type label** | Small chip on data cells ("data") and recurrence cells ("recurrence") to distinguish from equation cells |
 | **Empty session state** | A placeholder message in empty panels: "Press + to add an expression" |
 | **Grid regeneration on bound change** | Changing axis bounds re-evaluates all spatial cells — show a brief loading indicator if >200ms |
 | **Slider value display** | Show current numeric value next to the drag handle; double-click to type an exact value |

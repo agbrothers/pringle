@@ -6,6 +6,30 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-031 — RNG seeding breaks CellWidget data-mode → run button
+**Status:** Closed (fixed 2026-05-22)
+
+**Root cause:** `_on_run_requested` called `_rebuild_namespace()`, which restored `cell._rng_state` for every equation cell including the target — making `→` a no-op for random cells.
+
+**Fix:** In `_on_run_requested`, clear `self._cells[idx]._rng_state = None` on the target cell before calling `_rebuild_namespace()`. That cell then captures a fresh MT position (new draws); all other cells retain their pinned state.
+
+---
+
+### BUG-030 — `DataCellWidget` zombie class and stale architecture docs
+**Status:** Closed (fixed 2026-05-22)
+
+**Root cause:** The equation cell / data cell merge happened at the UI level (no `+ Data cell` button; `CellWidget` gained `data_mode`) but the old code paths were never removed. `DataCellWidget`, `data_panel.py`, `add_data_cell`, `_run_data_cell`, `_data_cell_ns`, and `_on_data_cell_*` remained as dead code reachable only via loading old YAML files with `type: data`.
+
+**Fix:**
+- Migrated `examples/lorenz.yml` and `examples/rossler.yml`: `type: data` → `type: equation`, `np.zeros(...)` → `zeros(...)`
+- Deleted `pringle/data_cell_widget.py` and `pringle/data_panel.py`
+- Removed `add_data_cell`, `_run_data_cell`, `_data_cell_ns`, `_on_data_cell_visibility_toggled`, `_on_data_cell_render_mode_changed` from `cell_list.py`
+- Removed `DataCellWidget` branch from `session.py:cell_to_dict`; `restore_cell_list` now routes old `type: data` YAML entries through `add_cell` (equation path) with `cell_type in ("equation", "data")` handling for sub-cells and RNG state
+- Removed `DataCellWidget` auto-run loop from `app.py:_on_open`
+- Updated `06-panel-architecture.md`, `07-cell-types-and-blocks.md`, `11-recurrence-relations.md`, `12-user-input-and-interaction.md`, and BUG-029 description in `14-bug-backlog.md`
+
+---
+
 ### BUG-014 — `RuntimeError: CallerHelper has been deleted` on app close
 **Status:** Closed (fixed 2026-05-21)  
 **Severity:** Low — stderr noise only; app has already exited cleanly, no data loss

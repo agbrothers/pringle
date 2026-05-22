@@ -179,13 +179,18 @@ A cell whose first character is `#` is treated as a comment cell — free text, 
 
 ---
 
-## Data Cells
+## Data Mode (Equation Cells with Scatter Output)
 
-Data cells live in the unified cell list alongside equation cells. They are added via `+ Data cell`. Unlike equation cells, they do **not** evaluate automatically — they require a manual ▷ Run click. When run, their exported names merge into a persistent `_data_cell_ns` that seeds all subsequent equation evaluations.
+Equation cells that produce an `(N, 2)` or `(N, 3)` array (detected by shape inference) automatically enter **data mode**. This is not a separate cell type — it is a UI state of an equation cell. Data mode cells:
 
-Data cells can have `initial_condition` and `recursion` sub-cells for recurrence patterns. The `↺` button opens a dropdown to add them.
+- Show a `→` run button and a stale indicator (orange dot) in a second row below the expression
+- Auto-evaluate reactively like any equation cell (slider changes, upstream edits, `_rebuild_namespace`)
+- Pin their MT19937 RNG state on first evaluation so random draws are stable across passive rebuilds
+- Clear the pinned state when the user clicks `→`, producing a fresh random sample
 
-Data cells are marked stale (orange status dot) when any upstream slider or equation changes. They must be manually re-run.
+Sub-cells (constraint, condition, initial_condition, recursion) are available regardless of data mode. Recurrence patterns (`path[n] = path[n-1] + ...`) work the same way in equation cells as they did in the old DataCellWidget.
+
+The `→` button is distinct from a re-run: it is a **resample** — it requests new random draws. Passive rebuilds (slider changes, upstream edits) always reproduce the same random output that was pinned at the most recent explicit `→` click or first evaluation.
 
 ---
 

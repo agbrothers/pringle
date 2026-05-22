@@ -13,7 +13,6 @@ The Pringle UI is split into two primary areas:
 │  │  (unified)    │  │        (GPU canvas)                    │
 │  │               │  │                                        │
 │  │  [eq cells]   │  │                                        │
-│  │  [data cells] │  │                                        │
 │  │  [folders]    │  │                                        │
 │  │  [sliders]    │  │                                        │
 │  │  [comments]   │  │                                        │
@@ -23,37 +22,26 @@ The Pringle UI is split into two primary areas:
 └─────────────────────┴────────────────────────────────────────┘
 ```
 
-The left panel contains a single **unified cell list** (`CellListWidget`) holding all cell types — equation, data, slider, folder, and comment — in one scrollable list. There is no separate data panel or panel divider between them. The ⚙ gear icon in the top-right corner of the viewport opens the **Axis Settings dialog** (a floating non-modal `Qt.Tool` window containing axis bounds, overlay toggles, camera presets, and resolution controls).
+The left panel contains a single **unified cell list** (`CellListWidget`) holding all cell types — equation, slider, folder, and comment — in one scrollable list. There is no separate data panel or panel divider between them. The ⚙ gear icon in the top-right corner of the viewport opens the **Axis Settings dialog** (a floating non-modal `Qt.Tool` window containing axis bounds, overlay toggles, camera presets, and resolution controls).
 
 ---
 
 ## The Unified Dependency Graph
 
-All cells — equation and data — live on a single directed acyclic graph (DAG). The graph determines evaluation order. Visual order within each panel is cosmetic; cells can be freely dragged and reordered in either panel.
+All cells live on a single directed acyclic graph (DAG). The graph determines evaluation order. Visual order is cosmetic; cells can be freely dragged and reordered.
 
 Edges in the DAG: cell A → cell B if A defines a name that B references (determined by AST free-variable analysis).
 
-**The key axis is reactivity, not panel membership:**
+**Reactivity:**
 
 | Cell type | Re-evaluates when... |
 |---|---|
 | Slider | User drags or animation ticks |
 | Lambda / helper | Any upstream cell changes |
 | Surface / curve / scatter | Any upstream dependency changes |
-| Data cell | User clicks ▷ Run only |
-| Recurrence cell | User clicks ▷ Run only |
+| Equation cell in data mode | Auto-evaluates like any equation cell; `→` button forces a fresh random sample |
 
-Non-reactive cells (data, recurrence) show a **stale indicator** (visual badge) when any upstream dependency has changed since their last run. The user chooses when to re-run them. They do not auto-run — not on slider changes, not on lambda edits, not on animation ticks. This prevents chaotic re-sampling of stochastic data.
-
-When the user clicks ▷ Run on a data cell:
-1. All upstream reactive cells (sliders, lambdas) are already current — they evaluate continuously
-2. Any upstream data cells that are stale are also run first (in dependency order)
-3. The target cell runs
-4. Downstream cells that have already been run are marked stale
-
-### Why Unified?
-
-A data cell referencing a lambda from the equation panel is handled correctly by the graph — the lambda cell is guaranteed to have evaluated before the data cell runs. No manual boot sequencing required. The separation into two visual panels is purely organizational; it does not affect graph topology.
+Equation cells that produce an `(N, 2)` or `(N, 3)` scatter array automatically enter **data mode** — they gain a stale indicator and a `→` run button. In data mode the cell still auto-evaluates on upstream changes, but the `→` button clears the pinned RNG state to force a new random sample (useful for stochastic initializations). The stale indicator goes orange when the expression or any upstream dependency has changed since the last `→` click.
 
 ### Cycle Detection
 
@@ -66,13 +54,9 @@ If a cycle is detected (e.g., data cell A references name `g` from lambda cell B
 When Pringle opens a saved YAML session:
 
 1. **Load YAML** — restore all cell content, style, slider values, folder membership, and viewport/camera state from file (two-pass restore: Pass 1 creates cells, Pass 2 applies folder membership and collapse/visible states)
-2. **Build dependency graph** — parse all cells, extract free variables, construct DAG
-3. **Evaluate reactive cells** — run all slider and lambda cells in dependency order (no renders yet)
-4. **Auto-run data cells** — all `DataCellWidget` instances with non-empty source are run in dependency order automatically; no manual ▷ needed on load
-5. **Evaluate render cells** — run all equation surface/curve/scatter cells in dependency order
-6. **First render** — renderer draws the scene
-
-This sequence ensures that data cells which call equation-panel lambdas always have those lambdas available at run time.
+2. **Restore RNG state** — each cell that previously had a pinned RNG state has `_pending_rng_state` populated from the session file so the first rebuild reproduces identical random draws
+3. **Single rebuild** — `_rebuild_namespace()` evaluates all cells in DAG order; each cell with a `_pending_rng_state` restores that state before evaluating so random draws are reproducible
+4. **First render** — renderer draws the scene
 
 ---
 
@@ -83,9 +67,8 @@ The shared namespace is the communication channel between all cells. It has laye
 ```
 Layer 1 (lowest):  numpy/scipy whitelist (always present)
 Layer 2:           slider values (reactive; updated on drag/animation)
-Layer 3:           equation panel lambda / helper definitions (reactive)
-Layer 4:           data panel outputs (updated on explicit ▶ Run)
-Layer 5:           grid vars injected per-execution (x, y, u, v, t, etc.)
+Layer 3:           equation cell exports (lambdas, arrays — all cells in DAG order)
+Layer 4:           grid vars injected per-execution (x, y, u, v, t, etc.)
                    — highest priority; cannot be shadowed
 ```
 
@@ -156,12 +139,6 @@ Clicking inserts a new slider cell with name `a`, default value `1`, range `[0, 
 
 **Style updates are non-reactive:** Changing a cell's color, opacity, size, or colormap via the style popover emits `style_updated` (not `content_changed`) and re-applies the cached last result without re-evaluating the expression. Folder visibility toggles likewise re-apply cached results for member cells.
 
-### Data Cells
-
-Non-reactive: only run when the user clicks ▷. Each data cell carries a stale indicator when any upstream dependency has changed since its last run. Clicking ▷ first runs all upstream stale data dependencies in dependency order, then the target cell.
-
-On session load, all data cells with non-empty source are auto-run in dependency order (no manual ▷ needed).
-
 ### Folders
 
 Collapsible groups created via **+ Folder**. Each cell carries a `folder_id` pointer. Drag a cell into a folder's indent zone to assign membership; drag out to remove. Folder headers have:
@@ -213,12 +190,12 @@ Each cell carries the following state, serialized to YAML:
 | Field | Type | Description |
 |---|---|---|
 | `id` | UUID | Stable identifier for dependency graph edges |
-| `type` | enum | `equation`, `slider`, `data`, `folder`, `comment` |
+| `type` | enum | `equation`, `slider`, `folder`, `comment` |
 | `source` | str | The code/text content |
 | `visible` | bool | Whether rendered output is shown |
 | `folder_id` | UUID or None | Containing folder's cell ID; `None` = top-level |
 | `style` | CellStyle | Color, opacity, line width, colormap, render mode, etc. — fully persisted |
 | `error` | str or None | Last execution error message |
 | `warning` | str or None | Shape mismatch or undefined variable warning |
-| `stale` | bool | Data cells: true if upstream deps changed since last run |
+| `rng_state` | uint32[624] or None | Pinned MT19937 state for cells with random draws; ensures reproducibility across rebuilds and session loads |
 | `collapsed` | bool | Folder cells: collapse state |

@@ -2,19 +2,19 @@
 
 ## Design
 
-Recurrence relations in Pringle are a specialized data cell type — not a function or equation construct. They live in the data panel and produce a precomputed array that the equation panel can reference and index.
+Recurrence relations in Pringle are expressed inside equation cells using `initial_condition` and `recursion` sub-cells. They produce a precomputed array that other equation cells can reference and index.
 
 This sidesteps the problems with general programming recursion (stack limits, non-vectorizable, circular dependency detection) by treating recurrences explicitly as what they are: **iterative rules for building arrays from prior values**.
 
 ## Cell Structure
 
-A recurrence data cell has:
+A recurrence equation cell has:
 1. **Primary expression**: allocates the output array — e.g., `path = zeros((10, 2))`
 2. **One or more `initial_condition:` sub-cells**: each is a statement `array[index] = expr` that explicitly sets a specific index
 3. **`recursion:` sub-cell**: a statement of the form `array[n] = expr(array[n-1], ...)` defining the update rule
 
 ```
-[Data cell]  path = zeros((10, 2))
+[Equation cell]  path = zeros((10, 2))
   [initial_condition]  path[0] = array([1.0, 0.1])
   [initial_condition]  path[1] = array([2.0, 0.2])   ← optional; for multi-step recurrences
   [recursion]          path[n] = 2 * path[n-1]
@@ -24,13 +24,16 @@ Multiple initial conditions allow multi-step recurrences (Fibonacci-style: `path
 
 In the YAML session format:
 ```yaml
-- id: "data-002"
-  type: recurrence
-  expression: "path = zeros((10, 2))"
-  initial_conditions:
-    - "path[0] = array([1.0, 0.1])"
-    - "path[1] = array([2.0, 0.2])"
-  recursion: "path[n] = 2 * path[n-1]"
+- id: "cell-002"
+  type: equation
+  source: "path = zeros((10, 2))"
+  sub_cells:
+    - type: initial_condition
+      source: "path[0] = array([1.0, 0.1])"
+    - type: initial_condition
+      source: "path[1] = array([2.0, 0.2])"
+    - type: recursion
+      source: "path[n] = 2 * path[n-1]"
 ```
 
 ## Execution Model

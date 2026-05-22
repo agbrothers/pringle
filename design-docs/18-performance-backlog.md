@@ -375,11 +375,11 @@ The `[... for m in M]` list comprehension iterates over the rows of `M` one at a
 
 This is exactly the log-sum-exp pattern. `scipy.special.logsumexp` computes this in a numerically stable way (avoiding overflow for large β) and is typically faster than the explicit `log(sum(exp(...)))` chain because it can use the max-shift trick internally.
 
-**Optimized expression (requires adding `logsumexp` to the equation namespace whitelist):**
+**Optimized expression:**
 ```python
 E_batch(v) = β_inv * logsumexp(-β * InvDistSqBatch(M, v), axis=0)
 ```
 
 Note the sign flip: `InvDistSqBatch` returns negative squared distances, so the signs work out.
 
-**Blocker:** `logsumexp` is not currently in `build_equation_namespace()`. Needs to be added to `namespace.py`.
+`logsumexp` is now available in the equation namespace (`namespace.py`). The optimization can be applied directly in `examples/memory.yml`.
