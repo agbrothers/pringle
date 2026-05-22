@@ -948,14 +948,40 @@ class CellListWidget(QWidget):
         self._drop_indicator.raise_()
 
     def _move_cell(self, from_idx: int, to_idx: int) -> None:
-        # to_idx is the drop slot (0 = before first cell, N = after last)
-        # Dropping immediately above or below the source is a no-op
-        if to_idx == from_idx or to_idx == from_idx + 1:
-            return
-        self._push_undo()
-        cell = self._cells.pop(from_idx)
-        insert_idx = (to_idx - 1) if to_idx > from_idx else to_idx
-        self._cells.insert(insert_idx, cell)
+        from pringle.folder_cell_widget import FolderCellWidget
+        cell = self._cells[from_idx]
+
+        if isinstance(cell, FolderCellWidget):
+            # Move folder + all its members as a single block
+            folder_id = cell.cell_id
+            members = [c for c in self._cells
+                       if self._cell_folder.get(c.cell_id) == folder_id]
+            block = [cell] + members
+            block_indices = sorted(
+                [self._index_of(b.cell_id) for b in block], reverse=True
+            )
+            # No-op: drop target is within the block itself
+            if to_idx in range(block_indices[-1], block_indices[0] + 2):
+                return
+            self._push_undo()
+            for i in block_indices:
+                self._cells.pop(i)
+            removed_before = sum(1 for i in block_indices if i < to_idx)
+            insert_at = max(0, to_idx - removed_before)
+            for j, b in enumerate(block):
+                self._cells.insert(insert_at + j, b)
+        else:
+            # Single-cell move; dropping immediately above/below is a no-op
+            if to_idx == from_idx or to_idx == from_idx + 1:
+                return
+            self._push_undo()
+            self._cells.pop(from_idx)
+            insert_idx = (to_idx - 1) if to_idx > from_idx else to_idx
+            self._cells.insert(insert_idx, cell)
+            new_folder = self._infer_folder(self._index_of(cell.cell_id))
+            if new_folder != self._cell_folder.get(cell.cell_id):
+                self._assign_folder(cell, new_folder)
+
         # Rebuild layout order without flickering
         self._container.setUpdatesEnabled(False)
         for c in self._cells:
@@ -963,12 +989,6 @@ class CellListWidget(QWidget):
         for i, c in enumerate(self._cells):
             self._layout.insertWidget(i + 1, c)  # +1 skips placeholder at index 0
         self._container.setUpdatesEnabled(True)
-        # Reassign folder membership based on new position (only for non-folder cells)
-        from pringle.folder_cell_widget import FolderCellWidget
-        if not isinstance(cell, FolderCellWidget):
-            new_folder = self._infer_folder(self._index_of(cell.cell_id))
-            if new_folder != self._cell_folder.get(cell.cell_id):
-                self._assign_folder(cell, new_folder)
         self._rebuild_namespace()
 
     # ------------------------------------------------------------------

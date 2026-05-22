@@ -6,6 +6,16 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-023 — Dragging a folder does not move its member cells
+**Status:** Closed (fixed 2026-05-21)  
+**Severity:** High
+
+**Root cause:** `_move_cell` only popped and re-inserted the `FolderCellWidget` header. The layout rebuild then placed member cells at their previous positions in `_cells` order — unchanged — splitting the folder from its members.
+
+**Fix:** `_move_cell` now branches on `isinstance(cell, FolderCellWidget)`. In the folder branch: collects `block = [folder] + members` (members in `_cells` visual order), pops all block indices in reverse, adjusts `to_idx` by the count of removed cells that preceded it, then inserts the whole block at `insert_at`. No-op detection checks whether `to_idx` falls inside the block's own span. Single-cell move logic is unchanged.
+
+---
+
 ### BUG-025 — Drag drop indicator appears inside tall cells; misplaced near hidden cells
 **Status:** Closed (fixed 2026-05-21)  
 **Severity:** Low — cosmetic
