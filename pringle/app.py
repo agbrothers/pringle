@@ -396,16 +396,18 @@ class PringleWindow(QMainWindow):
             self._update_title()
 
     def closeEvent(self, event) -> None:
+        # Stop submitting new GPU work: no new frames, no new map_async calls.
+        self._viewport._draw_timer.stop()
         # Stop the eval thread before Qt destroys widgets. Without this the
         # background thread can call results_ready.emit() after _EvalWorker's
         # C++ object is deleted, producing a "wrapped C/C++ object deleted" crash.
         self._cell_list.shutdown()
-        # Drain any pending GPU async callbacks (map_async completions) before
-        # Qt tears down QObjects. Without this, the wgpu-native background thread
-        # fires its callback after CallerHelper is deleted, printing a spurious
-        # "RuntimeError: wrapped C/C++ object of type CallerHelper has been deleted"
-        # to stderr on every clean exit. Best-effort — covers the common case.
-        QApplication.processEvents()
+        # Drain any pending GPU async callbacks (map_async completions). The
+        # wgpu-native poller thread fires these on the Qt main thread via
+        # CallerHelper. We loop a few times to let in-flight callbacks arrive
+        # and be processed before CallerHelper is deleted by super().closeEvent().
+        for _ in range(5):
+            QApplication.processEvents()
         super().closeEvent(event)
 
     def _update_title(self) -> None:
