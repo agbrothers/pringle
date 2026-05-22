@@ -6,6 +6,13 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-035 — `ConstraintSubCell` renamed to `SubCell`; `hasattr` guards removed from `_eval_cell`
+**Status:** Closed (fixed 2026-05-22)
+
+**Fix:** Renamed `ConstraintSubCell` → `SubCell` across `cell_widget.py` and `tests/test_phase8.py`. Removed the six `hasattr` guards in `_eval_cell` (`cell_list.py`) and replaced with direct method calls, reflecting that `_eval_cell` only ever receives `CellWidget` instances.
+
+---
+
 ### BUG-031 — RNG seeding breaks CellWidget data-mode → run button
 **Status:** Closed (fixed 2026-05-22)
 

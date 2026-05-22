@@ -5,7 +5,7 @@ Layout (horizontal):
   [color dot] [QPlainTextEdit] [+sub] [visibility eye] [delete ✕]
 
 Below the text edit (conditionally):
-  [ConstraintSubCell ...]  — indented sub-cells (constraint / condition)
+  [SubCell ...]  — indented sub-cells (constraint / condition / initial_condition / recursion)
   [error label]            — red, shown on eval error
   [warning label]          — orange, shown on shape mismatch or undefined variable
 
@@ -88,7 +88,7 @@ class DragHandle(QLabel):
 # Constraint / condition sub-cell
 # ---------------------------------------------------------------------------
 
-class ConstraintSubCell(QWidget):
+class SubCell(QWidget):
     """
     An indented sub-cell attached to a CellWidget.
 
@@ -260,7 +260,7 @@ class CellWidget(QWidget):
         self.cell_id: str = cell_id or str(uuid.uuid4())
         self.style: CellStyle = style or CellStyle()
         self._visible: bool = True
-        self._sub_cells: list[ConstraintSubCell] = []
+        self._sub_cells: list[SubCell] = []
         self._data_mode: bool = False
         self._debounce_connected: bool = True  # textChanged → debounce connected
 
@@ -468,9 +468,9 @@ class CellWidget(QWidget):
         self.set_preview(None, None)
         self._set_data_status("ok")
 
-    def add_sub_cell(self, sub_type: str = "constraint") -> ConstraintSubCell:
+    def add_sub_cell(self, sub_type: str = "constraint") -> SubCell:
         """Append a constraint or condition sub-cell below this cell."""
-        sub = ConstraintSubCell(sub_type=sub_type, parent=self)
+        sub = SubCell(sub_type=sub_type, parent=self)
         sub.content_changed.connect(self._on_text_changed)
         sub.delete_requested.connect(lambda: self._remove_sub_cell(sub))
         self._sub_cells.append(sub)
@@ -478,7 +478,7 @@ class CellWidget(QWidget):
         self._debounce.start()
         return sub
 
-    def _remove_sub_cell(self, sub: ConstraintSubCell) -> None:
+    def _remove_sub_cell(self, sub: SubCell) -> None:
         if sub in self._sub_cells:
             self._sub_cells.remove(sub)
         self._sub_layout.removeWidget(sub)

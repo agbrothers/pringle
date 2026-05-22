@@ -2,7 +2,7 @@
 Phase 8 tests: constraint and piecewise sub-cells.
 
 Tests validate:
-- ConstraintSubCell widget structure and signals
+- SubCell widget structure and signals
 - CellWidget.add_sub_cell / remove_sub_cell
 - constraint_exprs() and condition_exprs() return correct lists
 - Backend: apply_constraints masks surface with NaN outside filter region
@@ -17,7 +17,7 @@ import numpy as np
 
 from PyQt6.QtWidgets import QApplication
 
-from pringle.cell_widget import CellWidget, ConstraintSubCell
+from pringle.cell_widget import CellWidget, SubCell
 from pringle.cell_list import CellListWidget
 from pringle.evaluator import apply_constraints, run_cell, CellResult
 from pringle.grid import make_grid, GridConfig
@@ -36,33 +36,33 @@ def grid():
 
 
 # ---------------------------------------------------------------------------
-# ConstraintSubCell
+# SubCell
 # ---------------------------------------------------------------------------
 
-class TestConstraintSubCell:
+class TestSubCell:
     def test_creates_constraint(self, qapp):
-        s = ConstraintSubCell(sub_type="constraint")
+        s = SubCell(sub_type="constraint")
         assert s.sub_type() == "constraint"
         assert s.source() == ""
 
     def test_creates_condition(self, qapp):
-        s = ConstraintSubCell(sub_type="condition")
+        s = SubCell(sub_type="condition")
         assert s.sub_type() == "condition"
 
     def test_source_reflects_edit(self, qapp):
-        s = ConstraintSubCell()
+        s = SubCell()
         s._edit.setPlainText("x**2 + y**2 < 4")
         assert s.source() == "x**2 + y**2 < 4"
 
     def test_content_changed_signal(self, qapp):
-        s = ConstraintSubCell()
+        s = SubCell()
         received = []
         s.content_changed.connect(lambda: received.append(True))
         s._edit.setPlainText("x > 0")
         assert len(received) > 0
 
     def test_delete_requested_signal(self, qapp):
-        s = ConstraintSubCell()
+        s = SubCell()
         received = []
         s.delete_requested.connect(lambda: received.append(True))
         # Click the delete button
@@ -89,7 +89,7 @@ class TestCellWidgetSubCells:
     def test_add_constraint_sub_cell(self, qapp):
         cell = CellWidget()
         sub = cell.add_sub_cell("constraint")
-        assert isinstance(sub, ConstraintSubCell)
+        assert isinstance(sub, SubCell)
         assert len(cell._sub_cells) == 1
         assert sub.sub_type() == "constraint"
 

@@ -537,8 +537,8 @@ class CellListWidget(QWidget):
         source = cell.source()
         if not source.strip():
             return CellResult()
-        c_exprs = cell.constraint_exprs() if hasattr(cell, "constraint_exprs") else []
-        d_exprs = cell.condition_exprs() if hasattr(cell, "condition_exprs") else []
+        c_exprs = cell.constraint_exprs()
+        d_exprs = cell.condition_exprs()
         try:
             result = run_cell(
                 source, shared, self._grid,
@@ -549,13 +549,10 @@ class CellListWidget(QWidget):
             result.error = f"{type(exc).__name__}: {exc}"
 
         # Apply recursion/initial_condition sub-cells if present
-        rule_expr = cell.recurrence_expr() if hasattr(cell, "recurrence_expr") else None
+        rule_expr = cell.recurrence_expr()
         if rule_expr and not result.error:
             from pringle.recurrence import parse_recurrence, execute_recurrence
-            initial_exprs = (
-                cell.initial_condition_exprs()
-                if hasattr(cell, "initial_condition_exprs") else []
-            )
+            initial_exprs = cell.initial_condition_exprs()
             is_valid, arr_name, _ = parse_recurrence(rule_expr)
             if is_valid and arr_name in result.exports:
                 arr = result.exports[arr_name]
@@ -593,17 +590,15 @@ class CellListWidget(QWidget):
             cell.set_error(result.error)
         elif result.warning:
             cell.set_warning(result.warning)
-        if hasattr(cell, "set_preview"):
-            cell.set_preview(result.preview, result.shape_preview)
+        cell.set_preview(result.preview, result.shape_preview)
 
         # Auto-switch cell between expression mode and data-array mode based on return type
-        if hasattr(cell, "set_data_mode"):
-            should_be_data = (
-                result.from_shape_inference
-                and result.render_type in ("scatter", "scatter_2d")
-            )
-            if should_be_data != cell.is_data_mode():
-                cell.set_data_mode(should_be_data)
+        should_be_data = (
+            result.from_shape_inference
+            and result.render_type in ("scatter", "scatter_2d")
+        )
+        if should_be_data != cell.is_data_mode():
+            cell.set_data_mode(should_be_data)
 
         return result
 

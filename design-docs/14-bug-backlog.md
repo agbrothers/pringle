@@ -9,7 +9,7 @@ See [16-closed-bugs.md](16-closed-bugs.md) for resolved bugs.
 
 ### BUG-035 — `ConstraintSubCell` class handles 4 sub-types but is named for one; `hasattr` guards in `_eval_cell` are unreachable dead code
 
-**Status:** Open  
+**Status:** Closed (fixed 2026-05-22)  
 **Logged:** 2026-05-22  
 **Severity:** Low — cosmetic/structural; no runtime impact
 
