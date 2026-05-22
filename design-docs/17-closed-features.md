@@ -6,6 +6,13 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-031 — Halve the crosshair arm length
+**Status:** Closed (implemented 2026-05-21)
+
+**Implementation:** Changed the arm multiplier in `renderer.py` from `0.025` to `0.0125`. One line.
+
+---
+
 ### FEAT-038 — Auto-expanding text input for constraint and recursion sub-cells
 **Status:** Closed (implemented 2026-05-21)
 

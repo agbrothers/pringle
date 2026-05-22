@@ -705,7 +705,7 @@ class PringleRenderer:
             self._scene.remove(self._crosshair_group)
 
         xn, xx, yn, yx, zn, zx = self._overlay_bounds
-        arm = max(xx - xn, yx - yn, zx - zn) * 0.025
+        arm = max(xx - xn, yx - yn, zx - zn) * 0.0125
 
         group = gfx.Group()
         for p0, p1, color in [
