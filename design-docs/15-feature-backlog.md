@@ -403,53 +403,6 @@ The coast state needs to live outside `OrbitController` since there is no hook f
 ---
 
 
-### FEAT-026 — Drop shadow projected onto bottom plane of bounding box
-**Status:** Open  
-**Logged:** 2026-05-18
-
-**Description:**  
-Render a semi-transparent shadow of each plotted object projected straight down onto the `z_min` floor plane of the wireframe bounding box. The shadow would be a flat, dark silhouette that helps orient the user in 3D space and gives a sense of height above the floor.
-
-**Performance cost: essentially zero.** A straight-down orthographic shadow is just geometry — copy each object's vertex positions, clamp all Z coordinates to `z_min`, and render with a semi-transparent dark material. This adds geometry to the normal render pass but requires no extra GPU passes, no depth textures, and no shadow maps.
-
-**Why not use pygfx's built-in shadow maps?**  
-pygfx does support `cast_shadow` / `receive_shadow` on world objects and `DirectionalLight`, and the shadow pipeline covers Mesh, Line, and Points. However, shadow maps add a full extra render pass per frame per casting light — overhead that is unwarranted here since a straight-down projection is mathematically exact with the simpler technique.
-
-**Implementation:**  
-For each cell object in `_objects`, maintain a corresponding "shadow" object: a copy of the geometry with all Z values flattened to `z_min + ε` (tiny offset to avoid Z-fighting with the wireframe floor edge), rendered with a `MeshBasicMaterial` / `LineMaterial` / `PointsMaterial` in near-black at ~30–40% opacity:
-
-```python
-def _make_shadow(obj: gfx.WorldObject, z_floor: float) -> gfx.WorldObject | None:
-    geom = obj.geometry
-    if geom is None or geom.positions is None:
-        return None
-    pos = np.array(geom.positions.data, dtype=np.float32).copy()
-    pos[:, 2] = z_floor + 1e-3          # flatten + tiny Z offset
-    shadow_geom = gfx.Geometry(positions=pos, indices=geom.indices)
-    if isinstance(obj, gfx.Mesh):
-        mat = gfx.MeshBasicMaterial(color=(0, 0, 0, 0.35), side="both")
-        return gfx.Mesh(shadow_geom, mat)
-    elif isinstance(obj, gfx.Line):
-        mat = gfx.LineMaterial(color=(0, 0, 0, 0.35), thickness=obj.material.thickness)
-        return gfx.Line(shadow_geom, mat)
-    elif isinstance(obj, gfx.Points):
-        mat = gfx.PointsMaterial(color=(0, 0, 0, 0.35), size=obj.material.size)
-        return gfx.Points(shadow_geom, mat)
-    return None
-```
-
-Shadow objects are tracked in a parallel `_shadow_objects: dict[str, gfx.WorldObject]` dict in `PringleRenderer`, added/removed alongside their source objects in `add_object` and `remove_object`. They are also hidden when the source object is hidden (`set_visible`).
-
-**The `z_min` value needs to be kept in sync with the axis bounds.** When the user changes the Z min spinbox, all shadow objects should have their floor Z updated. This means either rebuilding shadow geometry on bounds change, or storing the floor plane as a uniform and doing the projection in a custom shader (more complex but avoids CPU geometry copies on every bounds change).
-
-**Excluded from bounding box calculations:** Shadow objects must be excluded from `get_data_bounding_box` (FEAT-019) and `fit_camera` so they don't inflate the scene bounds or affect camera fitting.
-
-**Toggle and opacity:** Add a "Shadow" checkbox to the axis/view settings panel alongside the existing Axes, Wireframe, and Crosshair toggles, with a companion opacity spinbox or slider (range 0.0–1.0, default ~0.35). The checkbox wires the same way as the other overlays — a `shadow_visibility_changed` signal on `ViewSettingsWidget` connected to a `set_shadow_visible` method on `PringleRenderer` that shows/hides all entries in `_shadow_objects`. The opacity control calls a `set_shadow_opacity` method that updates the alpha on each shadow material. Default visibility TBD (off by default seems reasonable given it adds visual noise for simple plots). Both values persist in the `view` YAML block introduced by FEAT-023.
-
-**Style consideration:** Shadow color should adapt for light vs. dark backgrounds (FEAT-024) — near-black on white, near-white on dark.
-
----
-
 ### FEAT-025 — Save button and unsaved-changes indicator
 **Status:** Open  
 **Logged:** 2026-05-18

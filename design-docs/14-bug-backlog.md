@@ -7,40 +7,49 @@ See [16-closed-bugs.md](16-closed-bugs.md) for resolved bugs.
 
 ---
 
-### BUG-025 — Drag drop indicator appears inside tall data cells; misplaced near hidden cells
+### BUG-026 — `error messaging the mach port for IMKCFRunLoopWakeUpReliable` printed on startup
 **Status:** Open  
 **Logged:** 2026-05-20  
-**Severity:** Low — cosmetic, but makes drag-and-drop confusing for multi-line cells
+**Severity:** Low — stderr noise only; no functional impact, no data loss
 
 **Description:**  
-When dragging a cell over a data cell that has expanded to multiple lines (e.g., one with recursion sub-cells), the blue drop indicator line appears in the middle of the data cell rather than at a cell boundary. Additionally, dragging near collapsed folder members (which are hidden) produces erratic indicator placement because hidden widgets report stale geometry values.
+On macOS, running the app prints the following to stderr/terminal shortly after launch:
 
-**Root cause:**  
-`_compute_drop_idx` (`cell_list.py:909`) uses each cell's vertical midpoint as the boundary threshold:
-```python
-if local_y < geo.top() + geo.height() // 2:
-    return i
 ```
-For a standard equation cell (~40px tall), the midpoint at 20px is a reasonable boundary. For a tall data cell (e.g., 200px with three sub-cell rows), the midpoint is at 100px — so the user has to drag 100px into the visible cell before the indicator snaps to "below the previous cell." At any mouse position between the top and midpoint of the data cell, the indicator line appears visually in the middle of the data cell widget.
-
-Hidden member cells of a collapsed folder have their `geometry()` return the position they occupied before being hidden (they are removed from the layout's visible flow but not resized to zero). This causes `_compute_drop_idx` to count hidden cells as real insertion points, placing the indicator at phantom positions and sometimes skipping slots or placing in wrong locations near collapsed folders.
-
-**Fix — `_compute_drop_idx`:**  
-Use a smaller threshold fraction (e.g., 25% from the top rather than 50%), and skip hidden cells entirely:
-```python
-def _compute_drop_idx(self, local_y: int) -> int:
-    for i, cell in enumerate(self._cells):
-        if not cell.isVisible():
-            continue             # skip hidden members of collapsed folders
-        geo = cell.geometry()
-        if local_y < geo.top() + geo.height() // 4:   # 25% threshold
-            return i
-    return len(self._cells)
+2026-05-20 22:30:05.423 python3[70697:7248220] error messaging the mach port for IMKCFRunLoopWakeUpReliable
 ```
-A 25% threshold means the indicator snaps to "before cell i" only when the mouse is in the top quarter of cell i — giving a much narrower hot zone and keeping the indicator near the actual cell boundary for tall cells.
 
-**Fix — `_position_drop_indicator`:**  
-Similarly, skip hidden cells when computing the indicator Y position so it always snaps to a visible gap between two visible cells.
+The message appears once per session (occasionally multiple times if input focus changes rapidly at startup) and does not affect app behavior. It cannot be suppressed via Python logging configuration since it is emitted by a macOS system framework at the C level.
+
+**Root cause — macOS Input Method Kit (IMK) and Qt's event loop:**  
+`IMKCFRunLoopWakeUpReliable` is an Apple Input Method Kit (IMK) internal: it attempts to wake the main thread's `CFRunLoop` when the system input method daemon (e.g., the Chinese/Japanese input method server, or the universal text input layer) wants to notify the focused text widget. The message fires when the IMK framework cannot deliver this notification — because the `CFRunLoop` is either not yet running, has already stopped, or is being driven by a foreign event loop (Qt's own event loop, not Cocoa's `NSRunLoop`).
+
+PyQt6 uses Qt's native event loop integration (`QEventDispatcherMac`) which does pump `CFRunLoop` but with subtly different timing from a pure Cocoa app. The mismatch window during early startup — between the point where the first `QLineEdit` or `QPlainTextEdit` gains focus and the point where the Qt–Cocoa event loop integration is fully established — is when the IMK message fires.
+
+The message is generated inside `IMKInputSession` (a private Apple framework) and there is no public API to suppress or disable it. It is seen across many PyQt5/PyQt6 and PySide6 applications on macOS and is widely regarded as a non-actionable Apple framework bug.
+
+**Why it is not `BUG-021` (the font warning):**  
+BUG-021 is a Qt font alias scan triggered by `font-family: monospace` in stylesheets (174ms, fixed by using explicit font families). This message is unrelated — it comes from the macOS system input method layer, not from Qt's font subsystem.
+
+**Possible mitigations:**
+
+- **Defer first focus** (may reduce frequency): In `app.py closeEvent` or the end of `__init__`, avoid giving any text widget focus during initial layout construction — call `self.setFocus()` or `clearFocus()` on the main window before the event loop starts. This may reduce the window during which IMK tries to ping a not-yet-ready `CFRunLoop`. Not guaranteed to eliminate the message.
+
+- **Redirect stderr at process level** (suppresses all such messages): Wrap the process entry point to redirect file descriptor 2 before Qt initializes:
+  ```python
+  import os, sys
+  if sys.platform == "darwin":
+      devnull = os.open(os.devnull, os.O_WRONLY)
+      os.dup2(devnull, 2)   # redirect stderr → /dev/null for C-level messages
+      os.close(devnull)
+  ```
+  This silences the IMK message but also suppresses any other C-level stderr output (including genuine errors from wgpu-native or the GPU driver). Not recommended without a mechanism to re-enable stderr for debugging.
+
+- **Accept as known noise** (recommended for now): The message is cosmetically annoying but carries no information about app correctness. Document it here as a known macOS PyQt6 quirk and leave it unfixed until it is confirmed to affect real users or until Apple or Qt resolves the underlying IMK–CFRunLoop timing issue upstream.
+
+**Platform:** macOS only. Not reproducible on Linux or Windows.
+
+---
 
 ---
 

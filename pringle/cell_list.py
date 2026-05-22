@@ -908,24 +908,41 @@ class CellListWidget(QWidget):
 
     def _compute_drop_idx(self, local_y: int) -> int:
         for i, cell in enumerate(self._cells):
+            if not cell.isVisible():
+                continue  # skip hidden members of collapsed folders
             geo = cell.geometry()
-            if local_y < geo.top() + geo.height() // 2:
+            if local_y < geo.top() + geo.height() // 4:  # 25% threshold
                 return i
         return len(self._cells)
 
     def _position_drop_indicator(self, drop_idx: int) -> None:
-        if not self._cells:
+        visible = [c for c in self._cells if c.isVisible()]
+        if not visible:
             self._drop_indicator.hide()
             return
-        n = len(self._cells)
         if drop_idx <= 0:
-            y = self._cells[0].geometry().top()
-        elif drop_idx >= n:
-            y = self._cells[-1].geometry().bottom()
+            y = visible[0].geometry().top()
+        elif drop_idx >= len(self._cells):
+            y = visible[-1].geometry().bottom()
         else:
-            prev_bottom = self._cells[drop_idx - 1].geometry().bottom()
-            next_top = self._cells[drop_idx].geometry().top()
-            y = (prev_bottom + next_top) // 2
+            # Find the nearest visible cell at or before drop_idx for prev_bottom
+            prev = next(
+                (self._cells[j] for j in range(drop_idx - 1, -1, -1)
+                 if self._cells[j].isVisible()),
+                None,
+            )
+            # Find the nearest visible cell at or after drop_idx for next_top
+            nxt = next(
+                (self._cells[j] for j in range(drop_idx, len(self._cells))
+                 if self._cells[j].isVisible()),
+                None,
+            )
+            if prev and nxt:
+                y = (prev.geometry().bottom() + nxt.geometry().top()) // 2
+            elif nxt:
+                y = nxt.geometry().top()
+            else:
+                y = visible[-1].geometry().bottom()
         w = self._container.width()
         self._drop_indicator.setGeometry(8, y - 1, w - 16, 2)
         self._drop_indicator.raise_()

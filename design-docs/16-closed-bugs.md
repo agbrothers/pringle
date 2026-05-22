@@ -6,6 +6,18 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-025 — Drag drop indicator appears inside tall cells; misplaced near hidden cells
+**Status:** Closed (fixed 2026-05-21)  
+**Severity:** Low — cosmetic
+
+**Root cause:** `_compute_drop_idx` used the cell midpoint (50%) as the snap threshold. For tall cells (200+ px), this placed the indicator deep inside the cell body. Hidden folder members still appeared in `_cells` with stale geometry, registering as valid insertion points at phantom positions.
+
+**Fix:** Two changes to `cell_list.py`:
+- `_compute_drop_idx`: skip `not cell.isVisible()` cells; changed threshold from `height // 2` to `height // 4` (25%) so the indicator snaps to a cell boundary after crossing only the top quarter.
+- `_position_drop_indicator`: compute `y` using only visible cells — walks backward from `drop_idx` for `prev_bottom` and forward for `next_top`, skipping hidden cells.
+
+---
+
 ### BUG-028 — CellTextEdit shows native OS frame border on all equation and data cells
 **Status:** Closed (fixed 2026-05-21)  
 **Severity:** Low — cosmetic

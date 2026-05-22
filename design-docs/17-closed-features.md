@@ -6,6 +6,13 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-026 — Drop shadow projected onto bottom plane of bounding box
+**Status:** Closed (implemented prior to 2026-05-21)
+
+**Implementation:** `PringleRenderer` maintains `_shadow_objects`, `_shadow_visible`, `_shadow_opacity`, and `_shadow_color`. `_make_shadow_object` copies each object's geometry with Z flattened to `z_min + ε` and renders with a light-colored translucent material. Shadows are created/removed alongside their source objects in `add_object`/`remove_object`, hidden with `set_visible`, and rebuilt via `_rebuild_shadows` when axis bounds change.
+
+---
+
 ### FEAT-031 — Halve the crosshair arm length
 **Status:** Closed (implemented 2026-05-21)
 
