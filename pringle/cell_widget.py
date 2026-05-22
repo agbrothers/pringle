@@ -179,14 +179,36 @@ class CellTextEdit(QPlainTextEdit):
         _font.setFamilies(['Menlo', 'Consolas', 'Courier New'])
         _font.setStyleHint(QFont.StyleHint.Monospace)
         self.setFont(_font)
-        self.document().contentsChanged.connect(self._adjust_height)
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setStyleSheet("QPlainTextEdit { border: none; background: transparent; }")
+        # documentSizeChanged fires after the layout engine has reflowed text
+        # to the actual widget width — reliable for multi-line wrap.
+        self.document().documentLayout().documentSizeChanged.connect(
+            self._on_document_size_changed
+        )
         self._adjust_height()
 
-    def _adjust_height(self):
-        doc_height = int(self.document().size().height())
-        margins = self.contentsMargins()
-        h = doc_height + margins.top() + margins.bottom() + 6
+    def _on_document_size_changed(self, new_size) -> None:
+        line_count = max(1, int(new_size.height()))
+        line_h = self.fontMetrics().lineSpacing()
+        dm = int(self.document().documentMargin())
+        m = self.contentsMargins()
+        h = line_count * line_h + 2 * dm + m.top() + m.bottom()
         self.setFixedHeight(max(h, 32))
+        self.updateGeometry()
+
+    def _adjust_height(self) -> None:
+        """Initial sizing before documentSizeChanged has fired."""
+        line_count = max(1, int(self.document().size().height()))
+        line_h = self.fontMetrics().lineSpacing()
+        dm = int(self.document().documentMargin())
+        m = self.contentsMargins()
+        h = line_count * line_h + 2 * dm + m.top() + m.bottom()
+        self.setFixedHeight(max(h, 32))
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._adjust_height()
 
     def focusOutEvent(self, event):
         self.focus_lost.emit()

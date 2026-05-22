@@ -6,6 +6,28 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-028 — CellTextEdit shows native OS frame border on all equation and data cells
+**Status:** Closed (fixed 2026-05-21)  
+**Severity:** Low — cosmetic
+
+**Root cause:** `CellTextEdit` (`cell_widget.py`) had no stylesheet or frame override. Qt's default `QPlainTextEdit` draws a native frame (a 1px OS-drawn border) that `border: none` in a stylesheet alone does not remove — on macOS the frame is drawn by the platform style plugin and ignores CSS border declarations.
+
+**Fix:** Added `self.setFrameShape(QFrame.Shape.NoFrame)` (removes the native Qt/OS-drawn frame) and `self.setStyleSheet("QPlainTextEdit { border: none; background: transparent; }")` (removes any painted Qt border) to `CellTextEdit.__init__`. Sub-cell `ConstraintSubCell` overrides this with its own dashed border stylesheet, which is intentional.
+
+---
+
+### BUG-027 — Equation and data cells clip multi-line content on session load
+**Status:** Closed (fixed 2026-05-21)  
+**Severity:** Medium — long expressions are unreadable after loading a saved session
+
+**Root cause:** `CellTextEdit._adjust_height` connected to `document().contentsChanged`, which fires before Qt's layout engine has reflowed text to the widget's actual width. When cells are restored from a session file and text is set via `setPlainText`, the document size calculation runs at a pre-layout width (often a narrow default), so `setFixedHeight` is set for a single line even when the expression wraps to multiple lines at 480 px. The height was never corrected after the widget reached its final width.
+
+**Fix:** Mirrored the approach used by `_CommentEdit` (which has always displayed correctly):
+- Replaced `document().contentsChanged` → `document().documentLayout().documentSizeChanged` signal, which fires *after* text reflow at the actual widget width. Height is computed as `line_count × lineSpacing()` — accurate for wrapped content.
+- Added `resizeEvent` override that calls `_adjust_height()` so cells re-expand correctly when the user drags the panel splitter.
+
+---
+
 ### BUG-024 — New cell inserted above the active cell instead of below
 **Status:** Closed (fixed 2026-05-20)  
 **Severity:** Medium
