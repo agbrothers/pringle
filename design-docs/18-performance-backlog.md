@@ -368,7 +368,7 @@ Numba `@njit` is the correct solution for this pattern: it compiles mutable-arra
 **Files:** [recurrence.py:73-84](../pringle/recurrence.py#L73)
 
 **Description:**  
-`execute_recurrence` has three separate per-step overheads that compound over a full recurrence run. For the memory.yml 200-step gradient-path cell, the total cost is **~14 ms** (manually triggered, not in the animation path). Per-step breakdown:
+`execute_recurrence` has three separate per-step overheads that compound over a full recurrence run. For the memory.yml 200-step gradient-path cell, the total cost is **~14 ms per animation tick** (the cell re-evaluates reactively on every β slider change). Per-step breakdown:
 
 | Overhead | Per-step µs | × 200 total |
 |----------|-------------|-------------|

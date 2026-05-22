@@ -39,7 +39,7 @@ This document tracks the high-level design decisions for Pringle and the open qu
 | Magic variable scoping | Magic names (`z`, `y`, `xyz`, etc.) are local to cell execution; never exported to shared namespace | Allows multiple `z = expr` cells without collision; spatial grid vars are never shadowed |
 | Duplicate magic name cells | Two cells both writing `z = expr` → two independent surfaces | Each renders separately; no shared namespace conflict |
 | Unified dependency graph | All cells (equation and data) on the same DAG; panel separation is UI-only | Solves boot order; data cells can reference equation lambdas; both panels freely reorderable |
-| Data cell reactivity | Non-reactive — never auto-run; show stale indicator when upstream deps change | Prevents chaotic re-sampling; user controls when data updates |
+| Data cell reactivity | Auto-evaluates on upstream parameter changes (slider animation, upstream cell edits), same as any equation cell; text edits to the cell or sub-cells mark stale instead of debounce-re-evaluating; `→` button resamples (clears pinned RNG state) | Stable random draws during slider animation; user controls resampling explicitly |
 | Session boot sequence | (1) load YAML, (2) build DAG, (3) eval reactive cells (sliders/lambdas), (4) ▶▶ Run All data, (5) eval render cells, (6) first render | Guarantees lambdas available to data cells at load time |
 | Comment cell detection | `#`-only lines OR bare string literals (`"""`, `'''`, `"`, `'`) | Supports both Python comment styles and docstring-style notes |
 | (u,v) parametric grid default | `[0, 2π] × [0, 2π]`; configurable in View Settings panel | Captures full rotation for common cylindrical/spherical surfaces |

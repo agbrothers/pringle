@@ -48,7 +48,7 @@ You are assigned one of the following 3 roles: developer, planner, or profiler. 
 - **Data mode on `CellWidget`** — equation cells that produce scatter/curve arrays gain a stale indicator and `→` run button; `DataCellWidget` is a zombie class being phased out (BUG-030)
 - **Unified DAG** across all cells; evaluation order is topological, not visual
 - Magic variables (`z`, `y`, `xyz`, `points`) are renderer-local — NEVER exported to shared namespace
-- Data-mode cells are non-reactive (→ Run only); stale indicator when upstream changes; sub-cells in data mode connect to `_mark_data_stale` not the eager debounce path
+- Data-mode cells re-evaluate reactively on upstream parameter changes (slider animation, upstream cell edits), identical to non-data equation cells; text edits to the cell or its sub-cells fire `_mark_data_stale` (orange stale dot) instead of the eager debounce path; `→` button resamples (clears pinned RNG state, triggers full rebuild)
 - Recurrence loop index: user sees `n`, internally renamed to `_pringle_loop_n` via AST
 - Piecewise: `z = [f, g, h]` list syntax + N condition sub-cells → `np.select`
 - `f(x,y) = expr` preprocessed to lambda; auto-renders as surface
