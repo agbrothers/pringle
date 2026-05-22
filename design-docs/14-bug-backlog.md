@@ -43,40 +43,6 @@ Option B is the recommended fix — auto-switching data mode is always a passive
 
 ---
 
-### BUG-033 — Sub-cells in data mode ignore the manual-re-run contract; every keystroke triggers a full rebuild
-
-**Status:** Open  
-**Logged:** 2026-05-22  
-**Severity:** Medium — typing in a Lorenz recurrence rule triggers a full integration on every debounce tick (300 ms), making the UI sluggish while composing sub-cell expressions
-
-**Description:**  
-Data-mode `CellWidget` implements a manual-re-run contract for the main cell: `textChanged` is disconnected from the debounce path and replaced with `focus_lost → _emit_changed`. This means the main expression is only re-evaluated when the user leaves the text field, avoiding repeated expensive integrations while typing.
-
-Sub-cells bypass this contract entirely. `add_sub_cell` always connects `sub.content_changed → self._on_text_changed`, which starts the 300 ms debounce timer and ultimately calls `_rebuild_namespace()` after each debounce tick — even when the parent cell is in data mode. For a Lorenz path with `k=2000`, this means 2000 integration steps fire every ~300 ms while the user types a character in the recursion rule.
-
-**Root cause:**  
-`add_sub_cell` (cell_widget.py:471) connects `content_changed` unconditionally regardless of `self._data_mode`. The data-mode signal-swap logic in `set_data_mode` only touches `self._text_edit`; sub-cells are added after mode-switching and always use the eager path.
-
-**Reproduction:**  
-1. Open `examples/lorenz.yml` (k=2000 steps)  
-2. Click in the recursion rule sub-cell and type any character  
-3. Observe ~300 ms stall 300 ms after each keypress (full Lorenz integration fires)
-
-**Fix:**  
-In `add_sub_cell`, check `self._data_mode` and connect to `_mark_data_stale` (not `_on_text_changed`) when in data mode, mirroring the main-cell signal swap. Also apply the same swap inside `set_data_mode` for any already-attached sub-cells.
-
-```python
-def add_sub_cell(self, sub_type: str = "constraint") -> SubCell:
-    sub = SubCell(sub_type=sub_type, parent=self)
-    if self._data_mode:
-        sub.content_changed.connect(self._mark_data_stale)
-    else:
-        sub.content_changed.connect(self._on_text_changed)
-    ...
-```
-
----
-
 ### BUG-013 — Camera locks and crosshair drifts when panning and rotating simultaneously
 
 **Status:** Open  

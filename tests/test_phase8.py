@@ -188,6 +188,47 @@ class TestSetDataMode:
 
 
 # ---------------------------------------------------------------------------
+# Sub-cell signal wiring in data mode (BUG-033)
+# ---------------------------------------------------------------------------
+
+class TestSubCellDataModeSignals:
+    def test_sub_cell_in_data_mode_does_not_start_debounce(self, qapp):
+        cell = CellWidget()
+        cell.set_data_mode(True)
+        sub = cell.add_sub_cell("recursion")
+        cell._debounce.stop()
+        sub._edit.setPlainText("x[n+1] = x[n] + 1")
+        assert not cell._debounce.isActive()
+
+    def test_sub_cell_in_expression_mode_starts_debounce(self, qapp):
+        cell = CellWidget()
+        sub = cell.add_sub_cell("constraint")
+        cell._debounce.stop()
+        sub._edit.setPlainText("x > 0")
+        assert cell._debounce.isActive()
+
+    def test_switch_to_data_mode_rewires_existing_sub_cells(self, qapp):
+        cell = CellWidget()
+        sub = cell.add_sub_cell("recursion")  # connected to _on_text_changed
+        cell.set_data_mode(True)              # should rewire to _mark_data_stale
+        cell._debounce.stop()
+        sub._edit.setPlainText("x[n+1] = x[n] + 1")
+        assert not cell._debounce.isActive()
+
+    def test_switch_to_expression_mode_rewires_sub_cells_back(self, qapp):
+        # A constraint sub-cell added while in data mode (connected to _mark_data_stale)
+        # should be rewired to _on_text_changed when the cell returns to expression mode.
+        # Constraint sub-cells are compatible with expression mode so they survive the switch.
+        cell = CellWidget()
+        cell.set_data_mode(True)
+        sub = cell.add_sub_cell("constraint")  # data mode → _mark_data_stale
+        cell.set_data_mode(False)              # constraint survives; should rewire to _on_text_changed
+        cell._debounce.stop()
+        sub._edit.setPlainText("x > 0")
+        assert cell._debounce.isActive()
+
+
+# ---------------------------------------------------------------------------
 # Backend: apply_constraints
 # ---------------------------------------------------------------------------
 

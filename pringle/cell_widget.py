@@ -471,7 +471,10 @@ class CellWidget(QWidget):
     def add_sub_cell(self, sub_type: str = "constraint") -> SubCell:
         """Append a constraint or condition sub-cell below this cell."""
         sub = SubCell(sub_type=sub_type, parent=self)
-        sub.content_changed.connect(self._on_text_changed)
+        if self._data_mode:
+            sub.content_changed.connect(self._mark_data_stale)
+        else:
+            sub.content_changed.connect(self._on_text_changed)
         sub.delete_requested.connect(lambda: self._remove_sub_cell(sub))
         self._sub_cells.append(sub)
         self._sub_layout.addWidget(sub)
@@ -539,12 +542,18 @@ class CellWidget(QWidget):
             self._text_edit.textChanged.connect(self._mark_data_stale)
             self._text_edit.focus_lost.connect(self._emit_changed)
             self._debounce_connected = False
+            for sub in self._sub_cells:
+                sub.content_changed.disconnect(self._on_text_changed)
+                sub.content_changed.connect(self._mark_data_stale)
         elif not enabled and not self._debounce_connected:
             self._text_edit.textChanged.disconnect(self._mark_data_stale)
             self._text_edit.textChanged.connect(self._on_text_changed)
             self._text_edit.focus_lost.disconnect(self._emit_changed)
             self._debounce_connected = True
             self._status_dot.setStyleSheet("color: #bbb; font-size: 12px;")
+            for sub in self._sub_cells:
+                sub.content_changed.disconnect(self._mark_data_stale)
+                sub.content_changed.connect(self._on_text_changed)
 
     def is_data_mode(self) -> bool:
         return self._data_mode

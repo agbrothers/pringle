@@ -6,6 +6,13 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-033 — Sub-cells in data mode trigger full rebuild on every keystroke
+**Status:** Closed (fixed 2026-05-22)
+
+**Fix:** Two changes in `cell_widget.py`: (1) `add_sub_cell` now checks `self._data_mode` and connects `sub.content_changed` to `_mark_data_stale` instead of `_on_text_changed` when in data mode. (2) `set_data_mode` now swaps the signal connection for all already-attached sub-cells alongside the existing `_text_edit` swap. Four regression tests added in `test_phase8.py::TestSubCellDataModeSignals`.
+
+---
+
 ### BUG-034 — `_eval_cell` blocked by `QMessageBox` during passive mode transition
 **Status:** Closed (fixed 2026-05-22)
 
