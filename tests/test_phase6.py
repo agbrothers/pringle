@@ -233,3 +233,40 @@ class TestCellListSlider:
         clist.add_cell("z = a + b")
         assert clist._shared_ns.get("a") == pytest.approx(2.0)
         assert clist._shared_ns.get("b") == pytest.approx(3.0)
+
+    def test_invisible_independent_cell_skipped_on_slider_change(self, qapp, grid):
+        """PERF-016: invisible cell with no visible dependents is not evaluated during animation."""
+        called_ids = []
+        clist = CellListWidget(
+            on_cell_result=lambda cid, r, s: called_ids.append(cid),
+            grid=grid,
+        )
+        slider = clist.add_cell("a = 1.0")
+        invis = clist.add_cell("c = a + 1")
+        invis._visible = False
+        clist.add_cell("z = a * sin(x) * cos(y)")
+
+        called_ids.clear()
+        slider.set_value(2.0)
+
+        assert invis.cell_id not in called_ids
+
+    def test_invisible_ancestor_of_visible_still_evaluated(self, qapp, grid):
+        """PERF-016: invisible cell that feeds a visible cell must still be evaluated."""
+        import numpy as np
+        surface_data = []
+        clist = CellListWidget(
+            on_cell_result=lambda cid, r, s: surface_data.append(r.data)
+            if r.render_type == "surface" else None,
+            grid=grid,
+        )
+        slider = clist.add_cell("a = 1.0")
+        invis = clist.add_cell("scale = a * 3")
+        invis._visible = False
+        clist.add_cell("z = scale * sin(x) * cos(y)")
+
+        surface_data.clear()
+        slider.set_value(2.0)  # scale becomes 6.0; z peaks at ~6.0
+
+        assert len(surface_data) > 0
+        assert np.max(np.abs(surface_data[-1])) == pytest.approx(6.0, abs=0.5)

@@ -744,8 +744,20 @@ class CellListWidget(QWidget):
             self._rebuild_namespace()
             return
 
+        import networkx as nx
+
         dag = build_dag(evaluable)
         descendants = downstream_of(dag, slider_cell.cell_id, evaluable)
+
+        # Cells that are visible or are ancestors of a visible cell must be evaluated.
+        # Invisible cells whose exports nothing visible depends on can be skipped.
+        visible_ids = {
+            c.cell_id for c in descendants
+            if not isinstance(c, SliderWidget) and self._is_render_visible(c)
+        }
+        required_ids = set(visible_ids)
+        for vid in visible_ids:
+            required_ids.update(nx.ancestors(dag, vid))
 
         # Start from the last full namespace snapshot, updated with the new value
         shared = dict(self._shared_ns)
@@ -754,6 +766,8 @@ class CellListWidget(QWidget):
         for cell in descendants:
             if isinstance(cell, SliderWidget):
                 shared[cell.name] = _ns_value(cell.value)
+                continue
+            if cell.cell_id not in required_ids:
                 continue
             result = self._eval_cell(cell, shared)
             shared.update(result.exports)

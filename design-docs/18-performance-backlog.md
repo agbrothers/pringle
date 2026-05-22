@@ -416,48 +416,6 @@ Because evaluation takes ~17 ms and the timer interval is 16 ms, the main thread
 
 ---
 
-### PERF-016 — Invisible output cells evaluated unconditionally during animation
-**Status:** Open  
-**Priority:** MEDIUM  
-**Logged:** 2026-05-22  
-**Discovered via:** User observation + code review  
-**Files:** [cell_list.py:754-763](../pringle/cell_list.py#L754)
-
-**Description:**  
-`_on_slider_value_changed` calls `_eval_cell` for every cell in `descendants`, regardless of visibility. Invisible cells that don't export anything used by a visible cell are pure dead weight — their computation runs but their result is immediately discarded via `_on_cell_result(cell_id, CellResult(), style)` (no mesh created, no namespace value consumed downstream).
-
-In memory.yml, toggling off `path_xy` does NOT skip `execute_recurrence` — it still runs 200 eval steps at ~3.5 ms per tick. Mesh creation is already skipped (the renderer already guards this correctly), but the numpy computation is not.
-
-**Measured savings:** Up to 3.5 ms per tick when `path_xy` is invisible (the recurrence cell). More generally: any invisible output cell whose exports are unused saves its full `run_cell` cost.
-
-**Fix:** After computing `descendants`, determine which cells are "needed" by performing backward reachability from visible output cells through the already-computed DAG. Skip `_eval_cell` (but not the slider value update) for cells outside the required set:
-
-```python
-# Visible output cells: need their computation + all their ancestors
-visible_ids = {
-    c.cell_id for c in descendants
-    if not isinstance(c, SliderWidget) and self._is_render_visible(c)
-}
-required_ids = set(visible_ids)
-for vid in visible_ids:
-    required_ids.update(nx.ancestors(dag, vid))
-
-for cell in descendants:
-    if isinstance(cell, SliderWidget):
-        shared[cell.name] = _ns_value(cell.value)
-        continue
-    if cell.cell_id not in required_ids:
-        continue  # invisible and no visible cell depends on its exports
-    result = self._eval_cell(cell, shared)
-    shared.update(result.exports)
-    self._on_cell_result(cell.cell_id, result, cell.style)
-```
-
-**Correctness:** Skipping a cell means its exports are absent from `self._shared_ns`. When the cell is made visible again, `_on_equation_cell_visibility_toggled` triggers a re-evaluation, repopulating the namespace.  
-**Note:** Works best combined with PERF-001 (DAG cache) since the DAG is already being computed; adding `nx.ancestors` per visible cell is O(V+E) on the subgraph.
-
----
-
 ## YAML Equation Optimization Issues
 
 These issues are specific to how expressions are written in session files and represent tips that can be documented in a user-facing guide.

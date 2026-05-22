@@ -93,6 +93,19 @@ GPU savings are additive to CPU savings and not directly measurable without a re
 
 ---
 
+### PERF-016 — Invisible output cells evaluated unconditionally during animation
+**Status:** Closed (fixed 2026-05-22)
+**Priority:** MEDIUM
+**Measured savings:** Up to 3.5 ms per tick when a recurrence output cell is invisible (skips `execute_recurrence` entirely)
+
+**Root cause:** `_on_slider_value_changed` called `_eval_cell` for every cell in `descendants`, regardless of visibility. Invisible cells whose exports nothing visible depends on were pure dead weight — the numpy computation ran but the result was immediately discarded via `_on_cell_result(cell_id, CellResult(), style)`.
+
+**Fix:** After computing `descendants`, backward-reachability from visible output cells through the DAG produces `required_ids`. Only cells in `required_ids` call `_eval_cell`; invisible cells with no visible dependents are skipped entirely. Invisible cells that ARE ancestors of a visible cell remain in `required_ids` and are still evaluated. See [cell_list.py:754-780](../pringle/cell_list.py#L754).
+
+**Correctness invariant:** Skipped cells retain their previous export values in `_shared_ns` (copied at the start of each tick). When a cell is made visible again, `_on_equation_cell_visibility_toggled` re-evaluates it, refreshing the namespace. Tests in `test_phase6.py::TestCellListSlider` cover both the skip case and the ancestor-still-evaluated case.
+
+---
+
 ### PERF-013 — `execute_recurrence` re-compiles RHS string and checks NaN on every step
 **Status:** Closed (fixed 2026-05-22)
 **Priority:** HIGH
