@@ -215,10 +215,10 @@ def bench_geometry_cpu(grid, n_frames: int) -> dict[str, list[float]]:
     Time the CPU geometry construction functions independently.
 
     _grid_indices: builds triangle index buffer (pure Python loops — PERF-003)
-    _grid_normals: computes per-vertex normals (numpy)
-    _clip_mesh_to_mask: constraint triangle clipping (pure Python — PERF-004)
+    _grid_gradients + _grid_normals: gradient + normal computation (numpy, FEAT-038)
+    _clip_mesh_to_mask: constraint triangle clipping (PERF-011 closed)
     """
-    from pringle.renderer import _grid_indices, _grid_normals, _clip_mesh_to_mask
+    from pringle.renderer import _grid_indices, _grid_gradients, _grid_normals, _clip_mesh_to_mask
 
     rows, cols = grid.x.shape
     # Build a representative z surface and constraint mask
@@ -228,11 +228,14 @@ def bench_geometry_cpu(grid, n_frames: int) -> dict[str, list[float]]:
     # Pre-build geometry needed as input to _clip_mesh_to_mask
     positions = np.stack([grid.x.ravel(), grid.y.ravel(), z_surface.ravel()], axis=1).astype(np.float32)
     indices   = _grid_indices(rows, cols)
-    normals   = _grid_normals(grid.x, grid.y, z_surface)
+    dz_dx, dz_dy = _grid_gradients(grid.x, grid.y, z_surface)
+    normals   = _grid_normals(dz_dx, dz_dy)
 
     results: dict[str, list[float]] = {}
     results["_grid_indices"]     = _timeit(lambda: _grid_indices(rows, cols), n_frames)
-    results["_grid_normals"]     = _timeit(lambda: _grid_normals(grid.x, grid.y, z_surface), n_frames)
+    results["_grid_gradients+normals"] = _timeit(
+        lambda: _grid_normals(*_grid_gradients(grid.x, grid.y, z_surface)), n_frames
+    )
     results["_clip_mesh_to_mask"]= _timeit(
         lambda: _clip_mesh_to_mask(positions, indices, normals, inside_mask), n_frames
     )
@@ -240,7 +243,7 @@ def bench_geometry_cpu(grid, n_frames: int) -> dict[str, list[float]]:
     # Combined cost: what make_surface_mesh pays before pygfx object creation
     def _full_cpu():
         idx = _grid_indices(rows, cols)
-        nor = _grid_normals(grid.x, grid.y, z_surface)
+        nor = _grid_normals(*_grid_gradients(grid.x, grid.y, z_surface))
         _clip_mesh_to_mask(positions, idx, nor, inside_mask)
 
     results["cpu_total"] = _timeit(_full_cpu, n_frames)
@@ -302,6 +305,62 @@ def bench_namespace(n_frames: int) -> dict[str, list[float]]:
     return {
         "build_namespace_1x": single,
         "build_namespace_2x": double,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Section 6 — Recurrence execution
+#
+# Measures execute_recurrence() for the gradient-descent path cell in
+# memory.yml: path_xy = zeros((200, 2)), path_xy[n] = path_xy[n-1] - η*dE(...)
+# This exercises the sequential Python eval() loop in recurrence.py.
+# ---------------------------------------------------------------------------
+
+def bench_recurrence(n_frames: int) -> dict[str, list[float]]:
+    """
+    Time execute_recurrence for the memory.yml gradient-descent path cell.
+
+    Simulates 200 steps of path_xy[n] = path_xy[n-1] - η * dE(M, path_xy[n-1][:,None])
+    using the actual execute_recurrence() implementation.
+    """
+    from pringle.recurrence import execute_recurrence
+    from pringle.namespace import build_equation_namespace
+
+    base_ns = build_equation_namespace()
+    rng = np.random.default_rng(42)
+    M = rng.random((10, 2)) * 6 - 3
+    p_xy = rng.random(2) * 4 - 2
+
+    # Populate dE: gradient of the log-sum-exp energy with respect to a 2D position.
+    # Matches memory.yml's dE(M, v) = (dF(M,v) * dS(M,v)).sum(axis=0) which is called as
+    # dE(M, path_xy[n-1][:, None]) with path_xy[n-1].shape=(2,) and M.shape=(10,2).
+    # Call convention: m=(10,2), v=(2,1) → returns (2,) gradient vector.
+    beta = 0.4
+    def dE_fn(m, v):
+        diff = m.T - v                              # (2,10)-(2,1) → (2,10)
+        d2 = (diff ** 2).sum(axis=0) + 1e-12       # (10,)
+        weights = beta * np.exp(-beta * d2)         # (10,)
+        return (-2 * diff * weights).sum(axis=1)    # (2,)
+
+    base_ns.update({
+        "M": M, "η": 0.1, "p_xy": p_xy,
+        "dE": dE_fn,
+    })
+
+    n_steps = 200
+    array = np.zeros((n_steps, 2))
+    rule = "path_xy[n] = path_xy[n-1] - η * dE(M, path_xy[n-1][:, None])"
+    initial = ["path_xy[0] = p_xy"]
+
+    times = _timeit(
+        lambda: execute_recurrence("path_xy", array.copy(), initial, rule, base_ns),
+        n_frames
+    )
+    # Per-step cost for analysis
+    per_step = [t / n_steps for t in times]
+    return {
+        "recurrence_200steps": times,
+        "recurrence_per_step": per_step,
     }
 
 
@@ -389,6 +448,7 @@ def _print_report(
     geo_res: dict,
     mesh_res: dict,
     ns_res: dict,
+    rec_res: dict,
 ) -> bool:
     """Print formatted benchmark report. Returns True if within budget."""
     budget = _BUDGET_MS
@@ -412,7 +472,7 @@ def _print_report(
 
     print()
     print("  [Geometry CPU — renderer hot functions]")
-    for key in ("cpu_total", "_grid_indices", "_grid_normals", "_clip_mesh_to_mask"):
+    for key in ("cpu_total", "_grid_indices", "_grid_gradients+normals", "_clip_mesh_to_mask"):
         label = f"  {key}" if key != "cpu_total" else key
         print(_fmt_row(f"  geo/{label}", geo_res.get(key, [])))
 
@@ -425,6 +485,11 @@ def _print_report(
     print("  [Namespace construction overhead (PERF-005)]")
     for key, times in ns_res.items():
         print(_fmt_row(f"  ns/{key}", times))
+
+    print()
+    print("  [Recurrence execution — 200-step gradient-descent path]")
+    for key in ("recurrence_200steps", "recurrence_per_step"):
+        print(_fmt_row(f"  rec/{key}", rec_res.get(key, [])))
 
     # Estimated total frame: eval chain + geo CPU (dominant bottlenecks)
     eval_chain = eval_res.get("chain_total", [])
@@ -493,25 +558,28 @@ def main() -> None:
     print(f"[bench] grid shape: {grid.x.shape}  ({grid.x.size:,} vertices)")
     print()
 
-    print("[bench] Section 1/5: AST pipeline overhead ...")
+    print("[bench] Section 1/6: AST pipeline overhead ...")
     ast_res = bench_ast_pipeline(args.frames)
 
-    print("[bench] Section 2/5: Cell evaluation chain ...")
+    print("[bench] Section 2/6: Cell evaluation chain ...")
     eval_res = bench_cell_eval(grid, args.frames)
 
-    print("[bench] Section 3/5: Geometry CPU functions ...")
+    print("[bench] Section 3/6: Geometry CPU functions ...")
     geo_res = bench_geometry_cpu(grid, args.frames)
 
-    print("[bench] Section 4/5: Full make_surface_mesh ...")
+    print("[bench] Section 4/6: Full make_surface_mesh ...")
     mesh_res = bench_make_surface_mesh(grid, args.frames)
 
-    print("[bench] Section 5/5: Namespace construction ...")
+    print("[bench] Section 5/6: Namespace construction ...")
     ns_res = bench_namespace(args.frames)
+
+    print("[bench] Section 6/6: Recurrence execution ...")
+    rec_res = bench_recurrence(args.frames)
 
     if args.no_gc:
         gc.enable()
 
-    _print_report(args.n, args.frames, ast_res, eval_res, geo_res, mesh_res, ns_res)
+    _print_report(args.n, args.frames, ast_res, eval_res, geo_res, mesh_res, ns_res, rec_res)
 
     if args.mem:
         print("[bench] Running memory audit ...")
