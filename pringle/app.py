@@ -103,15 +103,29 @@ class PringleViewport(QRenderWidget):
             )
 
     def _apply_movement(self) -> None:
-        import numpy as np
         cam = np.array(self._pr._camera.local.position, dtype=np.float64)
         tgt = np.array(self._pr._controller.target,     dtype=np.float64)
         dist = float(np.linalg.norm(cam - tgt))
         step = max(dist * _PAN_SPEED, 0.005)
+
+        # Horizontal forward = camera-to-target projected onto XY, normalized.
+        # Used to rotate WASD key-space directions into world space so that W
+        # always moves toward the scene regardless of camera azimuth.
+        fwd_xy = tgt[:2] - cam[:2]
+        mag = float(np.linalg.norm(fwd_xy))
+        fx, fy = (fwd_xy / mag) if mag > 1e-6 else (0.0, 1.0)
+
         for key in self._held_keys:
-            if key in _PAN_KEYS:
-                dx, dy, dz = _PAN_KEYS[key]
-                self._pr._pan_target(dx * step, dy * step, dz * step)
+            if key not in _PAN_KEYS:
+                continue
+            dx_k, dy_k, dz = _PAN_KEYS[key]
+            # Rotate key-space XY into world XY.
+            # Basis: forward=(fx,fy), right=rotate(fwd,-90°)=(fy,-fx).
+            # (dx_k,dy_k) → dx=dx_k*fy+dy_k*fx, dy=-dx_k*fx+dy_k*fy
+            # Space/Shift: dx_k=dy_k=0 → (0,0), dz unchanged.
+            dx = dx_k * fy + dy_k * fx
+            dy = -dx_k * fx + dy_k * fy
+            self._pr._pan_target(dx * step, dy * step, dz * step)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if not event.isAutoRepeat() and event.key() in _PAN_KEYS:

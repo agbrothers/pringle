@@ -6,6 +6,13 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-040 — Camera-relative WASD panning
+**Status:** Closed (implemented 2026-05-21)
+
+**Implementation:** Replaced world-space fixed-axis pan in `_apply_movement` (`app.py`) with camera-relative pan. The horizontal forward vector `(fx, fy)` is computed as the camera-to-target XY component, normalized. WASD key-space directions `(dx_k, dy_k)` are rotated into world XY using the 2D basis: `forward=(fx,fy)`, `right=(fy,-fx)`. The rotation is a single multiply: `dx = dx_k*fy + dy_k*fx`, `dy = -dx_k*fx + dy_k*fy`. Space/Shift have `dx_k=dy_k=0` so they pass through unchanged as world ±Z. Degenerate case (camera directly above target, `|fwd_xy| < 1e-6`) falls back to `(fx,fy)=(0,1)` (world +Y). `_PAN_KEYS` dict and `_pan_target` are unchanged.
+
+---
+
 ### FEAT-038 — Expose surface gradients as a shared renderer primitive
 **Status:** Closed (implemented 2026-05-20)
 
