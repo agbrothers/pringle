@@ -73,7 +73,24 @@ def cell_uses(cell) -> set[str]:
     if not src:
         return set()
     try:
-        return get_free_names(_preprocess_src(src)) - _always_defined()
+        uses = get_free_names(_preprocess_src(src)) - _always_defined()
+        # Also collect external deps from recurrence/initial_condition sub-cells so
+        # the DAG correctly orders upstream cells (e.g. dL, dt) before the path cell.
+        for sub in getattr(cell, "_sub_cells", []):
+            if not hasattr(sub, "sub_type"):
+                continue
+            if sub.sub_type() not in ("recursion", "initial_condition"):
+                continue
+            sub_src = sub.source().strip()
+            if not sub_src:
+                continue
+            try:
+                sub_uses = get_free_names(_preprocess_src(sub_src)) - _always_defined()
+                sub_uses.discard("n")  # 'n' is the recurrence loop variable, not an external dep
+                uses |= sub_uses
+            except Exception:
+                pass
+        return uses
     except Exception:
         return set()
 

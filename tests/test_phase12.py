@@ -252,43 +252,6 @@ class TestCellListFolder:
 # Undo / redo
 # ---------------------------------------------------------------------------
 
-class TestDataCellWidget:
-    def test_add_and_remove_empty_data_cell_does_not_crash(self, qapp, grid):
-        from pringle.cell_list import CellListWidget
-        cl = CellListWidget(on_cell_result=_noop_result, grid=grid)
-        cell = cl.add_data_cell()
-        # Deleting an untouched data cell must not crash (style attribute was missing)
-        cl.remove_cell(cell.cell_id)
-        assert len(cl._cells) == 0
-
-    def test_data_cell_has_style(self, qapp):
-        from pringle.data_cell_widget import DataCellWidget
-        from pringle.style import CellStyle
-        dc = DataCellWidget()
-        assert isinstance(dc.style, CellStyle)
-
-    def test_data_cell_serializes(self, qapp):
-        from pringle.data_cell_widget import DataCellWidget
-        from pringle.session import cell_to_dict
-        dc = DataCellWidget()
-        d = cell_to_dict(dc)
-        assert d["type"] == "data"
-        assert "style" in d
-        assert "color" in d["style"]
-
-    def test_data_cell_sees_slider_namespace(self, qapp, grid):
-        from pringle.cell_list import CellListWidget
-        results = []
-        cl = CellListWidget(
-            on_cell_result=lambda cid, r, s: results.append(r),
-            grid=grid,
-        )
-        cl.add_cell("k = 7")   # becomes a slider
-        dc = cl.add_data_cell("out = k * 2")
-        cl._run_data_cell(dc.cell_id)
-        assert cl._data_cell_ns.get("out") == 14
-
-
 class TestUndoRedo:
     def test_undo_removes_added_cell(self, qapp, grid):
         from pringle.cell_list import CellListWidget
@@ -432,29 +395,50 @@ class TestFolderSessionRoundTrip:
         finally:
             os.unlink(path)
 
-    def test_data_cell_round_trip(self, qapp, grid):
-        import tempfile, os
+    def test_legacy_data_type_yaml_loads_as_equation_cell(self, qapp, grid):
+        """Old YAML sessions with type: data are transparently migrated to equation cells."""
+        import tempfile, os, yaml
         from pringle.cell_list import CellListWidget
-        from pringle.data_cell_widget import DataCellWidget
-        from pringle.session import save_session, load_session, restore_cell_list
+        from pringle.cell_widget import CellWidget
+        from pringle.session import load_session, restore_cell_list
 
-        cl = CellListWidget(on_cell_result=_noop_result, grid=grid)
-        dc = cl.add_data_cell("path = zeros((10, 2))")
-        dc.add_sub_cell("initial_condition")._edit.setPlainText("path[0] = array([1.0, 0.0])")
-        dc.add_sub_cell("recursion")._edit.setPlainText("path[n] = path[n-1] * 0.9")
-
-        with tempfile.NamedTemporaryFile(suffix=".yaml", delete=False) as f:
+        # Build a minimal YAML that uses the old type: data format
+        session_dict = {
+            "version": 1,
+            "grid": {"x_min": -5.0, "x_max": 5.0, "y_min": -5.0, "y_max": 5.0,
+                     "z_min": -5.0, "z_max": 5.0, "n": 16},
+            "cells": [{
+                "id": "legacy-data-001",
+                "type": "data",
+                "source": "path = zeros((10, 2))",
+                "visible": True,
+                "style": {"color": [0.22, 0.4, 0.88, 1.0], "opacity": 1.0,
+                          "line_width": 0.05, "point_size": 0.1,
+                          "scatter_render_mode": "circles",
+                          "colormap": None, "colormap_reversed": False},
+                "sub_cells": [
+                    {"type": "initial_condition", "source": "path[0] = array([1.0, 0.0])"},
+                    {"type": "recursion", "source": "path[n] = path[n-1] * 0.9"},
+                ],
+            }],
+        }
+        with tempfile.NamedTemporaryFile(
+            suffix=".yaml", delete=False, mode="w"
+        ) as f:
+            yaml.dump(session_dict, f)
             path = f.name
         try:
-            save_session(path, cl, grid.config)
-            data = load_session(path)
-            cl2 = CellListWidget(on_cell_result=_noop_result, grid=grid)
-            restore_cell_list(cl2, data["cells"])
-            data_cells = [c for c in cl2._cells if isinstance(c, DataCellWidget)]
-            assert len(data_cells) == 1
-            assert data_cells[0].source() == "path = zeros((10, 2))"
-            assert data_cells[0].recurrence_expr() == "path[n] = path[n-1] * 0.9"
-            assert len(data_cells[0].initial_condition_exprs()) == 1
+            cl = CellListWidget(on_cell_result=_noop_result, grid=grid)
+            restore_cell_list(cl, load_session(path)["cells"])
+            assert len(cl._cells) == 1
+            cell = cl._cells[0]
+            assert isinstance(cell, CellWidget)
+            assert cell.source() == "path = zeros((10, 2))"
+            recursion_subs = [s for s in cell._sub_cells if s.sub_type() == "recursion"]
+            ic_subs = [s for s in cell._sub_cells if s.sub_type() == "initial_condition"]
+            assert len(recursion_subs) == 1
+            assert recursion_subs[0].source() == "path[n] = path[n-1] * 0.9"
+            assert len(ic_subs) == 1
         finally:
             os.unlink(path)
 

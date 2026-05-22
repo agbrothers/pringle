@@ -491,6 +491,16 @@ class CellWidget(QWidget):
     def condition_exprs(self) -> list[str]:
         return [s.source() for s in self._sub_cells if s.sub_type() == "condition" and s.source().strip()]
 
+    def recurrence_expr(self) -> str | None:
+        for s in self._sub_cells:
+            if s.sub_type() == "recursion" and s.source().strip():
+                return s.source().strip()
+        return None
+
+    def initial_condition_exprs(self) -> list[str]:
+        return [s.source() for s in self._sub_cells
+                if s.sub_type() == "initial_condition" and s.source().strip()]
+
     def set_data_mode(self, enabled: bool) -> None:
         """Switch cell between expression mode (auto-eval) and data-array mode (manual re-run)."""
         if self._data_mode == enabled:

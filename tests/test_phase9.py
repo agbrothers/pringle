@@ -1,16 +1,13 @@
 """
-Phase 9 tests: data panel and recurrence cells.
+Phase 9 tests: recurrence cells and data-namespace evaluation.
 
 Tests validate:
-- DataCellWidget structure, signals, and sub-cells
-- DataPanelWidget add/remove/run
-- Shared namespace accumulates across data cells
+- parse_recurrence / execute_recurrence correctness
+- Shared namespace accumulates across run_cell calls
 - import statement is blocked at runtime (no __builtins__)
-- np alias is available in data cells (np.random.randn)
+- np alias is available via is_data_cell=True
 - run_cell with is_data_cell=True skips AST safety check
-- Recurrence: parse_recurrence, execute_recurrence
-- Recurrence integration: path builds a geometric sequence
-- DataPanelWidget namespace_changed signal
+- Recurrence sub-cells can reference functions defined in upstream cells
 """
 
 import sys
@@ -19,12 +16,11 @@ import numpy as np
 
 from PyQt6.QtWidgets import QApplication
 
-from pringle.data_cell_widget import DataCellWidget
-from pringle.data_panel import DataPanelWidget
 from pringle.recurrence import parse_recurrence, execute_recurrence
 from pringle.evaluator import run_cell
 from pringle.namespace import build_data_namespace
 from pringle.grid import make_grid, GridConfig
+from pringle.dag import cell_uses
 
 
 @pytest.fixture(scope="module")
@@ -36,81 +32,6 @@ def qapp():
 @pytest.fixture
 def grid():
     return make_grid(GridConfig(n=32))
-
-
-# ---------------------------------------------------------------------------
-# DataCellWidget
-# ---------------------------------------------------------------------------
-
-class TestDataCellWidget:
-    def test_creates(self, qapp):
-        cell = DataCellWidget()
-        assert cell.cell_id != ""
-        assert cell.source() == ""
-
-    def test_set_source(self, qapp):
-        cell = DataCellWidget()
-        cell.set_source("d = zeros((10, 3))")
-        assert cell.source() == "d = zeros((10, 3))"
-
-    def test_run_requested_signal(self, qapp):
-        cell = DataCellWidget()
-        received = []
-        cell.run_requested.connect(received.append)
-        cell._run_btn.click()
-        assert cell.cell_id in received
-
-    def test_delete_requested_signal(self, qapp):
-        cell = DataCellWidget()
-        received = []
-        cell.delete_requested.connect(received.append)
-        cell._delete_btn.click()
-        assert cell.cell_id in received
-
-    def test_edit_marks_stale(self, qapp):
-        cell = DataCellWidget()
-        cell.set_status("ok")
-        cell._text_edit.setPlainText("new source")
-        assert "stale" in cell._status_dot.styleSheet().lower() or \
-               "cc7700" in cell._status_dot.styleSheet().lower()
-
-    def test_set_status_ok(self, qapp):
-        cell = DataCellWidget()
-        cell.set_status("ok")
-        assert "2a8a2a" in cell._status_dot.styleSheet()
-
-    def test_set_status_error_shows_message(self, qapp):
-        cell = DataCellWidget()
-        cell.set_status("error", "NameError: x is not defined")
-        assert not cell._msg_label.isHidden()
-
-    def test_add_initial_condition_sub_cell(self, qapp):
-        cell = DataCellWidget()
-        sub = cell.add_sub_cell("initial_condition")
-        assert sub.sub_type() == "initial_condition"
-        assert len(cell._sub_cells) == 1
-
-    def test_add_recursion_sub_cell(self, qapp):
-        cell = DataCellWidget()
-        sub = cell.add_sub_cell("recursion")
-        assert sub.sub_type() == "recursion"
-
-    def test_initial_condition_exprs(self, qapp):
-        cell = DataCellWidget()
-        sub = cell.add_sub_cell("initial_condition")
-        sub._edit.setPlainText("path[0] = array([1.0, 0.0])")
-        assert cell.initial_condition_exprs() == ["path[0] = array([1.0, 0.0])"]
-
-    def test_recurrence_expr(self, qapp):
-        cell = DataCellWidget()
-        sub = cell.add_sub_cell("recursion")
-        sub._edit.setPlainText("path[n] = path[n-1] * 0.9")
-        assert cell.recurrence_expr() == "path[n] = path[n-1] * 0.9"
-
-    def test_recurrence_expr_none_when_blank(self, qapp):
-        cell = DataCellWidget()
-        cell.add_sub_cell("recursion")  # blank
-        assert cell.recurrence_expr() is None
 
 
 # ---------------------------------------------------------------------------
@@ -231,7 +152,6 @@ class TestDataCellEval:
         assert result.exports["d"].shape == (10, 3)
 
     def test_import_blocked_at_runtime(self, grid):
-        # import fails at runtime because __builtins__ is disabled
         result = run_cell("import os", {}, grid, is_data_cell=True)
         assert result.error is not None
 
@@ -248,91 +168,83 @@ class TestDataCellEval:
 
 
 # ---------------------------------------------------------------------------
-# DataPanelWidget
+# Recurrence sub-cell dependency tracking via DAG
 # ---------------------------------------------------------------------------
 
-class TestDataPanelWidget:
-    def test_creates_empty(self, qapp, grid):
-        panel = DataPanelWidget(grid=grid)
-        assert len(panel._cells) == 0
+class _FakeSubCell:
+    """Minimal sub-cell stub for DAG dependency tests."""
+    def __init__(self, sub_type, source):
+        self._sub_type = sub_type
+        self._source = source
 
-    def test_add_cell(self, qapp, grid):
-        panel = DataPanelWidget(grid=grid)
-        cell = panel.add_cell("d = zeros((5, 3))")
-        assert len(panel._cells) == 1
-        assert cell.source() == "d = zeros((5, 3))"
+    def sub_type(self):
+        return self._sub_type
 
-    def test_remove_cell(self, qapp, grid):
-        panel = DataPanelWidget(grid=grid)
-        cell = panel.add_cell("d = zeros((5,))")
-        panel.remove_cell(cell.cell_id)
-        assert len(panel._cells) == 0
+    def source(self):
+        return self._source
 
-    def test_run_cell_updates_namespace(self, qapp, grid):
-        panel = DataPanelWidget(grid=grid)
-        cell = panel.add_cell("scale = 7.0")
-        panel._run_cell(cell)
-        assert "scale" in panel._namespace
-        assert panel._namespace["scale"] == pytest.approx(7.0)
 
-    def test_run_all_accumulates(self, qapp, grid):
-        panel = DataPanelWidget(grid=grid)
-        panel.add_cell("a_val = 3.0")
-        panel.add_cell("b_val = a_val * 2")
-        panel.run_all()
-        assert panel._namespace.get("a_val") == pytest.approx(3.0)
-        assert panel._namespace.get("b_val") == pytest.approx(6.0)
+class _FakeCell:
+    """Minimal cell stub for DAG dependency tests."""
+    def __init__(self, cell_id, source, sub_cells=None):
+        self.cell_id = cell_id
+        self._source = source
+        self._sub_cells = sub_cells or []
 
-    def test_namespace_changed_signal(self, qapp, grid):
-        received = []
-        panel = DataPanelWidget(grid=grid)
-        panel.namespace_changed.connect(lambda: received.append(True))
-        cell = panel.add_cell("v = 1.0")
-        panel._run_cell(cell)
-        assert len(received) > 0
+    def source(self):
+        return self._source
 
-    def test_error_cell_sets_error_status(self, qapp, grid):
-        panel = DataPanelWidget(grid=grid)
-        cell = panel.add_cell("z = undefined_variable_xyz")
-        panel._run_cell(cell)
-        # Status dot should reflect error
-        assert "cc2222" in cell._status_dot.styleSheet()
 
-    def test_get_namespace(self, qapp, grid):
-        panel = DataPanelWidget(grid=grid)
-        cell = panel.add_cell("alpha = 42.0")
-        panel._run_cell(cell)
-        ns = panel.get_namespace()
-        assert ns.get("alpha") == pytest.approx(42.0)
-        # Should be a copy, not the live dict
-        ns["alpha"] = 0.0
-        assert panel._namespace.get("alpha") == pytest.approx(42.0)
+class TestRecurrenceDAGDeps:
+    """Verify that cell_uses() includes external deps from recurrence sub-cells."""
 
-    def test_recurrence_integration(self, qapp, grid):
-        """Geometric decay recurrence produces correct path."""
-        panel = DataPanelWidget(grid=grid)
-        cell = panel.add_cell("path = zeros(8)")
-        ic = cell.add_sub_cell("initial_condition")
-        ic._edit.setPlainText("path[0] = 1.0")
-        rule = cell.add_sub_cell("recursion")
-        rule._edit.setPlainText("path[n] = path[n-1] * 0.5")
+    def test_recursion_rule_external_deps_tracked(self):
+        # path cell source has no reference to dL or dt — only zeros and k
+        # but the recursion sub-cell references dL and dt
+        sub = _FakeSubCell("recursion", "path[n] = path[n-1] + dt * dL(path[n-1])")
+        cell = _FakeCell("path-cell", "path = zeros((k, 3))", sub_cells=[sub])
+        uses = cell_uses(cell)
+        assert "dL" in uses, f"expected 'dL' in cell_uses, got: {uses}"
+        assert "dt" in uses, f"expected 'dt' in cell_uses, got: {uses}"
 
-        panel._run_cell(cell)
+    def test_recurrence_loop_var_n_not_in_deps(self):
+        sub = _FakeSubCell("recursion", "path[n] = path[n-1] * 0.9")
+        cell = _FakeCell("path-cell", "path = zeros((10, 2))", sub_cells=[sub])
+        uses = cell_uses(cell)
+        assert "n" not in uses, f"'n' (loop var) should not be a tracked dep, got: {uses}"
 
-        assert "path" in panel._namespace
-        path = panel._namespace["path"]
-        assert path[0] == pytest.approx(1.0)
-        assert path[4] == pytest.approx(0.5**4, abs=1e-6)
+    def test_initial_condition_external_deps_not_flagged(self):
+        # array is always-defined so it should not appear; path is self-defined so
+        # cell_uses may include it but build_dag's self-edge guard prevents a cycle
+        sub = _FakeSubCell("initial_condition", "path[0] = array([1.0, 0.0])")
+        cell = _FakeCell("path-cell", "path = zeros((10, 2))", sub_cells=[sub])
+        uses = cell_uses(cell)
+        assert "array" not in uses  # whitelist — always available
 
-    def test_on_cell_result_callback(self, qapp, grid):
-        """DataPanelWidget calls on_cell_result for renderable outputs."""
-        results = []
-        panel = DataPanelWidget(
-            on_cell_result=lambda cid, r, s: results.append((cid, r)),
-            grid=grid,
+    def test_cross_cell_recurrence_evaluates_correctly(self, grid, qapp):
+        # Simulate the Lorenz pattern: upstream cell defines f(pos), recurrence uses it
+        from pringle.cell_list import CellListWidget
+        results = {}
+        cl = CellListWidget(
+            on_cell_result=lambda cid, r, s: results.update({cid: r}),
+            grid=grid, parent=None,
         )
-        cell = panel.add_cell("points = random.randn(10, 3)")
-        panel._run_cell(cell)
-        assert len(results) > 0
-        _, r = results[0]
-        assert r.render_type == "scatter"
+        # Upstream cell: define a step function
+        step_cell = cl.add_cell(source="f(pos) = pos * 0.5")
+        # Recurrence cell: path[n] = f(path[n-1]), initial path[0] = array([4.0, 0.0])
+        path_cell = cl.add_cell(source="path = zeros((5, 2))")
+        ic = path_cell.add_sub_cell(sub_type="initial_condition")
+        ic._edit.setPlainText("path[0] = array([4.0, 0.0])")
+        rec = path_cell.add_sub_cell(sub_type="recursion")
+        rec._edit.setPlainText("path[n] = f(path[n-1])")
+
+        cl._rebuild_namespace()
+
+        r = path_cell._last_result
+        assert r.error is None, r.error
+        assert r.warning is None or "dL" not in str(r.warning)
+        p = r.exports.get("path")
+        assert p is not None
+        assert np.allclose(p[0], [4.0, 0.0]), p[0]
+        assert np.allclose(p[1], [2.0, 0.0]), p[1]
+        assert np.allclose(p[2], [1.0, 0.0]), p[2]

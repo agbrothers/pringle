@@ -69,7 +69,6 @@ class CellListWidget(QWidget):
         self._grid = grid or make_grid()
         self._cells: list[CellWidget] = []
         self._shared_ns: dict = {}
-        self._data_cell_ns: dict = {}  # exports from manually-run data cells
         self._cell_index: int = 0  # for palette cycling
         self._undo_history: deque[list[dict]] = deque(maxlen=_MAX_UNDO)
         self._redo_history: deque[list[dict]] = deque(maxlen=_MAX_UNDO)
@@ -267,54 +266,6 @@ class CellListWidget(QWidget):
         self._update_placeholder()
         return cell
 
-    def add_data_cell(
-        self,
-        source: str = "",
-        after_id: str | None = None,
-        style: CellStyle | None = None,
-    ):
-        """Add a run-on-demand data cell."""
-        from pringle.data_cell_widget import DataCellWidget
-        self._push_undo()
-        if style is None:
-            style = CellStyle(color=palette_color(self._cell_index))
-        self._cell_index += 1
-
-        cell = DataCellWidget(style=style)
-        cell.run_requested.connect(self._run_data_cell)
-        cell.delete_requested.connect(self._on_delete_requested)
-        cell.visibility_toggled.connect(self._on_data_cell_visibility_toggled)
-        cell.render_mode_changed.connect(self._on_data_cell_render_mode_changed)
-        cell.drag_started.connect(self._on_drag_started)
-        cell.drag_moved.connect(self._on_drag_moved)
-        cell.drag_ended.connect(self._on_drag_ended)
-
-        if after_id is not None:
-            idx = self._index_of(after_id)
-            if idx >= 0:
-                self._cells.insert(idx + 1, cell)
-                self._layout.insertWidget(idx + 2, cell)
-                if not self._skip_folder_inference:
-                    self._assign_folder(cell, self._infer_folder(idx + 1))
-                if source:
-                    cell.set_source(source)
-                if not self._skip_rebuild:
-                    cell.focus()
-                self._update_placeholder()
-                return cell
-
-        stretch_pos = self._layout.count() - 1
-        self._layout.insertWidget(stretch_pos, cell)
-        self._cells.append(cell)
-        if not self._skip_folder_inference:
-            self._assign_folder(cell, self._infer_folder(len(self._cells) - 1))
-        if source:
-            cell.set_source(source)
-        if not self._skip_rebuild:
-            cell.focus()
-        self._update_placeholder()
-        return cell
-
     def add_comment_cell(
         self,
         source: str = "#",
@@ -431,79 +382,6 @@ class CellListWidget(QWidget):
         self._grid = grid
         self._rebuild_namespace()
 
-    def _run_data_cell(self, cell_id: str) -> None:
-        """Run a data cell on demand, using the current equation namespace as input."""
-        from pringle.data_cell_widget import DataCellWidget
-        from pringle.namespace import build_data_namespace
-        from pringle.recurrence import parse_recurrence, execute_recurrence
-
-        idx = self._index_of(cell_id)
-        if idx < 0:
-            return
-        cell = self._cells[idx]
-        if not isinstance(cell, DataCellWidget):
-            return
-
-        source = cell.source().strip()
-        if not source:
-            cell.set_status("idle")
-            return
-
-        # Data namespace + full current shared namespace (sliders + equation exports
-        # + previous data cell outputs) so data cells see everything
-        ns = build_data_namespace()
-        ns.update(self._shared_ns)
-
-        result = run_cell(source, ns, self._grid, is_data_cell=True)
-
-        if result.error:
-            cell.set_status("error", result.error)
-            return
-
-        rule_expr = cell.recurrence_expr()
-        initial_exprs = cell.initial_condition_exprs()
-
-        if rule_expr:
-            is_valid, arr_name, _ = parse_recurrence(rule_expr)
-            if is_valid and arr_name in result.exports:
-                arr = result.exports[arr_name]
-                if isinstance(arr, np.ndarray):
-                    arr, warn = execute_recurrence(
-                        arr_name, arr, initial_exprs, rule_expr,
-                        {**ns, **result.exports},
-                    )
-                    result.exports[arr_name] = arr
-                    if warn:
-                        cell.set_status("stale", warn)
-                    else:
-                        cell.set_status("ok")
-                    if arr.ndim == 2 and arr.shape[1] in (2, 3):
-                        result.render_type = "scatter"
-                        with warnings.catch_warnings(record=True) as _w:
-                            warnings.simplefilter("always")
-                            result.data = arr.astype(np.float32)
-                        if _w:
-                            cell.set_status("warn", "Overflow: values exceed float32 range — integration may have diverged")
-                else:
-                    cell.set_status("error", f"'{arr_name}' is not an array")
-                    return
-            else:
-                cell.set_status("error", f"Cannot parse rule or missing array: {rule_expr!r}")
-                return
-        else:
-            cell.set_status("ok", result.warning or "")
-
-        # Merge exports into the persistent data-cell namespace, then rebuild
-        self._data_cell_ns.update(result.exports)
-        self._rebuild_namespace()
-
-        cell._last_result = result
-        if result.render_type:
-            if self._is_render_visible(cell):
-                self._on_cell_result(cell.cell_id, result, cell.style)
-            else:
-                self._on_cell_result(cell.cell_id, CellResult(), cell.style)
-
     # ------------------------------------------------------------------
     # Undo / redo (structural: add / remove cell)
     # ------------------------------------------------------------------
@@ -608,18 +486,10 @@ class CellListWidget(QWidget):
         ordered_cells, cyclic_ids = topo_order(dag, evaluable)
         undef = undefined_names(evaluable)
 
-        from pringle.data_cell_widget import DataCellWidget
-
-        # Seed with previously-run data cell outputs so equation cells can reference them
-        shared: dict = dict(self._data_cell_ns)
+        shared: dict = {}
         for cell in ordered_cells:
             if isinstance(cell, SliderWidget):
                 shared[cell.name] = _ns_value(cell.value)
-                continue
-
-            # Data cells run on demand only — skip during reactive rebuild
-            if isinstance(cell, DataCellWidget):
-                cell._mark_stale()
                 continue
 
             if cell.cell_id in cyclic_ids:
@@ -627,6 +497,20 @@ class CellListWidget(QWidget):
                 cell.set_error("Circular dependency detected")
                 self._on_cell_result(cell.cell_id, CellResult(), cell.style)
                 continue
+
+            # RNG state: ensure random expressions (e.g. M = random.random((10,2)))
+            # produce the same draws on every rebuild and reproduce correctly after
+            # session load. On first eval, capture the pre-run state. On subsequent
+            # evals, restore it so draws are identical regardless of MT position.
+            pending = getattr(cell, "_pending_rng_state", None)
+            if pending is not None:
+                cell._rng_state = pending
+                cell._pending_rng_state = None
+            saved = getattr(cell, "_rng_state", None)
+            if saved is not None:
+                np.random.set_state(saved)
+            else:
+                cell._rng_state = np.random.get_state()
 
             result = self._eval_cell(cell, shared)
             cell._last_result = result
@@ -663,6 +547,48 @@ class CellListWidget(QWidget):
         except Exception as exc:
             result = CellResult()
             result.error = f"{type(exc).__name__}: {exc}"
+
+        # Apply recursion/initial_condition sub-cells if present
+        rule_expr = cell.recurrence_expr() if hasattr(cell, "recurrence_expr") else None
+        if rule_expr and not result.error:
+            from pringle.recurrence import parse_recurrence, execute_recurrence
+            initial_exprs = (
+                cell.initial_condition_exprs()
+                if hasattr(cell, "initial_condition_exprs") else []
+            )
+            is_valid, arr_name, _ = parse_recurrence(rule_expr)
+            if is_valid and arr_name in result.exports:
+                arr = result.exports[arr_name]
+                if isinstance(arr, np.ndarray):
+                    from pringle.namespace import build_equation_namespace
+                    arr, warn = execute_recurrence(
+                        arr_name, arr, initial_exprs, rule_expr,
+                        {**build_equation_namespace(), **shared, **result.exports},
+                    )
+                    result.exports[arr_name] = arr
+                    if arr.ndim == 2 and arr.shape[1] in (2, 3):
+                        with warnings.catch_warnings(record=True) as _w:
+                            warnings.simplefilter("always")
+                            result.data = arr.astype(np.float32)
+                        result.render_type = "scatter"
+                        if _w:
+                            result.warning = "Overflow: values exceed float32 range — integration may have diverged"
+                        elif warn:
+                            result.warning = warn
+                    else:
+                        result.render_type = None
+                        result.data = None
+                        if warn:
+                            result.warning = warn
+                else:
+                    result.error = f"Recurrence: '{arr_name}' is not an array"
+                    result.render_type = None
+                    result.data = None
+            elif not is_valid:
+                result.error = f"Cannot parse recursion rule: {rule_expr!r}"
+                result.render_type = None
+                result.data = None
+
         if result.error:
             cell.set_error(result.error)
         elif result.warning:
@@ -687,6 +613,9 @@ class CellListWidget(QWidget):
 
     def _on_run_requested(self, cell_id: str) -> None:
         """Force re-evaluate a data-mode CellWidget (→ button or focus-out)."""
+        idx = self._index_of(cell_id)
+        if idx >= 0:
+            self._cells[idx]._rng_state = None  # allow fresh draws on explicit re-run
         self._rebuild_namespace()
 
     def _on_equation_cell_visibility_toggled(self, cell_id: str, _is_visible: bool) -> None:
@@ -703,28 +632,6 @@ class CellListWidget(QWidget):
 
     def _on_equation_cell_style_updated(self, cell_id: str) -> None:
         """Re-apply the cached result when color/opacity/size changes — no re-eval."""
-        idx = self._index_of(cell_id)
-        if idx < 0:
-            return
-        cell = self._cells[idx]
-        last = getattr(cell, "_last_result", None)
-        if last is not None and last.render_type and self._is_render_visible(cell):
-            self._on_cell_result(cell_id, last, cell.style)
-
-    def _on_data_cell_visibility_toggled(self, cell_id: str, is_visible: bool) -> None:
-        """Show or clear a DataCellWidget's render when the 👁 is toggled."""
-        idx = self._index_of(cell_id)
-        if idx < 0:
-            return
-        cell = self._cells[idx]
-        last = getattr(cell, "_last_result", None)
-        if self._is_render_visible(cell) and last is not None and last.render_type:
-            self._on_cell_result(cell_id, last, cell.style)
-        else:
-            self._on_cell_result(cell_id, CellResult(), cell.style)
-
-    def _on_data_cell_render_mode_changed(self, cell_id: str) -> None:
-        """Re-apply the cached result when scatter render mode changes — no re-eval needed."""
         idx = self._index_of(cell_id)
         if idx < 0:
             return
@@ -849,14 +756,9 @@ class CellListWidget(QWidget):
         shared = dict(self._shared_ns)
         shared[name] = _ns_value(value)
 
-        from pringle.data_cell_widget import DataCellWidget
-
         for cell in descendants:
             if isinstance(cell, SliderWidget):
                 shared[cell.name] = _ns_value(cell.value)
-                continue
-            if isinstance(cell, DataCellWidget):
-                cell._mark_stale()
                 continue
             result = self._eval_cell(cell, shared)
             shared.update(result.exports)

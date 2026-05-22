@@ -7,6 +7,62 @@ See [16-closed-bugs.md](16-closed-bugs.md) for resolved bugs.
 
 ---
 
+### BUG-035 — `ConstraintSubCell` class handles 4 sub-types but is named for one; `hasattr` guards in `_eval_cell` are unreachable dead code
+
+**Status:** Open  
+**Logged:** 2026-05-22  
+**Severity:** Low — cosmetic/structural; no runtime impact
+
+**Description:**  
+Two naming/clarity issues in the expression cell implementation that accumulated during the DataCellWidget migration:
+
+**1. `ConstraintSubCell` (cell_widget.py:91) name does not match responsibilities.**  
+The class handles four sub-types: `constraint`, `condition`, `initial_condition`, and `recursion`. The name `ConstraintSubCell` reflects only the first sub-type. Downstream, `_sub_cells: list[ConstraintSubCell]` and method signatures like `_remove_sub_cell(sub: ConstraintSubCell)` imply a homogeneous constraint-only list, hiding the fact that the list may contain recursion rules or initial conditions. Rename to `SubCell` or `ExprSubCell` for accuracy.
+
+**2. `hasattr` guards in `_eval_cell` (cell_list.py:534) are unreachable.**  
+Every call to `constraint_exprs`, `condition_exprs`, `recurrence_expr`, `initial_condition_exprs`, `set_preview`, and `set_data_mode` is wrapped in `hasattr(cell, ...)`. In the actual control flow, `_eval_cell` only ever receives `CellWidget` instances — sliders `continue` before reaching it, and folders/comments are filtered from `evaluable` before the DAG run. The guards imply a heterogeneous type that does not exist and make the method harder to read.
+
+**Fix:**  
+Rename `ConstraintSubCell` → `SubCell` (global search-replace across `cell_widget.py`, `session.py`, and tests). Remove the `hasattr` wrappers in `_eval_cell` and replace with direct method calls.
+
+---
+
+### BUG-034 — `_eval_cell` can spawn a blocking `QMessageBox` dialog mid-rebuild
+
+**Status:** Open  
+**Logged:** 2026-05-22  
+**Severity:** High — modal dialog can appear during a passive rebuild triggered by a slider drag or upstream edit; blocks the Qt event loop from inside a debounce timeout
+
+**Description:**  
+`_eval_cell` (cell_list.py:600) calls `cell.set_data_mode(should_be_data)` when the inferred render type of a cell changes between `scatter` (data-array mode) and surface/other (equation mode). `set_data_mode` (cell_widget.py:504) contains a `QMessageBox.question()` call that fires if the cell has incompatible sub-cells — e.g., a constraint sub-cell on a cell that is switching to data mode.
+
+The result is that a user who:
+1. Adds a constraint sub-cell to a cell, then
+2. Edits the expression so it now returns an `(N, 3)` array
+
+…will see a blocking modal dialog during the next passive rebuild (triggered by a slider tick or another cell's edit). The dialog appears from inside a debounce `QTimer` callback — a context where UI dialogs are not expected and where the user has no obvious reason why the dialog appeared.
+
+**Root cause:**  
+The decision to switch data mode and its UI side effect (dialog, signal rewiring, sub-cell cleanup) are bundled inside a single method called from the evaluation path. Evaluation should be free of UI side effects beyond updating inline labels.
+
+**Fix (two options):**
+
+*Option A — Defer mode-switch via `QTimer.singleShot(0, ...)`.*  
+In `_eval_cell`, replace the direct `cell.set_data_mode(should_be_data)` call with a deferred call. The dialog would still appear, but after the current rebuild completes and the event loop returns to an idle state.
+
+```python
+should_be_data = result.from_shape_inference and result.render_type in ("scatter", "scatter_2d")
+if should_be_data != cell.is_data_mode():
+    QTimer.singleShot(0, lambda c=cell, m=should_be_data: c.set_data_mode(m))
+```
+
+*Option B — Suppress dialog during passive mode transitions.*  
+Add a `force: bool = False` parameter to `set_data_mode`. When `force=False` (called from `_eval_cell`), silently remove incompatible sub-cells without asking. Reserve the confirmation dialog for explicit user actions (e.g., adding a sub-cell that would be incompatible with the current mode).
+
+Option B is the recommended fix — auto-switching data mode is always a passive inference from the return type, not a user-initiated action, so the dialog is always inappropriate in this path.
+
+---
+
 ### BUG-033 — Sub-cells in data mode ignore the manual-re-run contract; every keystroke triggers a full rebuild
 
 **Status:** Open  

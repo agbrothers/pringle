@@ -44,6 +44,7 @@ from scipy.special import (
     erf, erfc, erfinv,
     j0, j1, jn, yn,           # Bessel functions
     legendre,
+    logsumexp,
 )
 from scipy.linalg import (
     norm, det, inv, solve,
@@ -97,6 +98,7 @@ def build_equation_namespace() -> dict:
         "erf": erf, "erfc": erfc, "erfinv": erfinv,
         "j0": j0, "j1": j1, "jn": jn, "yn": yn,
         "legendre": legendre,
+        "logsumexp": logsumexp,
         # scipy.linalg
         "norm": norm, "det": det, "inv": inv, "solve": solve,
         "eig": eig, "eigvals": eigvals, "svd": svd,

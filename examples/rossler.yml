@@ -204,8 +204,8 @@ cells:
     scatter_render_mode: line
     colormap: null
     colormap_reversed: false
-  type: data
-  source: path = np.zeros((k+1, 3))
+  type: equation
+  source: path = zeros((k+1, 3))
   visible: false
   sub_cells:
   - type: recursion

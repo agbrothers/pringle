@@ -446,11 +446,6 @@ class PringleWindow(QMainWindow):
             QMessageBox.critical(self, "Load error", str(exc))
             return
         restore_cell_list(self._cell_list, data.get("cells", []))
-        # Auto-run data cells so they render on load without requiring manual ▷ clicks
-        from pringle.data_cell_widget import DataCellWidget
-        for cell in self._cell_list._cells:
-            if isinstance(cell, DataCellWidget) and cell.source().strip():
-                self._cell_list._run_data_cell(cell.cell_id)
         if data.get("grid"):
             from pringle.session import grid_config_from_dict
             cfg = grid_config_from_dict(data["grid"])

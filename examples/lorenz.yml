@@ -376,8 +376,8 @@ cells:
     colormap: null
     colormap_reversed: false
   folder_id: 66fedd76-2772-4b34-b08c-9063783fdb2c
-  type: data
-  source: path = np.zeros((k, 3))
+  type: equation
+  source: path = zeros((k, 3))
   visible: false
   sub_cells:
   - type: recursion
