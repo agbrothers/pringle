@@ -93,6 +93,34 @@ GPU savings are additive to CPU savings and not directly measurable without a re
 
 ---
 
+### PERF-013 — `execute_recurrence` re-compiles RHS string and checks NaN on every step
+**Status:** Closed (fixed 2026-05-22)
+**Priority:** HIGH
+**Measured cost before:** ~14 ms per animation tick for a 200-step recurrence cell (42% of 33 ms frame budget)
+
+**Root cause:** Three per-step overheads compounded over the full recurrence loop:
+- `eval(string)` re-invoked `compile()` on every iteration: 56.9 µs/step × 200 = **11.4 ms**
+- `np.errstate(...)` context manager entered/exited every step: 1.7 µs × 200 = **0.34 ms**
+- `{**namespace, array_name: result, "n": n}` copied the 100-key namespace dict every step: 0.6 µs × 200 = **0.12 ms**
+- `np.any(~np.isfinite(result[n]))` ran a boolean reduction every step: 3.7 µs × 200 = **0.73 ms**
+
+**Fix:** Three changes in `execute_recurrence` ([recurrence.py:70-82](../pringle/recurrence.py#L70)):
+1. `compile(rhs, "<recurrence>", "eval")` once before the loop; pass the code object to `eval` instead of the string
+2. Shared globals dict `{**namespace, "__builtins__": {}, array_name: result}` — only `{"n": n}` passed as locals per step (single-key dict); `result` is mutated in-place so `glob[array_name]` is always current with no sync
+3. `np.errstate` moved outside the loop; `np.all(np.isfinite(result[1:]))` called once post-loop instead of per step
+
+**Measured outcome (projected from per-step profiling, 200-step cell):**
+
+| Metric | Before | After | Speedup |
+|--------|--------|-------|---------|
+| Per-step eval | 56.9 µs | ~16.3 µs | **3.5×** |
+| Per-step NaN check | 3.7 µs | ~0 µs (post-loop) | — |
+| Total recurrence (200 steps) | ~14 ms | ~3.3 ms | **~4.2×** |
+| Estimated CPU frame (with recurrence) | ~24 ms | ~13.3 ms | — |
+| Estimated wall-clock fps | ~30 fps | ~45 fps | — |
+
+---
+
 ### PERF-003 — Python nested-loop triangle index generation
 **Status:** Closed (fixed 2026-05-19)  
 **Priority:** CRITICAL  

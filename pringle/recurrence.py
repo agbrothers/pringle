@@ -67,18 +67,16 @@ def execute_recurrence(
     if not is_valid:
         return result, f"Cannot parse recurrence rule: {rule_expr!r}"
 
-    n_steps = result.shape[0]
-    nan_found = False
+    code = compile(rhs, "<recurrence>", "eval")  # noqa: S307
+    glob = {**namespace, "__builtins__": {}, array_name: result}
 
-    for n in range(1, n_steps):
-        local = {**namespace, array_name: result, "n": n}
-        try:
-            with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
-                val = eval(rhs, {"__builtins__": {}}, local)  # noqa: S307
-            result[n] = val
-        except Exception as exc:
-            return result, f"Recurrence step {n} error: {exc}"
-        if np.any(~np.isfinite(result[n])):
-            nan_found = True
+    with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
+        for n in range(1, result.shape[0]):
+            try:
+                val = eval(code, glob, {"n": n})  # noqa: S307
+                result[n] = val
+            except Exception as exc:
+                return result, f"Recurrence step {n} error: {exc}"
 
+    nan_found = not np.all(np.isfinite(result[1:]))
     return result, "NaN/Inf detected in recurrence output" if nan_found else None

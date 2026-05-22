@@ -82,12 +82,10 @@ memory.yml now includes a recurrence cell (`path_xy = zeros((200, 2))`) that com
 | ↳ `_grid_gradients + _grid_normals` | 0.50 | 0.84 | 2% |
 | ↳ `_grid_indices` | 0.17 | 0.23 | 1% |
 | AST pipeline (6 downstream cells, PERF-006) | 1.00 | 1.51 | 3% |
-| **`execute_recurrence` (200 steps, PERF-013)** | **14.0** | 15.7 | **42%** |
-| **Estimated total CPU frame** | **~24.0** | ~27.0 | **~73%** |
+| `execute_recurrence` (200 steps, PERF-013 closed) | ~~14.0~~ → **~3.3** | — | **~10%** |
+| **Estimated total CPU frame** | **~13.3** | — | **~40%** |
 
-**Result: ~30 fps (borderline).** With GPU (~9–10 ms) the wall-clock estimate is **~33–34 ms**, right at the 30 fps limit. This explains the observed camera lag during β animation — the Qt event loop is starved by the ~24 ms CPU tick. The surface update rate itself appears reasonable but camera events queue up behind it.
-
-After PERF-013 (projected): recurrence ~3.3 ms → total CPU **~13.3 ms → comfortable ~47 fps headroom**.
+**Result after PERF-013: ~45 fps.** Recurrence cost reduced from ~14 ms to ~3.3 ms (4.2× speedup). With GPU (~9–10 ms) wall-clock estimate is **~22–23 ms → ~45 fps**.
 
 **Recurrence per-step breakdown (measured at individual component level):**
 
@@ -158,7 +156,7 @@ The recurrence cell IS in the animation path: `_on_slider_value_changed` re-eval
 | GPU render callback (estimated, unchecked) | **~9–10 ms** | same constrained surface |
 | **Estimated wall-clock frame** | **~33–34 ms → ~30 fps** | borderline; explains observed lag |
 
-After PERF-013: recurrence ~3.3 ms → CPU ~13.3 ms → wall-clock ~22–23 ms → **~45 fps**.
+After PERF-013 (closed 2026-05-22): recurrence ~3.3 ms → CPU ~13.3 ms → wall-clock ~22–23 ms → **~45 fps**.
 
 ---
 
@@ -357,96 +355,6 @@ Numba `@njit` is the correct solution for this pattern: it compiles mutable-arra
 - **Numba-aware helper functions in the namespace:** Add a `@numba.njit`-compiled `cumulate(fn, x0, n)` or similar utility to `build_equation_namespace()`. Users write the body as a lambda; Numba JITs it on first call. Simpler than a new cell type but limited to fixed-structure recurrences.
 
 **Why it matters:** Recurrence relations are a natural Pringle use case (Fibonacci, Lorenz attractor, Mandelbrot iteration count, forward Euler ODE). Without Numba, large N makes these prohibitively slow. With it, they become competitive with MATLAB/Julia.
-
----
-
-### PERF-013 — `execute_recurrence` re-compiles RHS string and checks NaN on every step
-**Status:** Open  
-**Priority:** HIGH — recurrence runs on every animation tick when upstream sliders change  
-**Logged:** 2026-05-22  
-**Discovered via:** Dynamic profiling (component-level timing of `execute_recurrence`)  
-**Files:** [recurrence.py:73-84](../pringle/recurrence.py#L73)
-
-**Description:**  
-`execute_recurrence` has three separate per-step overheads that compound over a full recurrence run. For the memory.yml 200-step gradient-path cell, the total cost is **~14 ms per animation tick** (the cell re-evaluates reactively on every β slider change). Per-step breakdown:
-
-| Overhead | Per-step µs | × 200 total |
-|----------|-------------|-------------|
-| `eval(string)` recompiles bytecode each call | 56.9 µs | **11.4 ms** |
-| `np.any(~np.isfinite(result[n]))` per step | 3.7 µs | **0.73 ms** |
-| `np.errstate(...)` context manager per step | 1.7 µs | **0.34 ms** |
-| `{**namespace, ...}` dict copy (100 keys) | 0.6 µs | **0.12 ms** |
-
-The dominant cost is `eval(string)`. Python's `eval()` called with a **string** argument invokes `compile()` on every call. Passing a pre-compiled code object via `compile(rhs, "<recurrence>", "eval")` reduces this from 56.9 µs to 16.3 µs per step — a **3.5× speedup on the eval call alone**.
-
-Note: these are sequential steps that cannot be parallelized or vectorized; the loop variable `n` is inherently serial. The optimizations below reduce the Python overhead around each step without changing the fundamental computation.
-
-**Fix:** Three independent changes to `execute_recurrence`:
-
-1. **Compile RHS once before the loop:**
-```python
-code = compile(rhs, "<recurrence>", "eval")
-
-# Move errstate outside the loop — only needs to be set once for the recurrence
-with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
-    for n in range(1, result.shape[0]):
-        local = {**namespace, array_name: result, "n": n}
-        val = eval(code, {"__builtins__": {}}, local)
-        result[n] = val
-```
-
-2. **Shared globals dict — avoids 100-key copy per step:**
-```python
-glob = {**namespace, "__builtins__": {}, array_name: result}
-# result is the same object, so result[n] = val is immediately visible
-# in glob[array_name] for the next step — no sync needed.
-for n in range(1, result.shape[0]):
-    val = eval(code, glob, {"n": n})
-    result[n] = val
-```
-
-3. **Post-loop NaN check — replaces 200 per-step boolean reductions:**
-```python
-# Replace: if np.any(~np.isfinite(result[n])): nan_found = True
-# With (after loop):
-nan_found = not np.all(np.isfinite(result[1:]))
-```
-
-**Combined diff:**
-```python
-def execute_recurrence(array_name, array, initial_exprs, rule_expr, namespace):
-    result = array.copy()
-    for expr in initial_exprs:
-        local = {**namespace, array_name: result}
-        try:
-            exec(expr, {"__builtins__": {}}, local)
-            result = local.get(array_name, result)
-        except Exception as exc:
-            return result, f"Initial condition error: {exc}"
-
-    is_valid, _, rhs = parse_recurrence(rule_expr)
-    if not is_valid:
-        return result, f"Cannot parse recurrence rule: {rule_expr!r}"
-
-    code = compile(rhs, "<recurrence>", "eval")
-    glob = {**namespace, "__builtins__": {}, array_name: result}
-
-    with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
-        for n in range(1, result.shape[0]):
-            try:
-                val = eval(code, glob, {"n": n})
-                result[n] = val
-            except Exception as exc:
-                return result, f"Recurrence step {n} error: {exc}"
-
-    nan_found = not np.all(np.isfinite(result[1:]))
-    return result, "NaN/Inf detected in recurrence output" if nan_found else None
-```
-
-**Estimated impact:** 200-step recurrence: ~14 ms → ~3.3 ms (**4.2× speedup**). For larger N the speedup compounds: 2000 steps projected at ~33 ms (current) → ~7.5 ms (after).
-
-**Why the sequential nature limits further improvement:**  
-The `path_xy[n] = f(path_xy[n-1])` pattern is fundamentally serial — step n depends on step n-1, so no cross-step vectorization is possible. The only levers are (a) reducing per-step Python overhead (this fix), and (b) compiling the kernel to native code (PERF-012). This fix addresses (a) fully; PERF-012 addresses (b) for large N where even 16 µs/step is too slow.
 
 ---
 
