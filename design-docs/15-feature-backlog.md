@@ -113,7 +113,7 @@ At `DEFAULT_SIZE = (1400, 900)`, the viewport gets `1400 - 480 = 920 px` — sti
 ---
 
 ### FEAT-038 — Auto-expanding text input for constraint and recursion sub-cells
-**Status:** Open  
+**Status:** Closed (implemented 2026-05-21)  
 **Logged:** 2026-05-20
 
 **Description:**  

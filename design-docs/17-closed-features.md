@@ -6,6 +6,13 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-038 — Auto-expanding text input for constraint and recursion sub-cells
+**Status:** Closed (implemented 2026-05-21)
+
+**Implementation:** Added `allow_newline: bool = False` to `CellTextEdit.__init__`. When `True`, the Enter key handler falls through to `super().keyPressEvent()` (inserts a newline) rather than emitting `enter_at_end`. In `ConstraintSubCell._build_ui`, replaced `QLineEdit` with `CellTextEdit(self, allow_newline=True)` — stylesheet updated from `QLineEdit {…}` to `QPlainTextEdit {…}` with `background: transparent`; font-family rule removed (CellTextEdit sets Menlo/Consolas/Courier New via QFont). `source()` updated from `.text()` to `.toPlainText()`. `QLineEdit` removed from imports.
+
+---
+
 ### FEAT-039 — Widen the expression panel by 50% by default
 **Status:** Closed (implemented 2026-05-21)
 
