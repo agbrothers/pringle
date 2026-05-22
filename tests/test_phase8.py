@@ -51,14 +51,14 @@ class TestConstraintSubCell:
 
     def test_source_reflects_edit(self, qapp):
         s = ConstraintSubCell()
-        s._edit.setText("x**2 + y**2 < 4")
+        s._edit.setPlainText("x**2 + y**2 < 4")
         assert s.source() == "x**2 + y**2 < 4"
 
     def test_content_changed_signal(self, qapp):
         s = ConstraintSubCell()
         received = []
         s.content_changed.connect(lambda: received.append(True))
-        s._edit.setText("x > 0")
+        s._edit.setPlainText("x > 0")
         assert len(received) > 0
 
     def test_delete_requested_signal(self, qapp):
@@ -66,9 +66,10 @@ class TestConstraintSubCell:
         received = []
         s.delete_requested.connect(lambda: received.append(True))
         # Click the delete button
+        from PyQt6.QtWidgets import QPushButton
         for i in range(s.layout().count()):
             w = s.layout().itemAt(i).widget()
-            if w and w.text() == "✕":
+            if isinstance(w, QPushButton) and w.text() == "✕":
                 w.click()
                 break
         assert len(received) > 0
@@ -105,15 +106,15 @@ class TestCellWidgetSubCells:
     def test_constraint_exprs_returns_filled(self, qapp):
         cell = CellWidget()
         sub = cell.add_sub_cell("constraint")
-        sub._edit.setText("x**2 + y**2 < 4")
+        sub._edit.setPlainText("x**2 + y**2 < 4")
         assert cell.constraint_exprs() == ["x**2 + y**2 < 4"]
 
     def test_condition_exprs_separate_from_constraints(self, qapp):
         cell = CellWidget()
         c_sub = cell.add_sub_cell("constraint")
         d_sub = cell.add_sub_cell("condition")
-        c_sub._edit.setText("x > 0")
-        d_sub._edit.setText("y > 0")
+        c_sub._edit.setPlainText("x > 0")
+        d_sub._edit.setPlainText("y > 0")
         assert cell.constraint_exprs() == ["x > 0"]
         assert cell.condition_exprs() == ["y > 0"]
 
@@ -128,8 +129,8 @@ class TestCellWidgetSubCells:
         cell = CellWidget()
         s1 = cell.add_sub_cell("constraint")
         s2 = cell.add_sub_cell("constraint")
-        s1._edit.setText("x > 0")
-        s2._edit.setText("y > 0")
+        s1._edit.setPlainText("x > 0")
+        s2._edit.setPlainText("y > 0")
         exprs = cell.constraint_exprs()
         assert "x > 0" in exprs
         assert "y > 0" in exprs
@@ -140,7 +141,7 @@ class TestCellWidgetSubCells:
         received = []
         cell.content_changed.connect(received.append)
         sub = cell.add_sub_cell("constraint")
-        sub._edit.setText("x > 0")
+        sub._edit.setPlainText("x > 0")
         # Fire the debounce timer immediately
         cell._debounce.stop()
         cell._emit_changed()
@@ -228,7 +229,7 @@ class TestCellListSubCells:
         )
         cell = clist.add_cell("z = x**2 + y**2")
         sub = cell.add_sub_cell("constraint")
-        sub._edit.setText("x**2 + y**2 < 4")
+        sub._edit.setPlainText("x**2 + y**2 < 4")
 
         # Trigger re-evaluation
         cell._debounce.stop()
@@ -250,8 +251,8 @@ class TestCellListSubCells:
         cell = clist.add_cell("z = [lambda x, y: x**2, lambda x, y: -x**2]")
         d1 = cell.add_sub_cell("condition")
         d2 = cell.add_sub_cell("condition")
-        d1._edit.setText("x > 0")
-        d2._edit.setText("x <= 0")
+        d1._edit.setPlainText("x > 0")
+        d2._edit.setPlainText("x <= 0")
 
         cell._debounce.stop()
         cell._emit_changed()
@@ -273,7 +274,7 @@ class TestCellListSubCells:
         )
         cell = clist.add_cell("z = ones((32, 32))")
         sub = cell.add_sub_cell("constraint")
-        sub._edit.setText("x > 0")
+        sub._edit.setPlainText("x > 0")
 
         cell._debounce.stop()
         cell._emit_changed()

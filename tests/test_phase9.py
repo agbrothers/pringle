@@ -98,13 +98,13 @@ class TestDataCellWidget:
     def test_initial_condition_exprs(self, qapp):
         cell = DataCellWidget()
         sub = cell.add_sub_cell("initial_condition")
-        sub._edit.setText("path[0] = array([1.0, 0.0])")
+        sub._edit.setPlainText("path[0] = array([1.0, 0.0])")
         assert cell.initial_condition_exprs() == ["path[0] = array([1.0, 0.0])"]
 
     def test_recurrence_expr(self, qapp):
         cell = DataCellWidget()
         sub = cell.add_sub_cell("recursion")
-        sub._edit.setText("path[n] = path[n-1] * 0.9")
+        sub._edit.setPlainText("path[n] = path[n-1] * 0.9")
         assert cell.recurrence_expr() == "path[n] = path[n-1] * 0.9"
 
     def test_recurrence_expr_none_when_blank(self, qapp):
@@ -313,9 +313,9 @@ class TestDataPanelWidget:
         panel = DataPanelWidget(grid=grid)
         cell = panel.add_cell("path = zeros(8)")
         ic = cell.add_sub_cell("initial_condition")
-        ic._edit.setText("path[0] = 1.0")
+        ic._edit.setPlainText("path[0] = 1.0")
         rule = cell.add_sub_cell("recursion")
-        rule._edit.setText("path[n] = path[n-1] * 0.5")
+        rule._edit.setPlainText("path[n] = path[n-1] * 0.5")
 
         panel._run_cell(cell)
 

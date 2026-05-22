@@ -440,8 +440,8 @@ class TestFolderSessionRoundTrip:
 
         cl = CellListWidget(on_cell_result=_noop_result, grid=grid)
         dc = cl.add_data_cell("path = zeros((10, 2))")
-        dc.add_sub_cell("initial_condition")._edit.setText("path[0] = array([1.0, 0.0])")
-        dc.add_sub_cell("recursion")._edit.setText("path[n] = path[n-1] * 0.9")
+        dc.add_sub_cell("initial_condition")._edit.setPlainText("path[0] = array([1.0, 0.0])")
+        dc.add_sub_cell("recursion")._edit.setPlainText("path[n] = path[n-1] * 0.9")
 
         with tempfile.NamedTemporaryFile(suffix=".yaml", delete=False) as f:
             path = f.name

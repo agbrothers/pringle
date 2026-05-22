@@ -80,7 +80,7 @@ class TestCellToDict:
         cl = CellListWidget(on_cell_result=_noop_result, grid=grid)
         cell = cl.add_cell("z = x")
         cell.add_sub_cell("constraint")
-        cell._sub_cells[-1]._edit.setText("x > 0")
+        cell._sub_cells[-1]._edit.setPlainText("x > 0")
         d = cell_to_dict(cell)
         assert len(d["sub_cells"]) == 1
         assert d["sub_cells"][0]["type"] == "constraint"

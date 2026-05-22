@@ -296,14 +296,14 @@ def restore_cell_list(
                     cell._on_visibility_toggled(False)
                 for sub_data in data.get("sub_cells", []):
                     sub = cell.add_sub_cell(sub_data.get("type", "constraint"))
-                    sub._edit.setText(sub_data.get("source", ""))
+                    sub._edit.setPlainText(sub_data.get("source", ""))
 
         elif cell_type == "data":
             from pringle.data_cell_widget import DataCellWidget
             if isinstance(cell, DataCellWidget):
                 for sub_data in data.get("sub_cells", []):
                     sub = cell.add_sub_cell(sub_data.get("type", "initial_condition"))
-                    sub._edit.setText(sub_data.get("source", ""))
+                    sub._edit.setPlainText(sub_data.get("source", ""))
                 if not data.get("visible", True):
                     cell._eye_btn.setChecked(False)
                     cell._on_visibility_toggled(False)
