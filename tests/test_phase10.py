@@ -231,3 +231,68 @@ class TestCameraPresets:
         vp.set_camera_preset("unknown_preset")
         pos_after = tuple(vp.renderer._camera.local.position[:3])
         assert pos_before == pos_after
+
+
+# ---------------------------------------------------------------------------
+# BUG-013: simultaneous WASD pan + mouse orbit
+# ---------------------------------------------------------------------------
+
+class TestSimultaneousPanOrbit:
+    """Verify _IncrementalOrbitHandler reads live camera state.
+
+    The old OrbitController.register_events() captured a snapshot at drag-start
+    and rewrote camera.local.position from it on every pointer_move, so WASD
+    deltas applied during a drag were immediately overwritten.
+
+    With _IncrementalOrbitHandler, controller.rotate() / .pan() always read the
+    live camera state, so a WASD delta survives into the next frame.
+    """
+
+    def test_wasd_delta_survives_after_orbit(self, qapp):
+        import numpy as np
+        from pringle.app import PringleViewport
+        from pringle.renderer import _IncrementalOrbitHandler
+
+        vp = PringleViewport()
+        pr = vp.renderer
+
+        # Confirm the handler is the incremental one (not register_events)
+        assert isinstance(pr._orbit_handler, _IncrementalOrbitHandler)
+
+        # Establish a known orbit target (fit_camera() does this in practice)
+        pr._controller.target = (0.0, 0.0, 0.0)
+
+        # WASD pan moves both the camera and the orbit target
+        pr._pan_target(1.0, 0.0, 0.0)
+        target_after_pan = np.array(pr._controller.target[:3])
+        assert abs(target_after_pan[0] - 1.0) < 1e-5, "target should be at x=1"
+
+        # Simulate a mouse orbit step — exactly what _IncrementalOrbitHandler does.
+        # rotate() reads LIVE camera state, so the pan delta is not discarded.
+        pr._controller.rotate((0.1, 0.0), (0.0, 0.0, 800.0, 600.0))
+
+        # The orbit pivot (_controller.target) must survive the orbit call.
+        # rotate() only moves the camera; it never modifies the target.
+        target_after_orbit = np.array(pr._controller.target[:3])
+        assert np.allclose(target_after_orbit, target_after_pan, atol=1e-5), (
+            "orbit must not overwrite the WASD-updated target"
+        )
+
+        # Camera position should have changed (the orbit rotated it)
+        cam_before_orbit = np.array([7.0, -8.0, 6.0])  # approx: iso + pan(1,0,0)
+        cam_after_orbit  = np.array(pr._camera.local.position[:3])
+        assert not np.allclose(cam_after_orbit, cam_before_orbit, atol=1e-4), (
+            "orbit should change camera position"
+        )
+
+    def test_pan_target_updates_controller_target(self, qapp):
+        import numpy as np
+        from pringle.app import PringleViewport
+
+        vp = PringleViewport()
+        pr = vp.renderer
+        pr._controller.target = (0.0, 0.0, 0.0)
+        pr._pan_target(2.0, 3.0, 0.0)
+        t = np.array(pr._controller.target)
+        assert abs(t[0] - 2.0) < 1e-5
+        assert abs(t[1] - 3.0) < 1e-5

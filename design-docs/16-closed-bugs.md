@@ -6,6 +6,13 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-013 — Camera locks and crosshair drifts when panning and rotating simultaneously
+**Status:** Closed (fixed 2026-05-22)
+
+**Fix:** Replaced `gfx.OrbitController.register_events()` with a custom `_IncrementalOrbitHandler` in `renderer.py`. The stock event system snapshots the camera state at drag-start and recomputes the full camera position from that snapshot on every `pointer_move`, immediately discarding any WASD delta. The new handler calls `controller.rotate()` / `.pan()` / `.zoom()` with the incremental pixel delta since the *previous* event, so the controller always reads the live camera state. WASD and mouse orbit now run simultaneously without conflict. See `renderer.py:_IncrementalOrbitHandler` and `test_phase10.py::TestSimultaneousPanOrbit`.
+
+---
+
 ### BUG-036 — `_EvalWorker` C++ object deleted before eval thread stops on close
 **Status:** Closed (fixed 2026-05-22)
 

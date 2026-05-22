@@ -9,7 +9,7 @@
 | Zoom | Scroll wheel | Moves camera toward/away from orbit center |
 | Reset view | Double-click viewport (or "Recenter" button) | Snaps to default isometric view |
 
-All three are handled by pygfx's `OrbitController` with default bindings — no custom code needed. The orbit-around-center model is correct for inspecting mathematical surfaces; it prevents disorienting roll and keeps axes readable.
+Orbit, pan, and zoom are handled by `gfx.OrbitController` for its math, but the event wiring uses a custom `_IncrementalOrbitHandler` (`renderer.py`) instead of `OrbitController.register_events()`. The stock event system snapshots camera state at drag-start; the custom handler calls `controller.rotate()` / `.pan()` / `.zoom()` with per-frame incremental pixel deltas so the controller always reads live camera state, enabling WASD and mouse orbit simultaneously (BUG-013). The orbit-around-center model prevents disorienting roll and keeps axes readable.
 
 ## 3D Viewport: Keyboard Controls (WASD)
 
@@ -30,7 +30,7 @@ WASD pans the **orbit target** — the point the camera orbits around and zooms 
 
 **Key handling is at the Qt level** (`keyPressEvent`/`keyReleaseEvent` on `PringleViewport`), not through wgpu's event system. `event.accept()` suppresses the macOS press-and-hold accent character popover. `focusOutEvent` clears held keys to prevent stuck movement when focus switches to the expression panel.
 
-**Known limitation:** pygfx's `OrbitController` right-drag pan moves the camera view but does not update `controller.target`. After a mouse pan, the WASD orbit target may differ from the visual center. WASD always operates relative to `controller.target`.
+**Note on right-drag pan:** `OrbitController._update_pan` does update `controller.target` when a custom target is set (which Pringle always uses), so mouse pan and WASD stay in sync.
 
 ### Orbit Target Crosshair
 

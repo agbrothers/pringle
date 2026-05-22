@@ -637,6 +637,80 @@ def make_scatter_mesh(
 
 
 # ---------------------------------------------------------------------------
+# Incremental orbit event handler (BUG-013)
+# ---------------------------------------------------------------------------
+
+class _IncrementalOrbitHandler:
+    """
+    Wires mouse events to OrbitController using per-frame incremental deltas.
+
+    The stock OrbitController.register_events() snapshots the camera state at
+    drag-start and recomputes the full camera position from that snapshot on every
+    pointer_move.  This makes it impossible for WASD panning to take effect during
+    a mouse drag — the next mouse-move event always overwrites the WASD delta.
+
+    This handler instead calls controller.rotate() / .pan() / .zoom() with the
+    small delta since the *previous* pointer_move, so the controller always reads
+    the live camera state.  WASD and mouse orbit can run simultaneously without
+    either path clobbering the other.
+
+    Bindings:
+      - Left-drag  (button 1) : orbit (azimuth + elevation)
+      - Right/Middle-drag (2/3): pan  (translate camera + target together)
+      - Wheel                  : zoom (change camera-to-target distance)
+    """
+
+    _ORBIT_SENSITIVITY = 0.005   # radians per screen pixel
+    _ZOOM_SENSITIVITY  = -0.001  # fractional scale per wheel unit (matches gfx default)
+
+    def __init__(self, controller: gfx.OrbitController, renderer, canvas) -> None:
+        self._controller = controller
+        self._canvas     = canvas
+        self._drag_button: int | None = None
+        self._last_x: float = 0.0
+        self._last_y: float = 0.0
+        renderer.add_event_handler(
+            self._handle,
+            "pointer_down",
+            "pointer_move",
+            "pointer_up",
+            "wheel",
+        )
+
+    def _rect(self) -> tuple[float, float, float, float]:
+        w, h = self._canvas.get_logical_size()
+        return (0.0, 0.0, float(w), float(h))
+
+    def _handle(self, event) -> None:
+        t = event.type
+        if t == "pointer_down":
+            if self._drag_button is None:
+                self._drag_button = event.button
+                self._last_x = float(event.x)
+                self._last_y = float(event.y)
+        elif t == "pointer_move":
+            if self._drag_button is None:
+                return
+            dx = float(event.x) - self._last_x
+            dy = float(event.y) - self._last_y
+            self._last_x = float(event.x)
+            self._last_y = float(event.y)
+            if self._drag_button == 1:
+                self._controller.rotate(
+                    (dx * self._ORBIT_SENSITIVITY, dy * self._ORBIT_SENSITIVITY),
+                    self._rect(),
+                )
+            elif self._drag_button in (2, 3):
+                self._controller.pan((dx, dy), self._rect())
+        elif t == "pointer_up":
+            if event.button == self._drag_button:
+                self._drag_button = None
+        elif t == "wheel":
+            d = (event.dy or event.dx) * self._ZOOM_SENSITIVITY
+            self._controller.zoom((d, d), self._rect())
+
+
+# ---------------------------------------------------------------------------
 # Scene manager
 # ---------------------------------------------------------------------------
 
@@ -694,9 +768,12 @@ class PringleRenderer:
         self._camera.local.position = (6, -8, 6)
         self._camera.look_at((0, 0, 0))
 
-        # Orbit controller — register_events() wires mouse/wheel/key events.
+        # Orbit controller — _IncrementalOrbitHandler wires mouse/wheel events
+        # using per-frame deltas so WASD and mouse orbit can run simultaneously.
         self._controller = gfx.OrbitController(self._camera)
-        self._controller.register_events(self._renderer)
+        self._orbit_handler = _IncrementalOrbitHandler(
+            self._controller, self._renderer, canvas
+        )
 
         # Keyboard panning is handled at the Qt level in PringleViewport,
         # not here, so that event.accept() can suppress macOS accent popovers.
