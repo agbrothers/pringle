@@ -69,9 +69,9 @@ JIT warmup: ~2.1 s first call in a fresh process; ~323 ms when loading the compi
 
 Run via `python tests/bench_slider_animation.py --n 128 --frames 60 --no-gc`.
 
-memory.yml now includes a data-mode recurrence cell (`path_xy = zeros((200, 2))`) that computes a gradient-descent path across 200 steps. This cell is data-mode (manual-run only) and is NOT in the animation path; the frame budget numbers below cover β-slider animation only.
+memory.yml now includes a recurrence cell (`path_xy = zeros((200, 2))`) that computes a 200-step gradient-descent path. Although this cell is in data-mode (shows a run button and stale indicator), **`_on_slider_value_changed` has no data-mode guard** — it re-evaluates all DAG descendants of the changed slider, including data-mode cells. Because `path_xy`'s sub-cell references `dE` which depends on β, it IS in the β descendant set and runs on every animation tick.
 
-**Animation frame budget (β-slider, constrained surface):**
+**Animation frame budget (β-slider, constrained surface, including recurrence):**
 
 | Component | Mean ms | P95 ms | % of 33ms budget |
 |-----------|---------|--------|-----------------|
@@ -82,20 +82,14 @@ memory.yml now includes a data-mode recurrence cell (`path_xy = zeros((200, 2))`
 | ↳ `_grid_gradients + _grid_normals` | 0.50 | 0.84 | 2% |
 | ↳ `_grid_indices` | 0.17 | 0.23 | 1% |
 | AST pipeline (6 downstream cells, PERF-006) | 1.00 | 1.51 | 3% |
-| `build_equation_namespace()` (PERF-005) | 0.01 | 0.02 | ~0% |
-| **Estimated total CPU frame** | **~10.0** | ~12.0 | **~30%** |
+| **`execute_recurrence` (200 steps, PERF-013)** | **14.0** | 15.7 | **42%** |
+| **Estimated total CPU frame** | **~24.0** | ~27.0 | **~73%** |
 
-**Result: PASS ✓ — ~33 fps budget met.** This is a **25× improvement** from the original 253 ms baseline.
+**Result: ~30 fps (borderline).** With GPU (~9–10 ms) the wall-clock estimate is **~33–34 ms**, right at the 30 fps limit. This explains the observed camera lag during β animation — the Qt event loop is starved by the ~24 ms CPU tick. The surface update rate itself appears reasonable but camera events queue up behind it.
 
-**Recurrence cell (data-mode, manually triggered):**
+After PERF-013 (projected): recurrence ~3.3 ms → total CPU **~13.3 ms → comfortable ~47 fps headroom**.
 
-| Component | Mean ms | P95 ms | Notes |
-|-----------|---------|--------|-------|
-| `execute_recurrence` (200 steps, PERF-013) | **14.0** | 15.7 | ~70 µs/step |
-
-The recurrence is NOT in the animation path but adds perceptible latency (~14 ms) when the user manually re-runs the gradient-path cell. See PERF-013.
-
-**Component-level breakdown of the 14 ms recurrence cost (measured at n=1 step):**
+**Recurrence per-step breakdown (measured at individual component level):**
 
 | Per-step overhead | Mean µs | × 200 steps | Notes |
 |-------------------|---------|------------|-------|
@@ -107,7 +101,7 @@ The recurrence is NOT in the animation path but adds perceptible latency (~14 ms
 
 Compile-once speedup: `eval(code_object)` = 16.3 µs vs `eval(string)` = 56.9 µs → **3.5× on eval alone**.
 Post-loop NaN check: `np.all(np.isfinite(result[1:]))` = 4.2 µs (once) vs 3.7 µs × 200 = 732 µs → **174× on NaN checks**.
-Projected result after PERF-013: ~3.3 ms (200 steps) → **4.2× speedup**.
+Projected result after PERF-013: ~3.3 ms (200 steps) → **4.2× speedup → total CPU frame ~13.3 ms**.
 
 ---
 
@@ -154,15 +148,17 @@ Projected result after PERF-013: ~3.3 ms (200 steps) → **4.2× speedup**.
 
 ### Post-BUG-030 (2026-05-22) — memory.yml with gradient-path recurrence cell
 
-The addition of the 200-step recurrence cell does not change animation-path frame timing (data-mode cells are non-reactive). The headless benchmark confirms:
+The recurrence cell IS in the animation path: `_on_slider_value_changed` re-evaluates all DAG descendants without a data-mode guard, and `path_xy` is a β-descendant via its `dE` sub-cell dependency. Total CPU frame rises from ~10 ms to ~24 ms.
 
 | Phase | Cost | Notes |
 |-------|------|-------|
 | CPU cell evaluation (animation path) | **~10 ms** | eval chain 5.6 ms + geometry 4.4 ms |
-| Recurrence cell (manual re-run only) | **~14 ms** | data-mode; not on animation tick |
-| **Estimated animation wall-clock** | **~10 ms + GPU** | ~33 fps after adding GPU (~9 ms) |
+| Recurrence cell (on every β tick) | **~14 ms** | runs in `_eval_cell` for all descendants |
+| **Total CPU frame** | **~24 ms** | |
+| GPU render callback (estimated, unchecked) | **~9–10 ms** | same constrained surface |
+| **Estimated wall-clock frame** | **~33–34 ms → ~30 fps** | borderline; explains observed lag |
 
-GPU timing was not re-measured (no GPU-path changes). Expected: ~19–20 ms total (10 ms CPU + ~9–10 ms GPU), ~50 fps — well above the 30 fps target.
+After PERF-013: recurrence ~3.3 ms → CPU ~13.3 ms → wall-clock ~22–23 ms → **~45 fps**.
 
 ---
 
@@ -366,7 +362,7 @@ Numba `@njit` is the correct solution for this pattern: it compiles mutable-arra
 
 ### PERF-013 — `execute_recurrence` re-compiles RHS string and checks NaN on every step
 **Status:** Open  
-**Priority:** MEDIUM  
+**Priority:** HIGH — recurrence runs on every animation tick when upstream sliders change  
 **Logged:** 2026-05-22  
 **Discovered via:** Dynamic profiling (component-level timing of `execute_recurrence`)  
 **Files:** [recurrence.py:73-84](../pringle/recurrence.py#L73)

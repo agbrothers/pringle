@@ -491,21 +491,28 @@ def _print_report(
     for key in ("recurrence_200steps", "recurrence_per_step"):
         print(_fmt_row(f"  rec/{key}", rec_res.get(key, [])))
 
-    # Estimated total frame: eval chain + geo CPU (dominant bottlenecks)
+    # Estimated total frame: eval chain + geometry + recurrence
+    # Note: recurrence cells (e.g. memory.yml path_xy) are re-evaluated on every
+    # animation tick because _on_slider_value_changed has no data-mode guard.
     eval_chain = eval_res.get("chain_total", [])
     geo_cpu = geo_res.get("cpu_total", [])
     mesh_times = mesh_res.get("make_surface_mesh", [])
+    rec_times  = rec_res.get("recurrence_200steps", [])
     if mesh_times:
-        # make_surface_mesh includes geo_cpu, so use it as the geometry cost
         combined = [e + m for e, m in zip(eval_chain, mesh_times)] if eval_chain and mesh_times else []
     elif eval_chain and geo_cpu:
         combined = [e + g for e, g in zip(eval_chain, geo_cpu)]
     else:
         combined = eval_chain or geo_cpu
+    # Add recurrence cost (runs on every β tick in memory.yml)
+    if combined and rec_times:
+        rec_mean = statistics.mean(rec_times)
+        combined = [c + rec_mean for c in combined]
+        print(f"  [note] recurrence mean ({rec_mean:.1f} ms) added to frame estimate")
 
     print()
     print("  " + "─" * 36 + "─┼─" + "─" * 10 + "─┼─" + "─" * 9 + "─┼─" + "─" * 9)
-    print(_fmt_row("  ESTIMATED TOTAL FRAME", combined))
+    print(_fmt_row("  ESTIMATED TOTAL FRAME (incl. recurrence)", combined))
     print(f"  {'TARGET  (33 ms = 30 fps)':<36} │  {budget:>8.1f}  │  {'':>7}  │")
     print()
 
