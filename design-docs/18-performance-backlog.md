@@ -44,9 +44,11 @@ After BUG-001 partial fix and PERF-003 vectorization. Geometry functions timed d
 
 ---
 
-## Current Benchmark — After PERF-002 (2026-05-21, n=128, 30 frames)
+## Current Benchmark — After PERF-002 (2026-05-21, n=128)
 
 After PERF-002 fix (live GPU buffer update; index buffer never re-uploaded during animation).
+
+**Scope caveat:** PERF-002's in-place path requires `not has_constraint`. Constrained surfaces (e.g. memory.yml's `z < 3`) always take the full rebuild path and see no improvement from this fix. The numbers below apply to unconstrained surfaces only.
 
 | Component | Mean ms | % of 33ms budget | vs baseline |
 |-----------|---------|-----------------|-------------|
@@ -54,20 +56,20 @@ After PERF-002 fix (live GPU buffer update; index buffer never re-uploaded durin
 | `_grid_gradients + _grid_normals` (FEAT-038) | 0.29 | 1% | — |
 | `_grid_indices` (PERF-003, closed) | 0.15 | 0% | 365× faster |
 | Cell evaluation chain (PERF-001, PERF-006) | **17.0** | **52%** | unchanged |
-| Surface geometry (CPU, PERF-002 closed) | **0.22** | **1%** | **6.6× faster** |
-| **Estimated total frame (CPU)** | **~19.1** | **58%** | **13.2× faster** |
+| Surface geometry — in-place CPU (PERF-002) | **0.36** | **1%** | **5.0× faster** |
+| **Estimated total CPU frame (unconstrained)** | **~19.0** | **58%** | **13.3× faster** |
 
-**~36 fps CPU-side; GPU render callback estimated ~4–5 ms faster (PERF-002 skips 387 KB index upload).**
+Dev-measured surface geometry: 0.22 ms (6.6×); independent benchmark: 0.36 ms (5.0×) — same direction, timing variance.
 
 JIT warmup: ~2.1 s first call in a fresh process; ~323 ms when loading the compiled cache on subsequent starts. One-time cost per process after the cache is warm.
 
 ---
 
-## GPU Frame Timer Measurements (n=128, memory.yml)
+## GPU Frame Timer Measurements (n=128)
 
 **Method:** Qt frame-timer wrapper (`PRINGLE_FRAME_TIMING=1`). Times the `_pr.render()` callback wall-clock. Enabled via env var; zero overhead when unset. Cell evaluation runs in the Qt event loop *outside* this callback, so the two costs are additive.
 
-### Pre-PERF-011 (2026-05-20)
+### Pre-PERF-011 (2026-05-20) — memory.yml, constrained surface
 
 | Phase | Cost | Notes |
 |-------|------|-------|
@@ -76,7 +78,7 @@ JIT warmup: ~2.1 s first call in a fresh process; ~323 ms when loading the compi
 | **Total wall-clock frame** | **~39 ms → ~25 fps** | |
 | First-frame spike | ~984 ms | Metal pipeline compile + initial buffer alloc |
 
-### Post-PERF-011 (2026-05-20)
+### Post-PERF-011 (2026-05-20) — memory.yml, constrained surface
 
 | Phase | Cost | Notes |
 |-------|------|-------|
@@ -86,19 +88,23 @@ JIT warmup: ~2.1 s first call in a fresh process; ~323 ms when loading the compi
 | First-frame spike | ~1,055 ms | +~350 ms Numba JIT on top of Metal compile |
 | Subsequent starts (cached JIT) | ~984 ms | Numba loads from `__pycache__`; Metal still compiles |
 
-### Post-PERF-002 (2026-05-21)
+### Post-PERF-002 (2026-05-21) — unconstrained surface, forced re-eval at 60 fps
 
 | Phase | Cost | Notes |
 |-------|------|-------|
-| GPU render callback (steady state, p95) | **~4–5 ms (est.)** | PERF-002 skips 387 KB index upload each frame |
-| CPU cell evaluation (headless benchmark) | **~19 ms** | geometry update: 1.44 ms → 0.22 ms |
-| **Total wall-clock frame (estimated)** | **~23–24 ms → ~42 fps** | |
+| GPU render callback (steady state, p95) | **5.0 ms** | Skips 387 KB index upload; uploads z + normals only (~384 KB) |
+| CPU cell evaluation (headless benchmark) | **~19 ms** | geometry in-place: 1.8 ms → 0.36 ms |
+| **Total wall-clock frame** | **~24 ms → ~42 fps** | |
+| First-frame spike | ~1,033 ms | Same as post-PERF-011 |
+
+**Constrained surfaces (memory.yml): no GPU change.** Full rebuild path still uploads 771 KB/frame; GPU callback remains ~9.3 ms; wall-clock ~28 ms → ~36 fps.
 
 **Key findings:**
-- GPU render callback was ~9 ms; PERF-002 (live buffer update, skips 387 KB index re-upload) estimated to reduce to ~4–5 ms
-- CPU geometry path: full rebuild 1.44 ms → in-place 0.22 ms (6.6× faster CPU-side)
-- PERF-001 (DAG cache, ~3–5 ms CPU saving) is now the largest remaining CPU bottleneck
-- To reach ~50 fps: PERF-001 alone should push total to ~19–20 ms → ~50 fps
+- PERF-002 reduces GPU callback from ~9 ms to ~5 ms for unconstrained surfaces (4 ms saving, matches estimate)
+- Constrained surfaces must use full rebuild — PERF-002 has no effect on them
+- PERF-001 (DAG cache, ~3–5 ms CPU saving) is the largest remaining bottleneck for both surface types
+- To reach ~50 fps on unconstrained surfaces: PERF-001 → estimated ~20 ms → ~50 fps
+- To reach ~50 fps on constrained surfaces: needs PERF-001 + constrained in-place path (new work)
 
 ---
 
