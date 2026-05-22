@@ -62,7 +62,7 @@ class TestViewSettingsWidget:
         w._x_max.setValue(10.0)
         w._on_apply()
         assert len(received) == 1
-        x_min, x_max, y_min, y_max = received[0]
+        x_min, x_max, y_min, y_max, z_min, z_max = received[0]
         assert x_min == pytest.approx(-10.0)
         assert x_max == pytest.approx(10.0)
 
@@ -137,7 +137,7 @@ class TestPringleWindowViewSettings:
         win = PringleWindow(grid=grid)
         initial_x_min = win._grid.config.x_min
 
-        win._on_bounds_changed(-20.0, 20.0, -5.0, 5.0)
+        win._on_bounds_changed(-20.0, 20.0, -5.0, 5.0, -5.0, 5.0)
 
         assert win._grid.config.x_min == pytest.approx(-20.0)
         assert win._grid.config.x_max == pytest.approx(20.0)
@@ -157,7 +157,7 @@ class TestPringleWindowViewSettings:
         # Set resolution first
         win._on_resolution_changed(48)
         # Then change bounds
-        win._on_bounds_changed(-10.0, 10.0, -10.0, 10.0)
+        win._on_bounds_changed(-10.0, 10.0, -10.0, 10.0, -10.0, 10.0)
         # Resolution should be preserved
         assert win._grid.config.n == 48
         win.close()
@@ -165,7 +165,7 @@ class TestPringleWindowViewSettings:
     def test_resolution_preserves_bounds(self, qapp, grid):
         from pringle.app import PringleWindow
         win = PringleWindow(grid=grid)
-        win._on_bounds_changed(-8.0, 8.0, -4.0, 4.0)
+        win._on_bounds_changed(-8.0, 8.0, -4.0, 4.0, -4.0, 4.0)
         win._on_resolution_changed(24)
         assert win._grid.config.x_min == pytest.approx(-8.0)
         assert win._grid.config.n == 24
@@ -189,7 +189,7 @@ class TestPringleWindowViewSettings:
         initial_x_range = float(surface_data[-1].max() - surface_data[-1].min()) if surface_data else None
 
         surface_data.clear()
-        win._on_bounds_changed(-10.0, 10.0, -5.0, 5.0)
+        win._on_bounds_changed(-10.0, 10.0, -5.0, 5.0, -5.0, 5.0)
 
         if surface_data:
             new_x_range = float(surface_data[-1].max() - surface_data[-1].min())

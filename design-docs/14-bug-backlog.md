@@ -99,7 +99,7 @@ def add_sub_cell(self, sub_type: str = "constraint") -> ConstraintSubCell:
 
 ### BUG-032 — `test_phase10` tests use stale 4-arg `_on_bounds_changed` signature; current impl takes 6 args
 
-**Status:** Open  
+**Status:** Closed (fixed 2026-05-22)  
 **Logged:** 2026-05-22  
 **Severity:** Low — test failures only; no runtime impact on users
 

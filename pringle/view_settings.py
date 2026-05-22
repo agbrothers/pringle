@@ -3,7 +3,7 @@ ViewSettingsWidget — axis bounds, grid resolution, and camera controls.
 
 Signals
 -------
-bounds_changed(x_min, x_max, y_min, y_max)
+bounds_changed(x_min, x_max, y_min, y_max, z_min, z_max)
     Emitted when the user clicks "Apply" after editing bounds.
 resolution_changed(n: int)
     Emitted immediately as the resolution spinbox changes.

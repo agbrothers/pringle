@@ -6,6 +6,13 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-032 — `test_phase10` tests use stale 4-arg `_on_bounds_changed` signature
+**Status:** Closed (fixed 2026-05-22)
+
+**Fix:** Updated the 5 failing tests to call `_on_bounds_changed` with 6 args (`x_min, x_max, y_min, y_max, z_min, z_max`) and unpack the `bounds_changed` signal as a 6-tuple. Fixed the stale docstring in `view_settings.py` line 6 to match the 6-arg `pyqtSignal`.
+
+---
+
 ### BUG-035 — `ConstraintSubCell` renamed to `SubCell`; `hasattr` guards removed from `_eval_cell`
 **Status:** Closed (fixed 2026-05-22)
 
