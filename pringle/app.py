@@ -288,7 +288,7 @@ class PringleWindow(QMainWindow):
     """
 
     DEFAULT_SIZE = (1400, 900)
-    LEFT_PANEL_WIDTH = 320
+    LEFT_PANEL_WIDTH = 480
 
     def __init__(self, grid: Grid | None = None):
         super().__init__()

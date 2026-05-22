@@ -88,7 +88,7 @@ BUG-013 documents that simultaneous WASD + mouse drag causes the camera to lock.
 ---
 
 ### FEAT-039 — Widen the expression panel by 50% by default
-**Status:** Open  
+**Status:** Closed (implemented 2026-05-21)  
 **Logged:** 2026-05-20
 
 **Description:**  

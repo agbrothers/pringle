@@ -6,6 +6,13 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-039 — Widen the expression panel by 50% by default
+**Status:** Closed (implemented 2026-05-21)
+
+**Implementation:** Changed `LEFT_PANEL_WIDTH` in `PringleWindow` (`app.py`) from `320` to `480`. Splitter initialization reads this constant directly; viewport gets `1400 - 480 = 920 px`.
+
+---
+
 ### FEAT-040 — Camera-relative WASD panning
 **Status:** Closed (implemented 2026-05-21)
 
