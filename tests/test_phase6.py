@@ -202,7 +202,7 @@ class TestCellListSlider:
         clist.add_cell("z = a * sin(x) * cos(y)")
 
         surface_data.clear()
-        slider.set_value(4.0)  # emits value_changed → _rebuild_namespace
+        slider.set_value(4.0)
 
         assert len(surface_data) > 0
         # Max value should now be ~4.0

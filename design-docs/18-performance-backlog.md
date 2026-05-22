@@ -390,30 +390,6 @@ The surface cells already have an in-place update path (`update_surface` / PERF-
 
 ---
 
-### PERF-015 — Cell evaluation blocks Qt main thread; camera orbit laggy during animation
-**Status:** Open  
-**Priority:** HIGH  
-**Logged:** 2026-05-22  
-**Discovered via:** Independent profiling + user observation  
-**Files:** [cell_list.py:720-765](../pringle/cell_list.py#L720), [slider_widget.py:317-331](../pringle/slider_widget.py#L317)
-
-**Description:**  
-The slider animation timer (`_anim_timer`, 16 ms interval) fires `_anim_tick` → `value_changed` → `_on_slider_value_changed`. The entire cell evaluation chain (~17 ms: DAG rebuild 2.2 ms + eval chain 5.7 ms + surface mesh 4.9 ms + recurrence 3.5 ms + scatter mesh 0.7 ms) runs synchronously in the Qt main thread.
-
-Because evaluation takes ~17 ms and the timer interval is 16 ms, the main thread is blocked for essentially 100% of the animation cycle. Camera orbit/zoom mouse events queue up in the Qt event loop during evaluation and can only be processed in the ~0 ms windows between ticks. This manifests as "framey/laggy" camera rotation even when the surface update fps is acceptable.
-
-**This is the root cause of the camera lag.** PERF-013 improved surface fps (28 ms → 17 ms per tick) but did not cross the ~5–8 ms threshold needed for smooth camera feel because the blocking period is still longer than the timer interval.
-
-**Measured impact:** Average camera event latency ~8–9 ms; worst-case ~17 ms. Smooth threshold is ~5 ms.
-
-**Fix options (in order of complexity):**
-
-1. **Pause animation on mouse press (pragmatic, low effort):** Detect `mousePressEvent` / `mouseReleaseEvent` on `PringleViewport`. While mouse button is held, stop `_anim_timer`. Resume on release. Trades animation continuity during orbit for smooth camera — acceptable for interactive use. ~20 lines of code.
-
-2. **Throttle animation to leave headroom (simple, imperfect):** Change `_ANIM_INTERVAL_MS` from 16 ms to e.g. 33 ms (30 fps animation). Between ticks, the event loop processes mouse events. Halves animation smoothness but nearly eliminates camera lag.
-
-3. **Off-thread evaluation (correct, complex):** Move `_on_slider_value_changed` evaluation to a `QThread`. The eval thread posts results back to the main thread via a queued signal. Main thread handles camera events continuously at 60 fps. Requires thread-safety audit for namespace dict access and pygfx object creation (which may need to stay on the main thread).
-
 ---
 
 ## YAML Equation Optimization Issues

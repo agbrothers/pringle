@@ -93,6 +93,32 @@ GPU savings are additive to CPU savings and not directly measurable without a re
 
 ---
 
+### PERF-015 — Cell evaluation blocks Qt main thread; camera orbit laggy during animation
+**Status:** Closed (fixed 2026-05-22)
+**Priority:** HIGH
+**Measured impact:** Main thread blocked ~17 ms per animation tick → average camera event latency ~8–9 ms; smooth threshold ~5 ms
+
+**Root cause:** `_on_slider_value_changed` ran the entire cell evaluation chain synchronously in the Qt main thread. With a 16 ms animation timer interval and ~17 ms eval cost, the main thread was blocked for essentially 100% of the animation cycle. Camera mouse events queued up and could only be processed in the sub-ms gaps between ticks.
+
+**Fix:** Off-thread evaluation via `QThread` / `QObject` worker pattern. Three new constructs in `cell_list.py`:
+
+- **`_CellSpec` dataclass** ([cell_list.py:49](../pringle/cell_list.py#L49)): a pure snapshot of one cell's inputs (source, style, constraint exprs, recurrence expr, visibility). Captured on the main thread before dispatch.
+- **`_CellWorkerResult` dataclass** ([cell_list.py:62](../pringle/cell_list.py#L62)): evaluation output (CellResult, diagnostics, style). Passed back to main thread via queued signal.
+- **`_eval_spec()`** ([cell_list.py:75](../pringle/cell_list.py#L75)): pure thread-safe function; takes `_CellSpec` + shared namespace + grid → `_CellWorkerResult`. No Qt access.
+- **`_EvalWorker(QObject)`** ([cell_list.py:145](../pringle/cell_list.py#L145)): `moveToThread()` worker. Receives a `(generation, shared, grid, specs)` tuple via `eval_requested` queued signal; calls `_eval_spec` for each spec in topological order; emits `results_ready(new_shared, worker_results, generation)`.
+- **`_dispatch_pending_eval()`** ([cell_list.py:903](../pringle/cell_list.py#L903)): builds `_CellSpec` list on main thread, emits to worker (threaded) or runs inline (synchronous path for tests).
+- **`_on_eval_results()`** ([cell_list.py:974](../pringle/cell_list.py#L974)): applies results on main thread; drops stale results via generation counter; dispatches any coalesced pending tick.
+
+Key design decisions:
+- **Generation counter** (`_eval_generation`): incremented on every sync rebuild; worker result discarded silently if generation doesn't match. Prevents stale results from overwriting a newer namespace.
+- **Coalescing**: `_pending_eval` stores the latest `(name, value)` tick. If the worker is busy when a new tick fires, only the most recent is dispatched when the worker becomes free. Animation frames are never queued.
+- **Main-thread snapshot**: all Qt widget state read into `_CellSpec` on the main thread before dispatch. The worker never touches Qt objects.
+- **`eval_threaded` parameter** ([cell_list.py:186](../pringle/cell_list.py#L186)): defaults to `False` so tests run synchronously without any thread lifecycle. `app.py` passes `eval_threaded=True` for production. This avoids Python 3.13 incremental GC / GIL deadlock in the test suite (GC can fire mid-QThread and crash).
+
+**Outcome:** Main thread free during eval; camera mouse events processed at 60 fps while surface update runs in background. No change to eval throughput — same CPU cost, now off the hot path for camera interaction.
+
+---
+
 ### PERF-016 — Invisible output cells evaluated unconditionally during animation
 **Status:** Closed (fixed 2026-05-22)
 **Priority:** MEDIUM

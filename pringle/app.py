@@ -351,6 +351,7 @@ class PringleWindow(QMainWindow):
             on_cell_result=self._on_cell_result,
             on_cell_deleted=self._viewport.forget_cell,
             grid=self._grid,
+            eval_threaded=True,
         )
         left_layout.addWidget(self._cell_list, 1)
 

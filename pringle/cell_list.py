@@ -20,6 +20,7 @@ from __future__ import annotations
 import time
 import warnings
 from collections import deque
+from dataclasses import dataclass
 from typing import Callable
 import numpy as np
 
@@ -27,7 +28,7 @@ from PyQt6.QtWidgets import (
     QWidget, QScrollArea, QVBoxLayout, QHBoxLayout, QPushButton,
     QFrame, QSizePolicy, QLabel, QApplication,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QObject, QThread, pyqtSignal, pyqtSlot
 
 from pringle.cell_widget import CellWidget
 from pringle.slider_widget import SliderWidget
@@ -38,6 +39,123 @@ from pringle.preprocess import is_slider_cell
 
 _MAX_UNDO = 50
 _SLOW_EVAL_MS = 100
+
+
+# ---------------------------------------------------------------------------
+# Off-thread evaluation helpers (PERF-015)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class _CellSpec:
+    """Snapshot of one cell's mutable state; safe to pass to the eval thread."""
+    cell_id: str
+    source: str
+    style: CellStyle
+    constraint_exprs: list[str]
+    condition_exprs: list[str]
+    recurrence_expr: str | None
+    initial_condition_exprs: list[str]
+    is_visible: bool
+
+
+@dataclass
+class _CellWorkerResult:
+    """Computation output from the eval thread; applied on the main thread."""
+    cell_id: str
+    result: CellResult
+    style: CellStyle
+    error: str | None
+    warning: str | None
+    preview: str | None
+    shape_preview: str | None
+    should_be_data: bool
+    is_visible: bool
+
+
+def _eval_spec(spec: _CellSpec, shared: dict, grid: Grid) -> _CellWorkerResult:
+    """Evaluate one cell from a snapshot. Thread-safe; no Qt widget access."""
+    if not spec.source.strip():
+        return _CellWorkerResult(
+            cell_id=spec.cell_id, result=CellResult(), style=spec.style,
+            error=None, warning=None, preview=None, shape_preview=None,
+            should_be_data=False, is_visible=spec.is_visible,
+        )
+    try:
+        result = run_cell(
+            spec.source, shared, grid,
+            constraint_exprs=spec.constraint_exprs,
+            condition_exprs=spec.condition_exprs,
+        )
+    except Exception as exc:
+        result = CellResult()
+        result.error = f"{type(exc).__name__}: {exc}"
+
+    if spec.recurrence_expr and not result.error:
+        from pringle.recurrence import parse_recurrence, execute_recurrence
+        from pringle.namespace import build_equation_namespace
+        is_valid, arr_name, _ = parse_recurrence(spec.recurrence_expr)
+        if is_valid and arr_name in result.exports:
+            arr = result.exports[arr_name]
+            if isinstance(arr, np.ndarray):
+                arr, warn = execute_recurrence(
+                    arr_name, arr, spec.initial_condition_exprs, spec.recurrence_expr,
+                    {**build_equation_namespace(), **shared, **result.exports},
+                )
+                result.exports[arr_name] = arr
+                if arr.ndim == 2 and arr.shape[1] in (2, 3):
+                    with warnings.catch_warnings(record=True) as _w:
+                        warnings.simplefilter("always")
+                        result.data = arr.astype(np.float32)
+                    result.render_type = "scatter"
+                    if _w:
+                        result.warning = "Overflow: values exceed float32 range — integration may have diverged"
+                    elif warn:
+                        result.warning = warn
+                else:
+                    result.render_type = None
+                    result.data = None
+                    if warn:
+                        result.warning = warn
+            else:
+                result.error = f"Recurrence: '{arr_name}' is not an array"
+                result.render_type = None
+                result.data = None
+        elif not is_valid:
+            result.error = f"Cannot parse recursion rule: {spec.recurrence_expr!r}"
+            result.render_type = None
+            result.data = None
+
+    should_be_data = (
+        result.from_shape_inference
+        and result.render_type in ("scatter", "scatter_2d")
+    )
+    return _CellWorkerResult(
+        cell_id=spec.cell_id,
+        result=result,
+        style=spec.style,
+        error=result.error,
+        warning=result.warning,
+        preview=result.preview,
+        shape_preview=result.shape_preview,
+        should_be_data=should_be_data,
+        is_visible=spec.is_visible,
+    )
+
+
+class _EvalWorker(QObject):
+    """Runs cell evaluation on a background QThread."""
+
+    results_ready = pyqtSignal(dict, list, int)  # (new_shared, [_CellWorkerResult], generation)
+
+    @pyqtSlot(object)
+    def run_eval(self, work: tuple) -> None:
+        generation, shared, grid, specs = work
+        worker_results: list[_CellWorkerResult] = []
+        for spec in specs:
+            wr = _eval_spec(spec, shared, grid)
+            shared.update(wr.result.exports)
+            worker_results.append(wr)
+        self.results_ready.emit(shared, worker_results, generation)
 
 
 def _ns_value(v: float) -> int | float:
@@ -56,12 +174,16 @@ class CellListWidget(QWidget):
     grid : the spatial grid used for all evaluations.
     """
 
+    # Dispatches a (generation, shared, grid, specs) work package to the eval worker.
+    eval_requested = pyqtSignal(object)
+
     def __init__(
         self,
         on_cell_result: Callable[[str, CellResult, CellStyle], None],
         grid: Grid | None = None,
         on_cell_deleted: Callable[[str], None] | None = None,
         parent=None,
+        eval_threaded: bool = False,
     ):
         super().__init__(parent)
         self._on_cell_result = on_cell_result
@@ -86,6 +208,31 @@ class CellListWidget(QWidget):
         self._skip_folder_inference: bool = False
         # Suppress intermediate namespace rebuilds during bulk restores
         self._skip_rebuild: bool = False
+
+        # Off-thread evaluation (PERF-015): slider animation eval runs on a
+        # background QThread so camera events are never blocked by numpy work.
+        # eval_threaded=False runs the eval inline (used in tests to avoid thread
+        # lifecycle complexity under Python's incremental GC).
+        self._eval_threaded: bool = eval_threaded
+        self._eval_generation: int = 0
+        self._eval_busy: bool = False
+        self._pending_eval: tuple[str, float] | None = None
+
+        if eval_threaded:
+            self._eval_worker = _EvalWorker()
+            self._eval_thread = QThread()
+            self._eval_worker.moveToThread(self._eval_thread)
+            self.eval_requested.connect(
+                self._eval_worker.run_eval,
+                Qt.ConnectionType.QueuedConnection,
+            )
+            self._eval_worker.results_ready.connect(self._on_eval_results)
+            self._eval_thread.start()
+            _t = self._eval_thread
+            self.destroyed.connect(lambda: (_t.quit(), _t.wait(2000)))
+        else:
+            self._eval_worker = None
+            self._eval_thread = None
 
         self._build_ui()
 
@@ -472,6 +619,11 @@ class CellListWidget(QWidget):
         Undefined-name detection: cells using names not defined by any cell
         receive an inline warning.
         """
+        # Invalidate any in-flight or pending worker result so it doesn't
+        # overwrite the namespace we're about to build synchronously.
+        self._eval_generation += 1
+        self._pending_eval = None
+
         from pringle.dag import build_dag, topo_order, undefined_names
         from pringle.folder_cell_widget import FolderCellWidget
         from pringle.comment_cell_widget import CommentCellWidget
@@ -719,11 +871,10 @@ class CellListWidget(QWidget):
 
     def _on_slider_value_changed(self, name: str, value: float) -> None:
         """
-        Incremental re-evaluation: only cells downstream of the changed slider
-        are re-evaluated.  All other cell outputs stay as-is from _shared_ns.
-        Falls back to full rebuild if the namespace is not yet initialised.
+        Incremental re-evaluation dispatched to the background eval thread
+        so the main thread stays free for camera events during animation.
+        Falls back to a full sync rebuild if the namespace is not yet initialised.
         """
-        from pringle.dag import build_dag, downstream_of
         from pringle.folder_cell_widget import FolderCellWidget
         from pringle.comment_cell_widget import CommentCellWidget
 
@@ -744,13 +895,38 @@ class CellListWidget(QWidget):
             self._rebuild_namespace()
             return
 
+        # Record the latest tick; dispatch immediately if the worker is idle.
+        self._pending_eval = (name, value)
+        if not self._eval_busy:
+            self._dispatch_pending_eval()
+
+    def _dispatch_pending_eval(self) -> None:
+        """Build a work package from the latest pending tick and hand it to the worker."""
+        if self._pending_eval is None:
+            return
+        name, value = self._pending_eval
+        self._pending_eval = None
+
+        from pringle.dag import build_dag, downstream_of
+        from pringle.folder_cell_widget import FolderCellWidget
+        from pringle.comment_cell_widget import CommentCellWidget
         import networkx as nx
+
+        evaluable = [
+            c for c in self._cells
+            if not isinstance(c, (FolderCellWidget, CommentCellWidget))
+        ]
+        slider_cell = next(
+            (c for c in evaluable if isinstance(c, SliderWidget) and c.name == name),
+            None,
+        )
+        if slider_cell is None:
+            self._rebuild_namespace()
+            return
 
         dag = build_dag(evaluable)
         descendants = downstream_of(dag, slider_cell.cell_id, evaluable)
 
-        # Cells that are visible or are ancestors of a visible cell must be evaluated.
-        # Invisible cells whose exports nothing visible depends on can be skipped.
         visible_ids = {
             c.cell_id for c in descendants
             if not isinstance(c, SliderWidget) and self._is_render_visible(c)
@@ -759,24 +935,69 @@ class CellListWidget(QWidget):
         for vid in visible_ids:
             required_ids.update(nx.ancestors(dag, vid))
 
-        # Start from the last full namespace snapshot, updated with the new value
+        # Snapshot namespace on the main thread; update slider values synchronously.
         shared = dict(self._shared_ns)
         shared[name] = _ns_value(value)
-
         for cell in descendants:
             if isinstance(cell, SliderWidget):
                 shared[cell.name] = _ns_value(cell.value)
-                continue
-            if cell.cell_id not in required_ids:
-                continue
-            result = self._eval_cell(cell, shared)
-            shared.update(result.exports)
-            if self._is_render_visible(cell):
-                self._on_cell_result(cell.cell_id, result, cell.style)
-            else:
-                self._on_cell_result(cell.cell_id, CellResult(), cell.style)
 
-        self._shared_ns = shared
+        # Snapshot all cell state on the main thread (Qt widget reads are not thread-safe).
+        specs: list[_CellSpec] = []
+        for cell in descendants:
+            if isinstance(cell, SliderWidget) or cell.cell_id not in required_ids:
+                continue
+            specs.append(_CellSpec(
+                cell_id=cell.cell_id,
+                source=cell.source(),
+                style=cell.style,
+                constraint_exprs=cell.constraint_exprs(),
+                condition_exprs=cell.condition_exprs(),
+                recurrence_expr=cell.recurrence_expr(),
+                initial_condition_exprs=cell.initial_condition_exprs(),
+                is_visible=self._is_render_visible(cell),
+            ))
+
+        if self._eval_threaded:
+            self._eval_busy = True
+            self.eval_requested.emit((self._eval_generation, shared, self._grid, specs))
+        else:
+            # Synchronous path (eval_threaded=False): run inline on the main thread.
+            gen = self._eval_generation
+            worker_results: list[_CellWorkerResult] = []
+            for spec in specs:
+                wr = _eval_spec(spec, shared, self._grid)
+                shared.update(wr.result.exports)
+                worker_results.append(wr)
+            self._on_eval_results(shared, worker_results, gen)
+
+    def _on_eval_results(self, new_shared: dict, worker_results: list, generation: int) -> None:
+        """Receive results from the eval worker (queued signal; runs on main thread)."""
+        self._eval_busy = False
+
+        if generation == self._eval_generation:
+            self._shared_ns = new_shared
+            for wr in worker_results:
+                idx = self._index_of(wr.cell_id)
+                if idx >= 0:
+                    cell = self._cells[idx]
+                    cell.clear_diagnostics()
+                    if wr.error:
+                        cell.set_error(wr.error)
+                    elif wr.warning:
+                        cell.set_warning(wr.warning)
+                    cell.set_preview(wr.preview, wr.shape_preview)
+                    cell._last_result = wr.result
+                    if wr.should_be_data != cell.is_data_mode():
+                        cell.set_data_mode(wr.should_be_data)
+                if wr.is_visible:
+                    self._on_cell_result(wr.cell_id, wr.result, wr.style)
+                else:
+                    self._on_cell_result(wr.cell_id, CellResult(), wr.style)
+
+        # Process any tick that arrived while the worker was busy.
+        if self._pending_eval is not None:
+            self._dispatch_pending_eval()
 
     def _on_delete_requested(self, cell_id: str) -> None:
         self.remove_cell(cell_id)

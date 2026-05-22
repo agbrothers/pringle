@@ -158,6 +158,26 @@ Attached to equation cells via the **+** sub-cell button. Each sub-cell uses a `
 
 ---
 
+## Slider Animation Evaluation Thread (PERF-015)
+
+Cell evaluation during slider animation runs off the Qt main thread to keep camera interaction smooth. The main thread fires `_anim_tick` every 16 ms and immediately returns; the actual eval runs in a `QThread`-backed worker.
+
+**Key components** (all in `cell_list.py`):
+
+- **`_CellSpec`**: read-only snapshot of one cell's inputs (source, style, constraint/condition/recurrence exprs, visibility) — captured on the main thread before dispatch so the worker never touches Qt objects.
+- **`_EvalWorker(QObject)`**: moved to a `QThread` via `moveToThread()`. Receives work via the `eval_requested` queued signal; calls `_eval_spec()` for each spec in dependency order; emits `results_ready` back to the main thread.
+- **`_eval_spec()`**: pure function — thread-safe, no Qt access. Takes a `_CellSpec` + shared namespace snapshot → `_CellWorkerResult`.
+- **`_dispatch_pending_eval()`**: builds the `_CellSpec` list on the main thread, then either emits to the worker (threaded) or runs inline (synchronous fallback).
+- **`_on_eval_results()`**: runs on the main thread via queued connection; applies diagnostics and render callbacks; checks the generation counter before applying.
+
+**Generation counter** (`_eval_generation`): incremented on every synchronous rebuild. If a result arrives from an older generation (e.g., slider changed again while the worker was busy), it is silently dropped.
+
+**Coalescing**: `_pending_eval` stores only the latest `(name, value)` tick. If the worker is still busy when the next tick fires, only the most recent pending tick is dispatched when the worker becomes free. Animation frames are never queued.
+
+**`eval_threaded` parameter** (default `False`): production code (`app.py`) passes `True`. Tests use the synchronous inline path to avoid QThread lifecycle crashes under Python 3.13's incremental GC.
+
+---
+
 ## Axis Settings Dialog
 
 The gear icon (⚙) in the top-right corner of the viewport opens a floating **non-modal** `Qt.Tool` dialog (`AxisSettingsDialog`) containing `ViewSettingsWidget`. It is not embedded in the left panel. Clicking ⚙ again or closing the dialog's title bar X hides it. Contains:
