@@ -34,12 +34,16 @@ from pringle.cell_list import CellListWidget
 from pringle.view_settings import ViewSettingsWidget
 
 
-# WASD + Space/Shift movement keys mapped to world-space (dx, dy, dz) unit vectors
+# WASD + arrow keys + Space/Shift mapped to world-space (dx, dy, dz) unit vectors
 _PAN_KEYS: dict[int, tuple[float, float, float]] = {
     Qt.Key.Key_W:     ( 0,  1,  0),
     Qt.Key.Key_S:     ( 0, -1,  0),
     Qt.Key.Key_A:     (-1,  0,  0),
     Qt.Key.Key_D:     ( 1,  0,  0),
+    Qt.Key.Key_Up:    ( 0,  1,  0),
+    Qt.Key.Key_Down:  ( 0, -1,  0),
+    Qt.Key.Key_Left:  (-1,  0,  0),
+    Qt.Key.Key_Right: ( 1,  0,  0),
     Qt.Key.Key_Space: ( 0,  0,  1),
     Qt.Key.Key_Shift: ( 0,  0, -1),
 }

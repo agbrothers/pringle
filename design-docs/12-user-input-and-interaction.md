@@ -17,10 +17,10 @@ WASD pans the **orbit target** — the point the camera orbits around and zooms 
 
 | Key | Movement |
 |---|---|
-| `W` | Forward in camera's horizontal frame (toward target projected onto XY) |
-| `S` | Backward |
-| `A` | Left (camera-relative) |
-| `D` | Right (camera-relative) |
+| `W` / `↑` | Forward in camera's horizontal frame (toward target projected onto XY) |
+| `S` / `↓` | Backward |
+| `A` / `←` | Left (camera-relative) |
+| `D` / `→` | Right (camera-relative) |
 | `Space` | +Z (world up, unconditional) |
 | `Shift` | −Z (world down, unconditional) |
 
