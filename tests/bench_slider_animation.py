@@ -365,18 +365,21 @@ def bench_recurrence(n_frames: int) -> dict[str, list[float]]:
 
 
 # ---------------------------------------------------------------------------
-# Section 7 — DAG rebuild overhead (PERF-001)
+# Section 7 — DAG rebuild overhead (PERF-001, closed)
 #
-# build_dag is called on EVERY slider tick inside _on_slider_value_changed,
-# unconditionally, even though the graph hasn't changed.  This parses ASTs
-# for every evaluable cell in the session just to reconstruct a static DAG.
+# PERF-001 fix: CellListWidget._get_dag() caches the nx.DiGraph keyed on
+# {cell_id: source} for all evaluable cells.  On a cache hit (sources
+# unchanged — the entire animation duration) only a dict key comparison
+# runs instead of 40+ AST parses.  The DAG is rebuilt only when a cell's
+# source text actually changes.
 # ---------------------------------------------------------------------------
 
 def bench_dag_overhead(n_frames: int) -> dict[str, list[float]]:
     """
-    Time build_dag + downstream_of for a realistic memory.yml cell list.
+    Time DAG build (historical) and DAG cache hit (current) for memory.yml cells.
 
-    Simulates the call in _on_slider_value_changed before any cell evaluation.
+    build_dag+downstream: cost before PERF-001 fix (every tick rebuilt the DAG)
+    dag_cache_hit:        cost after fix (key comparison + return cached object)
     """
     from pringle.dag import build_dag, downstream_of
 
@@ -418,6 +421,20 @@ def bench_dag_overhead(n_frames: int) -> dict[str, list[float]]:
     results["build_dag+downstream"] = _timeit(
         lambda: downstream_of(build_dag(cells), slider_id, cells), n_frames
     )
+
+    # Simulate PERF-001 cache: warm the cache, then measure hit cost.
+    _cache: dict = {}
+    _key: dict = {}
+    def _cached_dag():
+        k = {c.cell_id: c.source() for c in cells}
+        if k != _key or "dag" not in _cache:
+            _cache["dag"] = build_dag(cells)
+            _key.clear()
+            _key.update(k)
+        return _cache["dag"]
+    _cached_dag()  # warm
+    results["dag_cache_hit"] = _timeit(_cached_dag, n_frames)
+
     return results
 
 
@@ -545,9 +562,9 @@ def _print_report(
     print(f"  {'Section':<36} │  {'Mean ms':>8}  │  {'P95 ms':>7}  │  {'% budget':>8}")
     print("  " + "─" * 36 + "─┼─" + "─" * 10 + "─┼─" + "─" * 9 + "─┼─" + "─" * 9)
 
-    print("  [DAG rebuild overhead — called before eval each tick (PERF-001)]")
-    for key in ("build_dag+downstream", "build_dag_only"):
-        label = f"  {key}" if key != "build_dag+downstream" else key
+    print("  [DAG overhead — PERF-001 closed; cache hit cost per tick]")
+    for key in ("dag_cache_hit", "build_dag+downstream", "build_dag_only"):
+        label = f"  {key}" if key != "dag_cache_hit" else key
         print(_fmt_row(f"  dag/{label}", dag_res.get(key, [])))
 
     print()
@@ -588,15 +605,14 @@ def _print_report(
     for key, times in scatter_res.items():
         print(_fmt_row(f"  scatter/{key}", times))
 
-    # Estimated total frame: dag + eval chain + geometry + recurrence + scatter output
-    # Note: recurrence cells (e.g. memory.yml path_xy) are re-evaluated on every
-    # animation tick because _on_slider_value_changed has no data-mode guard.
-    # build_dag is called before every eval chain (PERF-001 not yet fixed).
+    # Estimated total frame: dag cache hit + eval chain + geometry + recurrence + scatter output
+    # Note: recurrence cells (e.g. memory.yml path_xy) are re-evaluated on every tick.
+    # PERF-001 closed: dag_cache_hit (key comparison only) replaces build_dag each tick.
     eval_chain = eval_res.get("chain_total", [])
     geo_cpu = geo_res.get("cpu_total", [])
     mesh_times = mesh_res.get("make_surface_mesh", [])
     rec_times  = rec_res.get("recurrence_200steps", [])
-    dag_times  = dag_res.get("build_dag+downstream", [])
+    dag_times  = dag_res.get("dag_cache_hit", dag_res.get("build_dag+downstream", []))
     scatter_times = scatter_res.get("make_scatter_mesh_200pt", [])
 
     if mesh_times:
@@ -612,11 +628,11 @@ def _print_report(
         combined = [c + rec_mean for c in combined]
         print(f"  [note] recurrence mean ({rec_mean:.1f} ms) added to frame estimate")
 
-    # Add DAG rebuild cost (PERF-001: called unconditionally every tick)
+    # Add DAG cache hit cost (PERF-001 closed: key comparison only, not full rebuild)
     if combined and dag_times:
         dag_mean = statistics.mean(dag_times)
         combined = [c + dag_mean for c in combined]
-        print(f"  [note] build_dag mean ({dag_mean:.1f} ms) added — PERF-001 not yet fixed")
+        print(f"  [note] dag cache hit mean ({dag_mean:.2f} ms) added (PERF-001 closed)")
 
     # Add scatter mesh creation for output cells (path_xy → make_scatter_mesh each frame)
     if combined and scatter_times:

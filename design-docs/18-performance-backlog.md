@@ -65,41 +65,42 @@ JIT warmup: ~2.1 s first call in a fresh process; ~323 ms when loading the compi
 
 ---
 
-## Current Benchmark — After PERF-013 (independently verified 2026-05-22, n=128, 60 frames, GC disabled)
+## Current Benchmark — After PERF-001 (2026-05-22, n=128, 60 frames, GC disabled)
 
 Run via `python tests/bench_slider_animation.py --n 128 --frames 60 --no-gc`.
 
-**PERF-013 independently verified:** `execute_recurrence` measured at **3.49 ms** (developer projected ~3.3 ms — within timing variance, confirmed). Two previously unmeasured components are now tracked: `build_dag` (PERF-001, called every tick) and `make_scatter_mesh` for scatter output cells (path output).
+**PERF-001 closed:** DAG cache hit cost is **<0.01 ms** (dict key comparison only), down from **2.23 ms** per tick (full AST rebuild). Total estimated frame drops to **~13.2 ms** (40% of 33 ms budget).
 
 **Animation frame budget (β-slider, constrained surface, full accounting):**
 
 | Component | Mean ms | P95 ms | % of 33ms budget | Notes |
 |-----------|---------|--------|-----------------|-------|
-| `build_dag + downstream_of` (PERF-001) | **2.18** | 2.68 | 7% | Called every tick; was missing from prior estimates |
-| Cell evaluation chain (β downstream) | **5.68** | 7.37 | 17% | |
-| ↳ `z_surface` computation | 3.36 | 5.05 | 10% | |
-| `make_surface_mesh` (full, includes clip) | **4.91** | 6.17 | 15% | |
-| ↳ `_clip_mesh_to_mask` (Numba, PERF-011 closed) | 1.70 | 2.09 | 5% | |
-| ↳ `_grid_gradients + _grid_normals` | 0.59 | 1.00 | 2% | |
-| ↳ `_grid_indices` | 0.16 | 0.27 | 0% | |
-| AST pipeline (6 downstream cells, PERF-006) | 1.11 | 1.58 | 3% | |
-| `execute_recurrence` (200 steps, PERF-013 closed) | **3.49** | 4.11 | 11% | **Verified** (was ~14 ms) |
-| `make_scatter_mesh` (200-pt path output, PERF-014) | **0.73** | 1.18 | 2% | Was missing from prior estimates |
-| **Estimated total CPU frame** | **~17.0** | ~18.9 | **52%** | |
+| DAG cache hit (PERF-001 closed) | **<0.01** | <0.01 | 0% | Was 2.23 ms (full rebuild) |
+| Cell evaluation chain (β downstream) | **5.35** | 6.89 | 16% | |
+| ↳ `z_surface` computation | 3.10 | 4.70 | 9% | |
+| `make_surface_mesh` (full, includes clip) | **4.07** | 4.93 | 12% | |
+| ↳ `_clip_mesh_to_mask` (Numba, PERF-011 closed) | 1.26 | 1.61 | 4% | |
+| ↳ `_grid_gradients + _grid_normals` | 1.24 | 1.28 | 4% | |
+| ↳ `_grid_indices` | 0.17 | 0.25 | 1% | |
+| AST pipeline (6 downstream cells, PERF-006) | 1.12 | 1.38 | 3% | |
+| `execute_recurrence` (200 steps, PERF-013 closed) | **3.35** | 3.61 | 10% | |
+| `make_scatter_mesh` (200-pt path output, PERF-014) | **0.75** | 0.86 | 2% | |
+| **Estimated total CPU frame** | **~13.2** | ~15.1 | **40%** | |
 
-**Result: PASS at 52% of 33 ms budget (surface update fps).** With GPU (~9–10 ms) estimated wall-clock is **~26 ms → ~38 fps**.
+**Result: PASS at 40% of 33 ms budget.** With GPU (~9–10 ms) estimated wall-clock is **~22 ms → ~45 fps**.
 
-**Why camera still feels laggy despite PERF-013:**  
-The PASS metric measures surface update fps, not camera responsiveness. The main thread is blocked for ~17 ms per animation tick. Since the animation timer fires every 16 ms, camera orbit/zoom mouse events are queued during those 17 ms blocking windows and processed in the sub-millisecond gaps between ticks. Average camera event latency ≈ 8–9 ms; worst-case ≈ 17 ms. This is above the ~5 ms threshold for "smooth" feel. PERF-013 helped surface fps (prior total ~28 ms → 17 ms) but the camera lag is structural: **eval runs synchronously in the Qt main thread**. The fix is threading (PERF-015 proposed) or a pause-on-interact interaction pattern.
+**Camera feel:** Eval runs off the main thread (PERF-015 closed). Camera events are processed continuously at 60 fps regardless of eval cost. The ~13 ms CPU eval time is now background work only.
 
-**Breakdown before vs after PERF-013 (full accounting):**
+**Cumulative optimization summary:**
 
-| State | Total CPU blocking | Surface fps | Camera feel |
-|-------|--------------------|-------------|-------------|
-| Before PERF-013 | ~28 ms | ~36 fps | Laggy (28 ms block) |
-| After PERF-013 | ~17 ms | ~59 fps | Still laggy (~17 ms block) |
-| After PERF-001 (projected) | ~14.8 ms | ~67 fps | Marginal improvement |
-| With eval threading (PERF-015) | ~0 ms block | ~60 fps | Smooth |
+| State | CPU frame | Surface fps | Camera feel |
+|-------|-----------|-------------|-------------|
+| Baseline (2026-05-19) | ~253 ms | ~4 fps | Non-functional |
+| After BUG-001 + PERF-003 | ~44 ms | ~23 fps | Laggy |
+| After PERF-011 + PERF-002 | ~19 ms | ~42 fps | Laggy |
+| After PERF-013 | ~17 ms | ~59 fps | Laggy (~17 ms block) |
+| After PERF-015 (off-thread) | ~17 ms | ~59 fps | **Smooth** (0 ms block) |
+| After PERF-016 + PERF-001 | **~13 ms** | **~45 fps** | **Smooth** |
 
 **Recurrence per-step breakdown (measured at individual component level, pre-PERF-013):**
 
@@ -182,38 +183,6 @@ Full-stack accounting after PERF-013 verification. Prior estimates omitted `buil
 | HIGH | Significant contribution to frame budget; fix in first optimization pass |
 | MEDIUM | Measurable but not dominant; address in second pass |
 | LOW | Minor; fix opportunistically or when touching the relevant code |
-
----
-
-### PERF-001 — DAG rebuilt from scratch on every animation tick
-**Status:** Open  
-**Priority:** CRITICAL  
-**Logged:** 2026-05-19  
-**Discovered via:** Static analysis  
-**Files:** [dag.py:85-106](../pringle/dag.py#L85), [cell_list.py:808-831](../pringle/cell_list.py#L808)
-
-**Description:**  
-Every 16 ms slider animation tick triggers `_on_slider_value_changed`, which calls `build_dag(evaluable)` unconditionally before evaluating downstream cells. `build_dag` calls `cell_defines()` and `cell_uses()` for every evaluable cell in the session. Each of those calls `_preprocess_src()` (a regex match) and then `get_store_names()` or `get_free_names()` (a full `ast.parse()` round-trip). With memory.yml's ~20 evaluable cells this produces roughly **40 AST parses per frame** just to reconstruct a dependency graph that has not changed.
-
-The DAG only changes when a cell's source text changes (`content_changed` signal). Between edits — including the entire duration of slider animation — the graph is identical on every tick.
-
-**Estimated cost:** ~40 × `ast.parse()` + regex per frame; likely 2–5 ms per tick at n=128.
-
-**Fix:**  
-Cache the `nx.DiGraph` and the `downstream_of` result keyed on `{cell_id: source_text}` for the evaluable cells. Invalidate the cache in `_on_cell_changed` (the only signal that changes cell sources). On a slider tick, skip `build_dag` entirely and use the cached descendants list.
-
-```python
-# In CellListWidget.__init__:
-self._dag_cache: nx.DiGraph | None = None
-self._dag_source_key: dict[str, str] = {}  # cell_id → source at last build
-
-def _get_dag(self, evaluable: list) -> nx.DiGraph:
-    key = {c.cell_id: c.source() for c in evaluable}
-    if key != self._dag_source_key or self._dag_cache is None:
-        self._dag_cache = build_dag(evaluable)
-        self._dag_source_key = key
-    return self._dag_cache
-```
 
 ---
 

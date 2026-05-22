@@ -218,6 +218,11 @@ class CellListWidget(QWidget):
         self._eval_busy: bool = False
         self._pending_eval: tuple[str, float] | None = None
 
+        # DAG cache (PERF-001): keyed on {cell_id: source} for all evaluable cells.
+        # Rebuilt only when source text changes; reused across all animation ticks.
+        self._dag_cache: object = None  # nx.DiGraph | None
+        self._dag_source_key: dict[str, str] = {}
+
         if eval_threaded:
             self._eval_worker = _EvalWorker()
             self._eval_thread = QThread()
@@ -239,6 +244,15 @@ class CellListWidget(QWidget):
         if self._eval_thread and self._eval_thread.isRunning():
             self._eval_thread.quit()
             self._eval_thread.wait(3000)
+
+    def _get_dag(self, evaluable: list):
+        """Return a cached DAG, rebuilding only when any cell source has changed."""
+        from pringle.dag import build_dag
+        key = {c.cell_id: c.source() for c in evaluable}
+        if key != self._dag_source_key or self._dag_cache is None:
+            self._dag_cache = build_dag(evaluable)
+            self._dag_source_key = key
+        return self._dag_cache
 
     # ------------------------------------------------------------------
     # UI
@@ -628,7 +642,7 @@ class CellListWidget(QWidget):
         self._eval_generation += 1
         self._pending_eval = None
 
-        from pringle.dag import build_dag, topo_order, undefined_names
+        from pringle.dag import topo_order, undefined_names
         from pringle.folder_cell_widget import FolderCellWidget
         from pringle.comment_cell_widget import CommentCellWidget
 
@@ -638,7 +652,7 @@ class CellListWidget(QWidget):
             if not isinstance(c, (FolderCellWidget, CommentCellWidget))
         ]
 
-        dag = build_dag(evaluable)
+        dag = self._get_dag(evaluable)
         ordered_cells, cyclic_ids = topo_order(dag, evaluable)
         undef = undefined_names(evaluable)
 
@@ -911,7 +925,7 @@ class CellListWidget(QWidget):
         name, value = self._pending_eval
         self._pending_eval = None
 
-        from pringle.dag import build_dag, downstream_of
+        from pringle.dag import downstream_of
         from pringle.folder_cell_widget import FolderCellWidget
         from pringle.comment_cell_widget import CommentCellWidget
         import networkx as nx
@@ -928,7 +942,7 @@ class CellListWidget(QWidget):
             self._rebuild_namespace()
             return
 
-        dag = build_dag(evaluable)
+        dag = self._get_dag(evaluable)
         descendants = downstream_of(dag, slider_cell.cell_id, evaluable)
 
         visible_ids = {

@@ -93,6 +93,25 @@ GPU savings are additive to CPU savings and not directly measurable without a re
 
 ---
 
+### PERF-001 — DAG rebuilt from scratch on every animation tick
+**Status:** Closed (fixed 2026-05-22)
+**Priority:** CRITICAL
+**Measured cost before:** 2.23 ms per tick (20 cells × 2 AST parses each = ~40 `ast.parse()` calls + regex + networkx graph construction)
+
+**Root cause:** `_dispatch_pending_eval` called `build_dag(evaluable)` unconditionally on every slider tick. `build_dag` calls `cell_defines()` and `cell_uses()` for every evaluable cell, each of which calls `_preprocess_src()` (regex) and `get_store_names()` / `get_free_names()` (full `ast.parse()`). With memory.yml's ~20 evaluable cells this produced ~40 AST parses per frame to reconstruct a static graph that had not changed.
+
+**Fix:** `CellListWidget._get_dag(evaluable)` ([cell_list.py](../pringle/cell_list.py)) caches the `nx.DiGraph` keyed on `{cell_id: source()}` for all evaluable cells. On a cache hit (sources unchanged — the entire animation duration) only a dict key comparison runs. Cache is automatically invalidated whenever any cell source changes (the key comparison catches it). Both `_dispatch_pending_eval` and `_rebuild_namespace` now call `_get_dag` instead of `build_dag` directly.
+
+**Measured outcome (2026-05-22, n=128, 60 frames, GC disabled):**
+
+| Metric | Before | After | Speedup |
+|--------|--------|-------|---------|
+| DAG cost per tick | 2.23 ms | **<0.01 ms** | **>200×** |
+| Total estimated CPU frame | ~15.8 ms | **~13.2 ms** | **1.2×** |
+| % of 33 ms budget | 48% | **40%** | — |
+
+---
+
 ### PERF-015 — Cell evaluation blocks Qt main thread; camera orbit laggy during animation
 **Status:** Closed (fixed 2026-05-22)
 **Priority:** HIGH
