@@ -209,7 +209,7 @@ class SliderWidget(QWidget):
         row1.addWidget(self._name_label)
 
         self._spinbox = _SpinBox()
-        self._spinbox.setRange(self._min, self._max)
+        self._spinbox.setRange(-1e12, 1e12)  # wide range — bounds are advisory, not clamping
         self._spinbox.setValue(self._value)
         self._spinbox.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._spinbox.valueChanged.connect(self._on_spinbox_changed)
@@ -304,14 +304,14 @@ class SliderWidget(QWidget):
         pass
 
     def set_value(self, v: float, emit: bool = True) -> None:
-        v = max(self._min, min(self._max, v))
         self._value = v
         self._spinbox.blockSignals(True)
         self._slider.blockSignals(True)
         self._spinbox.setValue(v)
-        self._slider.setValue(self._float_to_int(v))
+        self._slider.setValue(self._float_to_int(v))  # QSlider clamps handle to track
         self._spinbox.blockSignals(False)
         self._slider.blockSignals(False)
+        self._validate_bounds()
         if emit:
             self.value_changed.emit(self.name, v)
 
@@ -424,15 +424,22 @@ class SliderWidget(QWidget):
         self._slider.blockSignals(True)
         self._slider.setValue(self._float_to_int(v))
         self._slider.blockSignals(False)
+        self._validate_bounds()
         self.value_changed.emit(self.name, v)
 
     def _on_range_changed(self):
         self._min = self._min_box.value()
         self._max = self._max_box.value()
-        self._spinbox.setRange(self._min, self._max)
         self._slider.blockSignals(True)
         self._slider.setValue(self._float_to_int(self._value))
         self._slider.blockSignals(False)
+        self._validate_bounds()
+
+    def _validate_bounds(self) -> None:
+        """Flag min/max fields red when they conflict with the current value."""
+        red = "border: 1px solid #c0392b;"
+        self._min_box.setStyleSheet(red if self._value < self._min else "")
+        self._max_box.setStyleSheet(red if self._value > self._max else "")
 
     def set_anim_mode(self, mode: str) -> None:
         self._anim_mode = mode if mode in ("pingpong", "loop") else "pingpong"

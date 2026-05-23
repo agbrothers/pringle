@@ -61,12 +61,13 @@ class TestSliderWidget:
         s.set_warning("hmm")
         s.clear_diagnostics()  # all should be no-ops without raising
 
-    def test_set_value_clamps(self, qapp):
+    def test_set_value_does_not_clamp(self, qapp):
+        # BUG-045: values outside [min, max] are stored as-is; bounds are flagged red.
         s = SliderWidget(name="a", value=5.0, min_val=0.0, max_val=10.0)
         s.set_value(15.0, emit=False)
-        assert s.value == pytest.approx(10.0)
+        assert s.value == pytest.approx(15.0)
         s.set_value(-5.0, emit=False)
-        assert s.value == pytest.approx(0.0)
+        assert s.value == pytest.approx(-5.0)
 
     def test_value_changed_signal(self, qapp):
         s = SliderWidget(name="a", value=1.0, min_val=0.0, max_val=10.0)

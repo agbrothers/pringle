@@ -6,6 +6,17 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-045 — Slider value clamped to range bounds instead of flagging the offending bound
+**Status:** Closed (fixed 2026-05-23)
+
+**Root cause:** `set_value` clamped via `max(self._min, min(self._max, v))` and the `QDoubleSpinBox` had `setRange(min, max)` so Qt also clamped input. Out-of-range values typed by the user were silently discarded.
+
+**Fix:** Widened the spinbox range to `[-1e12, 1e12]` (advisory, not clamping). Removed the clamp from `set_value`. Added `_validate_bounds()` which applies a `#c0392b` border to `_min_box` when `value < min`, to `_max_box` when `value > max`, and clears both otherwise. Called from `set_value`, `_on_spinbox_changed`, and `_on_range_changed`. The QSlider handle continues to visually peg to the track end when value is out of range (its [0, 1000] integer range naturally clamps). Removed the corresponding `setRange` call from `_on_range_changed`. Updated the pre-existing `test_set_value_clamps` → `test_set_value_does_not_clamp`.
+
+**Tests:** `tests/test_bug045.py` — 6 cases covering above-max, below-min, in-range, border clearing on both sides, and unclamped emission.
+
+---
+
 ### BUG-044 — Constant values outside default slider range do not morph to slider
 **Status:** Closed (fixed 2026-05-23)
 
