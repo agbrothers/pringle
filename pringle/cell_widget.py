@@ -25,7 +25,7 @@ from PyQt6.QtWidgets import (
     QLabel, QPlainTextEdit, QSizePolicy, QFrame,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QKeyEvent, QFont
+from PyQt6.QtGui import QKeyEvent, QFont, QFontMetricsF
 
 from pringle.style import CellStyle
 
@@ -156,6 +156,16 @@ class SubCell(QWidget):
 # Expanding text edit that emits Enter and Backspace signals
 # ---------------------------------------------------------------------------
 
+_WRAP_PAIRS: dict[int, tuple[str, str]] = {
+    Qt.Key.Key_ParenLeft:   ('(', ')'),
+    Qt.Key.Key_BracketLeft: ('[', ']'),
+    Qt.Key.Key_BraceLeft:   ('{', '}'),
+    Qt.Key.Key_Apostrophe:  ("'", "'"),
+    Qt.Key.Key_QuoteDbl:    ('"', '"'),
+    Qt.Key.Key_QuoteLeft:   ('`', '`'),
+}
+
+
 class CellTextEdit(QPlainTextEdit):
     """
     QPlainTextEdit that:
@@ -179,6 +189,7 @@ class CellTextEdit(QPlainTextEdit):
         _font.setFamilies(['Menlo', 'Consolas', 'Courier New'])
         _font.setStyleHint(QFont.StyleHint.Monospace)
         self.setFont(_font)
+        self.setTabStopDistance(QFontMetricsF(self.font()).horizontalAdvance(' ') * 4)
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setStyleSheet("QPlainTextEdit { border: none; background: transparent; }")
         # documentSizeChanged fires after the layout engine has reflowed text
@@ -214,9 +225,22 @@ class CellTextEdit(QPlainTextEdit):
         self.focus_lost.emit()
         super().focusOutEvent(event)
 
+    def wheelEvent(self, event) -> None:
+        event.ignore()
+
     def keyPressEvent(self, event: QKeyEvent):
         key = event.key()
         mod = event.modifiers()
+
+        if key == Qt.Key.Key_Tab:
+            self.insertPlainText("    ")
+            return
+
+        if key in _WRAP_PAIRS and self.textCursor().hasSelection():
+            open_, close = _WRAP_PAIRS[key]
+            cursor = self.textCursor()
+            cursor.insertText(open_ + cursor.selectedText() + close)
+            return
 
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             if not self._allow_newline and mod == Qt.KeyboardModifier.NoModifier:

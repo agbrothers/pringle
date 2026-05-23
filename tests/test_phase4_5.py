@@ -228,3 +228,78 @@ class TestPringleWindowIntegration:
         # At least one object should be in the scene (the surface)
         assert len(win.viewport.renderer._objects) >= 1
         win.close()
+
+
+# ---------------------------------------------------------------------------
+# CellTextEdit editing improvements (FEAT-044)
+# ---------------------------------------------------------------------------
+
+class TestCellTextEdit:
+    def test_tab_inserts_four_spaces(self, qapp):
+        from PyQt6.QtGui import QKeyEvent
+        from PyQt6.QtCore import QEvent
+        from pringle.cell_widget import CellTextEdit
+        edit = CellTextEdit()
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Tab, Qt.KeyboardModifier.NoModifier)
+        edit.keyPressEvent(event)
+        assert edit.toPlainText() == "    "
+
+    def test_tab_stop_distance_is_four_chars(self, qapp):
+        from PyQt6.QtGui import QFontMetricsF
+        from pringle.cell_widget import CellTextEdit
+        edit = CellTextEdit()
+        expected = QFontMetricsF(edit.font()).horizontalAdvance(' ') * 4
+        assert abs(edit.tabStopDistance() - expected) < 0.5
+
+    def test_wheel_event_ignored(self, qapp):
+        from PyQt6.QtGui import QWheelEvent
+        from PyQt6.QtCore import QPointF, QPoint
+        from pringle.cell_widget import CellTextEdit
+        edit = CellTextEdit()
+        event = QWheelEvent(
+            QPointF(0, 0), QPointF(0, 0),
+            QPoint(0, 0), QPoint(0, 120),
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+            Qt.ScrollPhase.NoScrollPhase,
+            False,
+        )
+        edit.wheelEvent(event)
+        assert not event.isAccepted()
+
+    def test_bracket_wraps_selection(self, qapp):
+        from PyQt6.QtGui import QKeyEvent
+        from PyQt6.QtCore import QEvent
+        from pringle.cell_widget import CellTextEdit
+        edit = CellTextEdit()
+        edit.setPlainText("abc")
+        cursor = edit.textCursor()
+        cursor.select(cursor.SelectionType.Document)
+        edit.setTextCursor(cursor)
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_ParenLeft, Qt.KeyboardModifier.NoModifier, "(")
+        edit.keyPressEvent(event)
+        assert edit.toPlainText() == "(abc)"
+
+    def test_bracket_no_selection_falls_through(self, qapp):
+        from PyQt6.QtGui import QKeyEvent
+        from PyQt6.QtCore import QEvent
+        from pringle.cell_widget import CellTextEdit
+        edit = CellTextEdit()
+        # No selection — bracket should be inserted literally by Qt's default handler
+        assert not edit.textCursor().hasSelection()
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_ParenLeft, Qt.KeyboardModifier.NoModifier, "(")
+        edit.keyPressEvent(event)
+        assert edit.toPlainText() == "("
+
+    def test_square_bracket_wraps_selection(self, qapp):
+        from PyQt6.QtGui import QKeyEvent
+        from PyQt6.QtCore import QEvent
+        from pringle.cell_widget import CellTextEdit
+        edit = CellTextEdit()
+        edit.setPlainText("xyz")
+        cursor = edit.textCursor()
+        cursor.select(cursor.SelectionType.Document)
+        edit.setTextCursor(cursor)
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_BracketLeft, Qt.KeyboardModifier.NoModifier, "[")
+        edit.keyPressEvent(event)
+        assert edit.toPlainText() == "[xyz]"

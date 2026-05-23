@@ -6,6 +6,17 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-044 — Text editing improvements: tab width, scroll pass-through, bracket wrapping
+**Status:** Closed (implemented 2026-05-22)
+
+**Implementation:**
+- **`cell_widget.py`**: Added `QFontMetricsF` import. Added module-level `_WRAP_PAIRS` dict mapping opening bracket keys to `(open, close)` pairs. In `CellTextEdit.__init__`, added `setTabStopDistance` to 4 character widths after font is set. In `keyPressEvent`: Tab inserts 4 literal spaces and returns; selection + bracket key wraps selection with the pair and returns (Part C). Added `wheelEvent` that calls `event.ignore()` to propagate scroll to the outer panel (Part B).
+- **`comment_cell_widget.py`**: Added `QFontMetricsF` import. Added `setTabStopDistance` to 4 character widths in `_CommentEdit.__init__` for consistency.
+
+**Tests:** `tests/test_phase4_5.py::TestCellTextEdit` — `test_tab_inserts_four_spaces`, `test_tab_stop_distance_is_four_chars`, `test_wheel_event_ignored`, `test_bracket_wraps_selection`, `test_bracket_no_selection_falls_through`, `test_square_bracket_wraps_selection`.
+
+---
+
 ### FEAT-043 — Slider visual cleanup: remove color dot, align name with cell text
 **Status:** Closed (implemented 2026-05-22)
 

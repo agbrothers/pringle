@@ -24,7 +24,7 @@ from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QPlainTextEdit, QPushButton, QLabel, QSizePolicy,
 )
 from PyQt6.QtCore import pyqtSignal, Qt
-from PyQt6.QtGui import QTextOption
+from PyQt6.QtGui import QFontMetricsF, QTextOption
 
 from pringle.style import CellStyle
 from pringle.cell_widget import DragHandle
@@ -51,6 +51,7 @@ class _CommentEdit(QPlainTextEdit):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.setTabStopDistance(QFontMetricsF(self.font()).horizontalAdvance(' ') * 4)
         self.document().documentLayout().documentSizeChanged.connect(
             self._on_document_size_changed
         )
