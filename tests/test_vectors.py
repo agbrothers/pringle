@@ -252,6 +252,161 @@ class TestMakeArrowMesh:
         # After two calls, the singleton must be set
         assert _r._ARROW_GEO is not None
 
+    def test_instance_buffer_written_by_batch(self):
+        """make_arrow_mesh must write instance_buffer via batch — no all-zero matrices."""
+        from pringle.renderer import make_arrow_mesh
+        arrows = np.array([
+            [0., 0., 0.,  1., 0., 0.],
+            [0., 0., 0.,  0., 2., 0.],
+        ], dtype=np.float32)
+        mesh = make_arrow_mesh(arrows)
+        # Both instance matrices should be non-zero (valid arrows)
+        Ms = mesh.instance_buffer.data["matrix"]
+        assert not np.allclose(Ms[0], 0.0), "first matrix should be non-zero"
+        assert not np.allclose(Ms[1], 0.0), "second matrix should be non-zero"
+
+
+@_needs_gpu
+class TestUpdateArrows:
+    """PringleRenderer.update_arrows in-place path (PERF-017)."""
+
+    def _make_renderer(self):
+        from rendercanvas.offscreen import OffscreenRenderCanvas
+        from pringle.renderer import PringleRenderer
+        canvas = OffscreenRenderCanvas(size=(100, 100))
+        return PringleRenderer(canvas)
+
+    def test_first_call_returns_true(self):
+        pr = self._make_renderer()
+        arrows = np.array([[0., 0., 0., 1., 0., 0.]], dtype=np.float32)
+        is_new = pr.update_arrows("c1", arrows, color=(1., 1., 1., 1.), opacity=1.0)
+        assert is_new is True
+
+    def test_second_call_same_n_returns_false(self):
+        pr = self._make_renderer()
+        arrows = np.array([[0., 0., 0., 1., 0., 0.]], dtype=np.float32)
+        pr.update_arrows("c1", arrows, color=(1., 1., 1., 1.), opacity=1.0)
+        is_new = pr.update_arrows("c1", arrows, color=(1., 1., 1., 1.), opacity=1.0)
+        assert is_new is False
+
+    def test_n_change_triggers_rebuild(self):
+        pr = self._make_renderer()
+        arrows1 = np.zeros((3, 6), dtype=np.float32)
+        arrows1[:, 3] = 1.0
+        arrows2 = np.zeros((5, 6), dtype=np.float32)
+        arrows2[:, 3] = 1.0
+        pr.update_arrows("c1", arrows1, color=(1., 1., 1., 1.), opacity=1.0)
+        is_new = pr.update_arrows("c1", arrows2, color=(1., 1., 1., 1.), opacity=1.0)
+        assert is_new is False  # cell existed before; not brand new
+        assert pr._arrow_count["c1"] == 5
+
+    def test_remove_clears_cache(self):
+        pr = self._make_renderer()
+        arrows = np.array([[0., 0., 0., 1., 0., 0.]], dtype=np.float32)
+        pr.update_arrows("c1", arrows, color=(1., 1., 1., 1.), opacity=1.0)
+        pr.remove_object("c1")
+        assert "c1" not in pr._arrow_mesh
+        assert "c1" not in pr._arrow_count
+
+    def test_inplace_updates_buffer(self):
+        """After in-place update the translation column must reflect the new tail."""
+        pr = self._make_renderer()
+        arrows1 = np.array([[0., 0., 0., 1., 0., 0.]], dtype=np.float32)
+        pr.update_arrows("c1", arrows1, color=(1., 1., 1., 1.), opacity=1.0)
+
+        arrows2 = np.array([[5., 6., 7., 6., 6., 7.]], dtype=np.float32)
+        pr.update_arrows("c1", arrows2, color=(1., 1., 1., 1.), opacity=1.0)
+
+        ib = pr._arrow_mesh["c1"].instance_buffer
+        tail_col = ib.data["matrix"][0, :3, 3]
+        assert np.allclose(tail_col, [5., 6., 7.], atol=1e-4)
+
+
+# ---------------------------------------------------------------------------
+# _arrow_matrices_batch — vectorized Rodrigues (PERF-017)
+# ---------------------------------------------------------------------------
+
+class TestArrowMatricesBatch:
+    """Verify that _arrow_matrices_batch produces the same transforms as _arrow_matrix."""
+
+    def _single_matrix(self, tail, head, size=0.1):
+        from pringle.renderer import _arrow_matrix
+        M = _arrow_matrix(tail.astype(np.float64), head.astype(np.float64), size=size)
+        return M  # may be None for degenerate arrows
+
+    def test_along_z_matches_single(self):
+        from pringle.renderer import _arrow_matrices_batch
+        tail = np.array([[0., 0., 0.]], dtype=np.float32)
+        head = np.array([[0., 0., 2.]], dtype=np.float32)
+        Ms = _arrow_matrices_batch(tail, head, size=0.1)
+        M_single = self._single_matrix(tail[0], head[0])
+        assert M_single is not None
+        assert np.allclose(Ms[0], M_single, atol=1e-4)
+
+    def test_along_x_matches_single(self):
+        from pringle.renderer import _arrow_matrices_batch
+        tail = np.array([[0., 0., 0.]], dtype=np.float32)
+        head = np.array([[3., 0., 0.]], dtype=np.float32)
+        Ms = _arrow_matrices_batch(tail, head, size=0.1)
+        M_single = self._single_matrix(tail[0], head[0])
+        assert M_single is not None
+        assert np.allclose(Ms[0], M_single, atol=1e-4)
+
+    def test_antiparallel_matches_single(self):
+        from pringle.renderer import _arrow_matrices_batch
+        tail = np.array([[0., 0., 0.]], dtype=np.float32)
+        head = np.array([[0., 0., -1.]], dtype=np.float32)
+        Ms = _arrow_matrices_batch(tail, head, size=0.1)
+        M_single = self._single_matrix(tail[0], head[0])
+        assert M_single is not None
+        assert np.allclose(Ms[0], M_single, atol=1e-4)
+
+    def test_degenerate_zero_length_is_zero_matrix(self):
+        from pringle.renderer import _arrow_matrices_batch
+        tail = np.array([[1., 2., 3.]], dtype=np.float32)
+        head = np.array([[1., 2., 3.]], dtype=np.float32)
+        Ms = _arrow_matrices_batch(tail, head)
+        assert np.allclose(Ms[0], 0.0)
+
+    def test_batch_matches_single_for_random_arrows(self):
+        """Batch result must agree with per-arrow _arrow_matrix on valid arrows."""
+        from pringle.renderer import _arrow_matrices_batch, _arrow_matrix
+        rng = np.random.default_rng(42)
+        N = 64
+        tails = rng.uniform(-5, 5, (N, 3)).astype(np.float32)
+        heads = rng.uniform(-5, 5, (N, 3)).astype(np.float32)
+        Ms = _arrow_matrices_batch(tails, heads, size=0.15)
+        for i in range(N):
+            M_ref = _arrow_matrix(tails[i].astype(np.float64),
+                                  heads[i].astype(np.float64), size=0.15)
+            assert M_ref is not None, f"arrow {i} unexpectedly degenerate"
+            assert np.allclose(Ms[i], M_ref, atol=1e-4), f"mismatch at arrow {i}"
+
+    def test_output_shape(self):
+        from pringle.renderer import _arrow_matrices_batch
+        N = 10
+        tails = np.zeros((N, 3), dtype=np.float32)
+        heads = np.ones((N, 3), dtype=np.float32)
+        Ms = _arrow_matrices_batch(tails, heads)
+        assert Ms.shape == (N, 4, 4)
+        assert Ms.dtype == np.float32
+
+    def test_translation_column_is_tail(self):
+        from pringle.renderer import _arrow_matrices_batch
+        tail = np.array([[2., 3., 4.]], dtype=np.float32)
+        head = np.array([[2., 3., 6.]], dtype=np.float32)
+        Ms = _arrow_matrices_batch(tail, head)
+        assert np.allclose(Ms[0, :3, 3], [2., 3., 4.], atol=1e-5)
+
+    def test_homogeneous_row(self):
+        from pringle.renderer import _arrow_matrices_batch
+        tails = np.zeros((5, 3), dtype=np.float32)
+        heads = np.ones((5, 3), dtype=np.float32)
+        Ms = _arrow_matrices_batch(tails, heads)
+        # Bottom row must be [0, 0, 0, 1] for valid arrows
+        assert np.allclose(Ms[:, 3, :3], 0.0, atol=1e-6)
+        assert np.allclose(Ms[:, 3, 3], 1.0, atol=1e-6)
+
 
 # ---------------------------------------------------------------------------
 # Flow mode: consecutive-pair dispatch

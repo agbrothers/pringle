@@ -9,6 +9,28 @@ See [20-profiling-sop.md](20-profiling-sop.md) for the profiling standard operat
 
 ---
 
+## Vector-Field Animation Benchmark (2026-05-23, N=4096 arrows, 30 frames, GC disabled)
+
+Run via `python tests/bench_vector_field.py --n-arrows 4096 --frames 30 --no-gc`.
+
+Config: `examples/vector-field-animation.yml` — T slider animates at pingpong; each frame renders `anim = frames[T]` as an (N=4096, 6) arrow array (64×64 gradient-field snapshot).
+
+**Pre-PERF-017 baseline:**
+
+| Component | Mean ms | P95 ms | % of 33ms budget |
+|-----------|---------|--------|-----------------|
+| `anim = frames[T]` numpy index (cell eval) | **0.00** | 0.00 | 0% |
+| `_arrow_matrix` single call | 0.08 | 0.09 | 0.2% |
+| Python loop extrapolated for N=4096 | **~310** | — | **939%** |
+| `make_arrow_mesh` (loop + pygfx construction) | **285** | 303 | **864%** |
+| **Total frame** | **285** | 303 | **864%** |
+
+Effective frame rate: ~3.5 fps. Camera and canvas both unresponsive.
+
+**Post-PERF-017 (closed 2026-05-23):** `_arrow_matrices_batch` + `update_arrows` in-place path reduces per-frame cost from 285 ms → ~1.2 ms (246× speedup). See [19-closed-performance.md](19-closed-performance.md).
+
+---
+
 ## Measured Baseline (2026-05-19, n=128, 30 frames)
 
 Run via `python tests/bench_slider_animation.py --n 128 --frames 30`.

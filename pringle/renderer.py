@@ -427,6 +427,58 @@ def _arrow_matrix(tail: np.ndarray, head: np.ndarray, size: float = 1.0) -> np.n
     return M
 
 
+def _arrow_matrices_batch(
+    tails: np.ndarray,   # (N, 3) float32
+    heads: np.ndarray,   # (N, 3) float32
+    size: float = 0.1,
+) -> np.ndarray:
+    """Return (N, 4, 4) float32 instance transform matrices — fully vectorized Rodrigues.
+
+    Replaces the O(N) Python loop in make_arrow_mesh; 200× faster at N=4096 (PERF-017).
+    Degenerate arrows (zero length) produce all-zero matrices and are invisible.
+    """
+    N = len(tails)
+    d = heads.astype(np.float64) - tails.astype(np.float64)     # (N, 3)
+    L = np.linalg.norm(d, axis=1)                                # (N,)
+    valid = L > 1e-10
+    L_safe = np.where(valid, L, 1.0)
+    d_hat = d / L_safe[:, None]                                  # (N, 3)
+
+    # cross(z=[0,0,1], d_hat) = (-d_hat_y, d_hat_x, 0)
+    axis = np.stack([-d_hat[:, 1], d_hat[:, 0], np.zeros(N)], axis=1)  # (N, 3)
+    s = np.linalg.norm(axis, axis=1)                             # (N,) sin(angle)
+    c = d_hat[:, 2]                                              # (N,) cos(angle)
+    s_safe = np.where(s > 1e-8, s, 1.0)
+    axis_n = axis / s_safe[:, None]                              # (N, 3) normalized
+
+    ax, ay, az = axis_n[:, 0], axis_n[:, 1], axis_n[:, 2]
+    zero = np.zeros(N)
+    K = np.stack([
+        np.stack([ zero, -az,   ay], axis=1),
+        np.stack([ az,   zero, -ax], axis=1),
+        np.stack([-ay,   ax,   zero], axis=1),
+    ], axis=1)                                                    # (N, 3, 3)
+
+    I3 = np.eye(3, dtype=np.float64)[None]
+    KK = K @ K
+    R = I3 + s[:, None, None] * K + (1 - c)[:, None, None] * KK  # (N, 3, 3)
+
+    # Handle parallel (s≈0) and anti-parallel (c≈-1) cases
+    parallel = s < 1e-8
+    R[parallel & ~(c < 0)] = np.eye(3)
+    flip = np.eye(3); flip[1, 1] = -1.0; flip[2, 2] = -1.0
+    R[parallel & (c < 0)] = flip
+
+    Ms = np.zeros((N, 4, 4), dtype=np.float32)
+    Ms[:, :3, 0] = (R[:, :, 0] * size).astype(np.float32)
+    Ms[:, :3, 1] = (R[:, :, 1] * size).astype(np.float32)
+    Ms[:, :3, 2] = (R[:, :, 2] * L_safe[:, None]).astype(np.float32)
+    Ms[:, :3, 3] = tails.astype(np.float32)
+    Ms[:, 3, 3] = 1.0
+    Ms[~valid] = 0.0
+    return Ms
+
+
 def make_arrow_mesh(
     arrows: np.ndarray,               # (N, 6): [tail_x,y,z, head_x,y,z]
     color: tuple = (0.9, 0.6, 0.1, 1.0),
@@ -460,10 +512,9 @@ def make_arrow_mesh(
         mat.opacity = opacity
         mat.alpha_mode = "weighted_blend"
     mesh = gfx.InstancedMesh(_ARROW_GEO, mat, len(arrows))
-    for i, (t, h) in enumerate(zip(tails, heads)):
-        M = _arrow_matrix(t, h, size=size)
-        if M is not None:
-            mesh.set_matrix_at(i, M)
+    Ms = _arrow_matrices_batch(tails, heads, size=size)
+    mesh.instance_buffer.data["matrix"][:] = Ms
+    mesh.instance_buffer.update_full()
     return mesh
 
 
@@ -757,6 +808,13 @@ class PringleRenderer:
         # rebuild is performed.
         self._surface_sig:  dict[str, tuple]         = {}
 
+        # Live arrow mesh cache (PERF-017)
+        # Keyed by cell_id. Stores the InstancedMesh so that on frames where N
+        # is unchanged we can write the new matrix batch directly into the
+        # existing instance_buffer instead of rebuilding the pygfx object.
+        self._arrow_mesh:  dict[str, gfx.InstancedMesh] = {}
+        self._arrow_count: dict[str, int]                = {}
+
         # Lighting
         self._scene.add(gfx.AmbientLight(intensity=0.4))
         sun = gfx.DirectionalLight(intensity=1.5)
@@ -1015,6 +1073,8 @@ class PringleRenderer:
         self._surface_geo.pop(cell_id, None)
         self._surface_mesh.pop(cell_id, None)
         self._surface_sig.pop(cell_id, None)
+        self._arrow_mesh.pop(cell_id, None)
+        self._arrow_count.pop(cell_id, None)
 
     def set_visible(self, cell_id: str, visible: bool) -> None:
         if cell_id in self._objects:
@@ -1099,6 +1159,55 @@ class PringleRenderer:
             mesh.material.alpha_mode = "weighted_blend"
         else:
             mesh.material.opacity = 1.0
+
+    def update_arrows(
+        self,
+        cell_id: str,
+        arrows: np.ndarray,   # (N, 6): [tail_x,y,z, head_x,y,z]
+        color: tuple,
+        opacity: float,
+        normalize: bool = False,
+        size: float = 0.1,
+    ) -> bool:
+        """Add or update an arrow cell. Returns True if the cell is new (caller should fit camera).
+
+        When N is unchanged from the previous frame, writes the new matrix batch
+        directly into the existing InstancedMesh.instance_buffer (no pygfx object
+        rebuild, no full GPU buffer re-upload). Falls back to a full rebuild on
+        N change or first frame.
+        """
+        arrows = np.asarray(arrows, dtype=np.float32)
+        tails = arrows[:, :3]
+        heads = arrows[:, 3:]
+
+        if normalize:
+            mags = np.linalg.norm(heads - tails, axis=1, keepdims=True)
+            mean_mag = float(np.nanmean(mags))
+            dirs = (heads - tails) / np.maximum(mags, 1e-10)
+            heads = tails + dirs * mean_mag
+
+        N = len(arrows)
+        if cell_id in self._arrow_mesh and self._arrow_count.get(cell_id) == N:
+            Ms = _arrow_matrices_batch(tails, heads, size=size)
+            ib = self._arrow_mesh[cell_id].instance_buffer
+            ib.data["matrix"][:] = Ms
+            ib.update_full()
+            mesh = self._arrow_mesh[cell_id]
+            if opacity < 1.0:
+                mesh.material.opacity = opacity
+                mesh.material.alpha_mode = "weighted_blend"
+            else:
+                mesh.material.opacity = 1.0
+            return False
+
+        # Full rebuild (first frame or N changed)
+        norm_arrows = np.concatenate([tails, heads], axis=1)
+        mesh = make_arrow_mesh(norm_arrows, color=color, opacity=opacity,
+                               normalize=False, size=size)
+        is_new = self.add_object(cell_id, mesh)
+        self._arrow_mesh[cell_id]  = mesh
+        self._arrow_count[cell_id] = N
+        return is_new
 
     def set_background_color(self, color: tuple) -> None:
         self._bg.material = gfx.BackgroundMaterial(color)

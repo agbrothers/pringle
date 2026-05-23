@@ -29,7 +29,7 @@ _ICON_PATH = Path(__file__).parent / "assets" / "icon.png"
 from rendercanvas.qt import QRenderWidget
 
 import pygfx as gfx
-from pringle.renderer import PringleRenderer, make_line_mesh, make_scatter_mesh, make_arrow_mesh
+from pringle.renderer import PringleRenderer, make_line_mesh, make_scatter_mesh
 from pringle.grid import GridConfig, Grid, make_grid
 from pringle.evaluator import run_cell, CellResult
 from pringle.style import CellStyle
@@ -173,6 +173,15 @@ class PringleViewport(QRenderWidget):
             constraint_mask, constraint_values, z_raw,
             colormap, colormap_reversed,
         )
+        if is_new and cell_id not in self._seen_cell_ids:
+            self._seen_cell_ids.add(cell_id)
+            self._pr.fit_camera()
+
+    def update_arrows(
+        self, cell_id: str,
+        arrows, color, opacity, normalize=False, size=0.1,
+    ) -> None:
+        is_new = self._pr.update_arrows(cell_id, arrows, color, opacity, normalize, size)
         if is_new and cell_id not in self._seen_cell_ids:
             self._seen_cell_ids.add(cell_id)
             self._pr.fit_camera()
@@ -668,9 +677,8 @@ class PringleWindow(QMainWindow):
                 pts = result.data
                 if len(pts) >= 2:
                     arrows = np.concatenate([pts[:-1], pts[1:]], axis=1)  # (N-1, 6)
-                    obj = make_arrow_mesh(arrows, color=style.color, opacity=style.opacity,
-                                         normalize=style.normalize_arrows, size=style.point_size)
-                    vp.add_object(cell_id, obj)
+                    vp.update_arrows(cell_id, arrows, color=style.color, opacity=style.opacity,
+                                     normalize=style.normalize_arrows, size=style.point_size)
                 else:
                     vp.remove_object(cell_id)
             else:
@@ -688,9 +696,8 @@ class PringleWindow(QMainWindow):
                     data[:, :2], np.zeros(len(data), dtype=np.float32),
                     data[:, 2:], np.zeros(len(data), dtype=np.float32),
                 ])
-            obj = make_arrow_mesh(data, color=style.color, opacity=style.opacity,
-                                  normalize=style.normalize_arrows, size=style.point_size)
-            vp.add_object(cell_id, obj)
+            vp.update_arrows(cell_id, data, color=style.color, opacity=style.opacity,
+                             normalize=style.normalize_arrows, size=style.point_size)
 
         else:
             # No renderable output (comment, slider, error, or hidden) — clear

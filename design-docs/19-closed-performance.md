@@ -8,6 +8,31 @@ See [20-profiling-sop.md](20-profiling-sop.md) for the profiling standard operat
 
 ---
 
+### PERF-017 — `make_arrow_mesh` Python loop — 285ms per frame for N=4096 arrows
+**Status:** Closed (fixed 2026-05-23)  
+**Priority:** CRITICAL  
+**Measured cost before:** 285 ms per frame for N=4096 arrows; ~3.5 fps; camera unresponsive
+
+**Root cause:** `make_arrow_mesh` iterated over every arrow with a Python `for` loop calling `_arrow_matrix` (a numpy op on 3-element arrays) then `mesh.set_matrix_at(i, M)` per arrow. Python overhead vastly exceeded the actual computation: ~0.08 ms × 4096 = ~285 ms per frame, blocking the Qt main thread. Additionally `add_object` destroyed and recreated the `gfx.InstancedMesh` every frame, incurring a full GPU buffer re-upload even though only the instance transforms changed.
+
+**Fix — two parts:**
+
+**Part A — vectorized `_arrow_matrices_batch`:** Added `_arrow_matrices_batch(tails, heads, size)` to `renderer.py`. Implements the same Rodrigues rotation formula as `_arrow_matrix` using numpy operations over `(N, 3)` / `(N, 3, 3)` arrays — no Python loop. `make_arrow_mesh` now calls this once, writes the result into `mesh.instance_buffer.data["matrix"]`, and calls `update_full()`. The old per-arrow loop and `set_matrix_at` are gone.
+
+**Part B — `update_arrows` in-place path:** Added `PringleRenderer.update_arrows(cell_id, arrows, ...)` analogous to `update_surface` (PERF-002). Caches the `InstancedMesh` in `_arrow_mesh` and the arrow count in `_arrow_count`. On frames where N is unchanged, writes the new matrix batch directly into the existing `instance_buffer` — no `add_object`, no pygfx object rebuild, no full GPU buffer upload. Falls back to full rebuild on N change or first frame. Cache is cleared in `remove_object`. `PringleViewport.update_arrows` delegates to the renderer and handles camera fitting. Both `vectors`/`vectors_2d` render types and scatter flow-mode arrows (`scatter_render_mode="arrows"`) use this path.
+
+**Measured outcome (benchmark from `tests/bench_vector_field.py`, N=4096 arrows):**
+
+| Path | Mean ms | Speedup |
+|------|---------|---------|
+| Before: `make_arrow_mesh` Python loop | 285 ms | 1× |
+| After: vectorized batch only | ~1.37 ms | ~208× |
+| After: in-place buffer update | ~1.16 ms | **~246×** |
+
+**Effective frame rate:** ~3.5 fps → **~30+ fps**. Camera responsiveness fully restored.
+
+---
+
 ### PERF-002 — Full GPU geometry recreated on every surface update
 **Status:** Closed (fixed 2026-05-21)  
 **Priority:** CRITICAL  
