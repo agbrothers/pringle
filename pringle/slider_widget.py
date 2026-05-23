@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import uuid
 from typing import Callable
+import numpy as np
 from PyQt6.QtWidgets import (
     QAbstractSpinBox, QWidget, QHBoxLayout, QLabel, QLineEdit, QSlider, QDoubleSpinBox,
     QPushButton, QFrame, QVBoxLayout, QSizePolicy,
@@ -52,6 +53,70 @@ class _SpinBox(QDoubleSpinBox):
         if v == int(v) and abs(v) < 1e15:
             return str(int(v))
         return f"{v:g}"
+
+
+def _fmt(v: float) -> str:
+    """Format a float cleanly: integers without decimal point, others with %g."""
+    if v == int(v) and abs(v) < 1e15:
+        return str(int(v))
+    return f"{v:g}"
+
+
+class _ExprBox(QLineEdit):
+    """Numeric input that also accepts expression strings resolvable to a scalar."""
+    committed = pyqtSignal(float)
+
+    def __init__(self, value: float = 0.0, parent=None):
+        super().__init__(_fmt(value), parent)
+        self._raw_expr: str | None = None
+        self._last_valid: float = value
+        self.editingFinished.connect(self._on_commit)
+
+    def set_resolve(self, fn: Callable[[str], float | None]) -> None:
+        self._resolve = fn
+
+    def value(self) -> float:
+        return self._last_valid
+
+    def setValue(self, v: float) -> None:
+        self._last_valid = v
+        self._raw_expr = None
+        self.setText(_fmt(v))
+
+    def expr(self) -> str | None:
+        return self._raw_expr
+
+    def _on_commit(self) -> None:
+        text = self.text().strip()
+        try:
+            v = float(text)
+            self._last_valid = v
+            self._raw_expr = None
+            self.committed.emit(v)
+            return
+        except ValueError:
+            pass
+        resolved = self._resolve(text) if hasattr(self, "_resolve") else None
+        if resolved is not None and isinstance(resolved, (int, float, np.floating, np.integer)) and np.isfinite(resolved):
+            self._last_valid = float(resolved)
+            self._raw_expr = text
+            self.setText(text)
+            self.committed.emit(self._last_valid)
+        else:
+            self.setText(self._raw_expr if self._raw_expr else _fmt(self._last_valid))
+            self._indicate_error()
+
+    def re_resolve(self, fn: Callable[[str], float | None]) -> None:
+        if self._raw_expr is None:
+            return
+        resolved = fn(self._raw_expr)
+        if resolved is not None and isinstance(resolved, (int, float, np.floating, np.integer)) and np.isfinite(resolved):
+            self._last_valid = float(resolved)
+            self.committed.emit(self._last_valid)
+
+    def _indicate_error(self) -> None:
+        self.setStyleSheet("border: 1px solid #c0392b;")
+        QTimer.singleShot(500, lambda: self.setStyleSheet(""))
 
 
 class SliderWidget(QWidget):
@@ -176,11 +241,9 @@ class SliderWidget(QWidget):
         self._mode_btn.clicked.connect(self._on_mode_toggled)
         row2.addWidget(self._mode_btn)
 
-        self._min_box = _SpinBox()
-        self._min_box.setRange(-1e6, 1e6)
-        self._min_box.setValue(self._min)
+        self._min_box = _ExprBox(self._min)
         self._min_box.setFixedWidth(60)
-        self._min_box.valueChanged.connect(self._on_range_changed)
+        self._min_box.committed.connect(lambda _: self._on_range_changed())
         row2.addWidget(self._min_box)
 
         self._slider = QSlider(Qt.Orientation.Horizontal)
@@ -189,11 +252,9 @@ class SliderWidget(QWidget):
         self._slider.valueChanged.connect(self._on_slider_moved)
         row2.addWidget(self._slider, 1)
 
-        self._max_box = _SpinBox()
-        self._max_box.setRange(-1e6, 1e6)
-        self._max_box.setValue(self._max)
+        self._max_box = _ExprBox(self._max)
         self._max_box.setFixedWidth(60)
-        self._max_box.valueChanged.connect(self._on_range_changed)
+        self._max_box.committed.connect(lambda _: self._on_range_changed())
         row2.addWidget(self._max_box)
 
         sep = QLabel("·")
@@ -204,9 +265,7 @@ class SliderWidget(QWidget):
         step_lbl.setStyleSheet("color: #888; font-size: 10px;")
         row2.addWidget(step_lbl)
 
-        self._step_box = _SpinBox()
-        self._step_box.setRange(1e-6, 1e6)
-        self._step_box.setValue(self._step)
+        self._step_box = _ExprBox(self._step)
         self._step_box.setFixedWidth(60)
         row2.addWidget(self._step_box)
 
@@ -259,6 +318,27 @@ class SliderWidget(QWidget):
     def set_name_validator(self, fn: Callable[[str], bool] | None) -> None:
         """Set a callback used to reject names already claimed by sibling sliders."""
         self._validate_name = fn
+
+    def set_resolver(self, fn: Callable[[str], float | None]) -> None:
+        """Inject namespace resolver into all bound boxes."""
+        self._min_box.set_resolve(fn)
+        self._max_box.set_resolve(fn)
+        self._step_box.set_resolve(fn)
+
+    def re_resolve(self, fn: Callable[[str], float | None]) -> None:
+        """Re-evaluate stored expression strings against a fresh namespace."""
+        self._min_box.re_resolve(fn)
+        self._max_box.re_resolve(fn)
+        self._step_box.re_resolve(fn)
+
+    def min_expr(self) -> str | None:
+        return self._min_box.expr()
+
+    def max_expr(self) -> str | None:
+        return self._max_box.expr()
+
+    def step_expr(self) -> str | None:
+        return self._step_box.expr()
 
     # ------------------------------------------------------------------
     # Name editing

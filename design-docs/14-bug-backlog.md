@@ -58,6 +58,114 @@ python -m pytest tests/ --ignore=tests/test_rendering.py \
 
 ---
 
+### BUG-040 — RuntimeWarning: overflow in float32 cast for vector-field-trajectory data
+
+**Status:** Open  
+**Logged:** 2026-05-23
+
+**Description:**  
+Running `vector-field-trajectory.yml` prints the following warning to the console:
+
+```
+/Users/greysonbrothers/code/pringle/pringle/evaluator.py:551: RuntimeWarning: overflow encountered in cast
+  data = np.asarray(data, dtype=np.float32)
+```
+
+The application continues, but overflowed values are silently replaced with ±`inf` in the GPU buffer, which can produce rendering artifacts (NaN geometry, invisible faces, or stray polygons).
+
+**Reproduction:**
+1. Open `examples/vector-field-trajectory.yml`.
+2. Observe the warning on stdout.
+
+**Root cause:**  
+`evaluator.py:551` casts the evaluated data to `float32` unconditionally. If the expression produces values outside the float32 range (`|x| > 3.4 × 10³⁸`), numpy emits `RuntimeWarning: overflow encountered in cast` and replaces the out-of-range values with `±inf`. The vector-field-trajectory example likely accumulates trajectory positions over many time steps, producing large values in at least one component.
+
+**Fix directions:**
+- Clamp or clip values to a safe float32 range before casting, and surface a warning on the cell if any value was clipped.
+- Alternatively, detect the overflow after cast (`np.any(np.isinf(data))`) and set `result.warning` with the count of overflowed values so the user is informed.
+- Review the trajectory computation in `vector-field-trajectory.yml` to check whether the overflow is a data error (e.g. unbounded trajectory escaping the domain) or just values that are legitimately large but expected.
+
+**Affected files:**  
+- `pringle/evaluator.py:551`
+
+---
+
+### BUG-041 — SyntaxError in recurrence RHS during mid-edit causes unhandled crash (Abort trap: 6)
+
+**Status:** Open  
+**Logged:** 2026-05-23  
+**Possibly related:** BUG-038
+
+**Description:**  
+While editing a recurrence cell (specifically when adding `x` as a function argument), the app crashes with `Abort trap: 6` instead of showing an inline error. The traceback shows a `SyntaxError` during `compile()` inside `execute_recurrence`, which propagates unhandled up through `_eval_cell` → `_rebuild_namespace` → `_on_cell_changed`.
+
+**Traceback:**
+```
+File ".../cell_list.py", line 876, in _on_cell_changed
+    self._rebuild_namespace()
+File ".../cell_list.py", line 768, in _eval_cell
+    arr, warn = execute_recurrence(...)
+File ".../recurrence.py", line 70, in execute_recurrence
+    code = compile(rhs, "<recurrence>", "eval")
+  File "<recurrence>", line 1
+    path[n-1] - dt*
+SyntaxError: invalid syntax
+Abort trap: 6
+```
+
+**Root cause:**  
+`execute_recurrence` calls `compile(rhs, "<recurrence>", "eval")` without wrapping it in a `try/except SyntaxError`. The `SyntaxError` propagates out of `_eval_cell`, which also doesn't catch it, and the exception reaches a layer (likely inside wgpu / pygfx internals) that causes a fatal abort instead of a recoverable error.
+
+The immediate trigger is a partially-typed RHS (`path[n-1] - dt*`) — mid-edit state where the user had not yet finished the expression. The debounce or reactive evaluation fired before editing was complete.
+
+**Note on `x` as argument:** The user noted this occurred while adding `x` as a function argument. It is possible the edit produced an intermediate parse-invalid state in the recurrence RHS, but the crash mechanism is the uncaught `SyntaxError` in `execute_recurrence` regardless of what specifically triggered the partial expression.
+
+**Fix:**  
+Wrap the `compile()` call in `recurrence.py` with `try/except SyntaxError` and return it as a user-visible warning on the cell, consistent with how other eval errors are handled:
+
+```python
+try:
+    code = compile(rhs, "<recurrence>", "eval")
+except SyntaxError as e:
+    raise ValueError(f"Syntax error in recurrence rule: {e}") from e
+```
+
+The `ValueError` will then be caught by the existing exception handler in `_eval_cell`, which sets `result.error` and returns without crashing.
+
+**Tests to add:**
+- A recurrence cell with an incomplete RHS (e.g. `arr[n] = arr[n-1] +`) should produce `result.error` containing a syntax error message, not raise an unhandled exception.
+
+**Affected files:**  
+- `pringle/recurrence.py:70` — `compile()` call needs `try/except SyntaxError`
+
+---
+
+### BUG-042 — `t` cannot be used as a reliable integer index
+
+**Status:** Open  
+**Logged:** 2026-05-23
+
+**Description:**  
+`t` cannot be used as a reliable integer array index in expressions, particularly in patterns analogous to how `time` is used in `examples/vector-field-trajectory.yml` (e.g. `path[t]` or `path[int(t)]`). This is confusing because `time` (a slider) works cleanly as an index while `t` (a magic spatial variable) does not.
+
+**Root cause (likely):**  
+`t` is a magic spatial variable injected by the evaluation grid — it is a 2D float array of shape `(n, n)`, not a scalar. Attempting to use it as an array index either raises an `IndexError` (non-integer index), produces a broadcast over the 2D grid, or returns a value that is unexpectedly shaped. Additionally, if the user defines a slider named `t`, it shadows the magic `t` and the interaction between the slider scalar and the grid variable may be non-obvious or inconsistent.
+
+A further issue: even when `t` is coerced via `int(t)`, floating-point precision at certain slider values can cause `int(1.9999...)` to undercount by 1, producing off-by-one indexing that is hard to debug.
+
+**Expected behavior:**  
+- If the user defines a slider `t`, it should be a scalar and usable as `int(t)` as an index without precision surprises.
+- If no slider `t` is defined, attempting to use the magic `t` grid as an index should produce a clear warning rather than a confusing broadcast result or silent error.
+- Documentation should clarify that `t` as a magic variable is the grid time axis and is not an integer counter; users wanting an integer animation frame counter should use a slider with `int()` coercion or use the `n` loop index in recurrence cells.
+
+**Affected files:**  
+- `pringle/namespace.py` — magic variable injection
+- `pringle/evaluator.py` — possible conflict between slider `t` and magic `t`
+- `design-docs/03-expression-evaluation.md` — documentation clarification
+- `design-docs/07-cell-types-and-blocks.md` — magic variable table
+
+---
+
 ### BUG-038 — Assigning to a reserved spatial variable crashes the app instead of warning the user
 
 **Status:** Open  

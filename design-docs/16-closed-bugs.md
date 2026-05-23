@@ -6,6 +6,17 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-039 (crosshair) — Zooming disconnects camera from crosshair after WASD panning
+**Status:** Closed (fixed 2026-05-23)
+
+**Root cause:** `_pan_target` in `renderer.py` called `self._controller.target = new_target` (which internally calls `camera.look_at(new_target)`) before updating `self._camera.local.position`. Because `look_at` reads the camera's current world position at call time, it computed the look direction from the OLD camera position toward the new (shifted) target — introducing a small tilt per step. After many WASD frames the tilt accumulated into a visible misalignment: the camera no longer pointed exactly at the orbit target, so the crosshair (at the target in world space) projected slightly off screen-center. The effect was most noticeable after zooming (zoom moves the camera without correcting orientation).
+
+**Fix:** In `renderer.py:_pan_target`, moved `self._camera.local.position = cam_pos + delta` to execute BEFORE `self._controller.target = new_target`. With the camera already at its new position, `look_at` computes the correct direction (`new_target − new_cam_pos = old_target − old_cam_pos`, unchanged), preventing any per-step drift.
+
+**Tests:** `tests/test_bug039.py` — `test_pan_target_no_drift` (fixed impl: <0.001° after 120 steps), `test_pan_target_buggy_drifts` (old impl: >0.1° confirms regression coverage).
+
+---
+
 ### BUG-039 — Typing in comment cells triggers a full namespace rebuild on every keystroke
 **Status:** Closed (fixed 2026-05-22)
 

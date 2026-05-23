@@ -6,6 +6,22 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-039 — Compact per-cell RNG seed (replaces full MT19937 state in YAML)
+**Status:** Closed (implemented 2026-05-23)
+
+**Implementation:**
+- **`cell_widget.py`**: Added `self._rng_seed: int = 0` to `CellWidget.__init__`.
+- **`cell_list.py` (`_rebuild_namespace`)**: Replaced the `_pending_rng_state`/`_rng_state` MT state save/restore block with `shared["random"] = np.random.RandomState(cell._rng_seed)`. After the loop, `shared.pop("random", None)` prevents the per-cell RandomState from leaking into `_shared_ns`.
+- **`cell_list.py` (`_on_run_requested`)**: Replaced `cell._rng_state = None` with `cell._rng_seed = (cell._rng_seed + 1) % 2**32`.
+- **`session.py` (`cell_to_dict`)**: Replaced the 4-field MT block (`rng_state`, `rng_pos`, `rng_has_gauss`, `rng_gauss`) with `base["rng_seed"] = getattr(cell, "_rng_seed", 0)`.
+- **`session.py` (`restore_cell_list`)**: Old sessions with `rng_state` key set `cell._rng_seed = 0` (migration); new sessions with `rng_seed` restore the integer; absent key defaults to 0.
+
+**Deviation from spec:** None. The per-cell `RandomState` is injected via `shared["random"]` (overriding the module-level alias from `build_equation_namespace()`) rather than a new parameter on `run_cell`. This avoids changing the evaluator signature and achieves the same result since `local_ns.update(shared_namespace)` runs before `exec`.
+
+**Tests:** `tests/test_feat039.py` — 9 tests covering: same seed → identical draws across rebuilds; different seeds → different draws; → press increments seed; seed wraps at 2³²; global `np.random` not mutated by cell eval; `random` not in `_shared_ns` after rebuild; `rng_seed` round-trips through `cell_to_dict`/`restore_cell_list`; old `rng_state` key migrates to seed 0; new `rng_seed` key restores correctly.
+
+---
+
 ### FEAT-050 — Shape preview for all array-valued assignment cells
 **Status:** Closed (implemented 2026-05-23)
 

@@ -250,3 +250,72 @@ Let me know if anything is unclear or if you have any additional questions.
 -------------------------------
 
 claude --append-system-prompt "$(cat ~/roles/planner.md)"
+
+-------------------------------
+
+
+Is there a less verbose way to store the rng seed? Can we manually seed a local rng for each set? Increment the seed for the cell rng each run? That way we only save the cell rng seed. 
+
+Vectors colorable by cmap values. Vectors colorable by magnitude. This ties into conditional coloring ability. 
+
+zooming causes camera to disconnect from crosshair
+
+Negative constants don't yield sliders. Constants outside of slider default bounds don't yield constants. Bounds should be dynamic and slider formatting applied only once the user hits enter and the value is a scalar (int/float)
+
+Pressing ENTER in any cell should add a new equation cell beneath. SHIFT+ENTER to add a newline in a cell. Then CMD+ENTER to add folder cell below if that's possible. 
+
+time animation doesn't work with `t`
+
+/Users/greysonbrothers/code/pringle/pringle/evaluator.py:551: RuntimeWarning: overflow encountered in cast
+  data = np.asarray(data, dtype=np.float32)
+
+Traceback (most recent call last):
+  File "/Users/greysonbrothers/code/pringle/pringle/cell_list.py", line 876, in _on_cell_changed
+    self._rebuild_namespace()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/greysonbrothers/code/pringle/pringle/cell_list.py", line 716, in _rebuild_namespace
+    result = self._eval_cell(cell, shared)
+  File "/Users/greysonbrothers/code/pringle/pringle/cell_list.py", line 768, in _eval_cell
+    arr, warn = execute_recurrence(
+                ~~~~~~~~~~~~~~~~~~^
+        arr_name, arr, initial_exprs, rule_expr,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        {**build_equation_namespace(), **shared, **result.exports},
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/greysonbrothers/code/pringle/pringle/recurrence.py", line 70, in execute_recurrence
+    code = compile(rhs, "<recurrence>", "eval")  # noqa: S307
+  File "<recurrence>", line 1
+    path[n-1] - dt*
+SyntaxError: invalid syntax
+Abort trap: 6
+
+
+
+
+
+^C^CReceived signal Interrupt: 2
+^CTraceback (most recent call last):
+  File "/Users/greysonbrothers/code/pringle/pringle/cell_list.py", line 868, in _on_cell_changed
+    self._rebuild_namespace()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/greysonbrothers/code/pringle/pringle/cell_list.py", line 718, in _rebuild_namespace
+    self._on_cell_result(cell.cell_id, result, cell.style)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/greysonbrothers/code/pringle/pringle/app.py", line 691, in _on_cell_result
+    obj = make_arrow_mesh(data, color=style.color, opacity=style.opacity,
+                          normalize=style.normalize_arrows, size=style.point_size)
+  File "/Users/greysonbrothers/code/pringle/pringle/renderer.py", line 462, in make_arrow_mesh
+    mesh = gfx.InstancedMesh(_ARROW_GEO, mat, len(arrows))
+  File "/Users/greysonbrothers/code/pringle/.venv/lib/python3.13/site-packages/pygfx/objects/_instanced.py", line 102, in __init__
+    super().__init__(geometry, material, count, **kwargs)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/greysonbrothers/code/pringle/.venv/lib/python3.13/site-packages/pygfx/objects/_more.py", line 232, in __init__
+    super().__init__(geometry, material, *args, **kwargs)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/greysonbrothers/code/pringle/.venv/lib/python3.13/site-packages/pygfx/objects/_instanced.py", line 53, in __init__
+    instance_infos[instance_index]["global_id"] = id
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+KeyboardInterrupt
+Abort trap: 6

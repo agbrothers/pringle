@@ -167,6 +167,28 @@ def _ns_value(v: float) -> int | float:
     return int(v) if v == int(v) else v
 
 
+def _make_resolver(shared_ns: dict):
+    """Create a scalar-only namespace resolver for expression bounds (FEAT-045).
+
+    Merges equation-namespace scalar constants (pi, e, inf, nan) with slider
+    values from shared_ns; shared_ns takes precedence on name collisions.
+    """
+    from pringle.namespace import build_equation_namespace
+    eq_scalars = {k: v for k, v in build_equation_namespace().items()
+                  if isinstance(v, (int, float, np.floating, np.integer))}
+    safe_ns = {**eq_scalars, **{k: v for k, v in shared_ns.items()
+               if isinstance(v, (int, float, np.floating, np.integer))}}
+    def resolve(expr: str):
+        try:
+            result = eval(expr, {"__builtins__": {}}, safe_ns)
+            if isinstance(result, (int, float, np.floating, np.integer)):
+                return float(result)
+        except Exception:
+            pass
+        return None
+    return resolve
+
+
 class CellListWidget(QWidget):
     """
     Scrollable ordered list of CellWidget objects.
@@ -180,6 +202,8 @@ class CellListWidget(QWidget):
 
     # Dispatches a (generation, shared, grid, specs) work package to the eval worker.
     eval_requested = pyqtSignal(object)
+    # Emitted after _rebuild_namespace completes and slider bounds are re-resolved.
+    namespace_rebuilt = pyqtSignal()
 
     def __init__(
         self,
@@ -392,6 +416,7 @@ class CellListWidget(QWidget):
             cell.name_changed.connect(self._on_slider_name_changed)
             cell.set_name_validator(self._make_name_validator(cell))
             cell.delete_requested.connect(self._on_delete_requested)
+            cell.set_resolver(_make_resolver(self._shared_ns))
         else:
             cell = CellWidget(style=style)
             cell.content_changed.connect(self._on_cell_changed)
@@ -674,19 +699,9 @@ class CellListWidget(QWidget):
                 self._on_cell_result(cell.cell_id, CellResult(), cell.style)
                 continue
 
-            # RNG state: ensure random expressions (e.g. M = random.random((10,2)))
-            # produce the same draws on every rebuild and reproduce correctly after
-            # session load. On first eval, capture the pre-run state. On subsequent
-            # evals, restore it so draws are identical regardless of MT position.
-            pending = getattr(cell, "_pending_rng_state", None)
-            if pending is not None:
-                cell._rng_state = pending
-                cell._pending_rng_state = None
-            saved = getattr(cell, "_rng_state", None)
-            if saved is not None:
-                np.random.set_state(saved)
-            else:
-                cell._rng_state = np.random.get_state()
+            # Per-cell RNG: inject a fresh RandomState seeded by _rng_seed so draws
+            # are reproducible on every rebuild without mutating global np.random state.
+            shared["random"] = np.random.RandomState(getattr(cell, "_rng_seed", 0))
 
             result = self._eval_cell(cell, shared)
             cell._last_result = result
@@ -704,8 +719,15 @@ class CellListWidget(QWidget):
             else:
                 self._on_cell_result(cell.cell_id, CellResult(), cell.style)
 
+        shared.pop("random", None)
         self._shared_ns = shared
         self.last_eval_ms = (time.monotonic() - t0) * 1000
+
+        _resolver = _make_resolver(self._shared_ns)
+        for cell in self._cells:
+            if isinstance(cell, SliderWidget):
+                cell.re_resolve(_resolver)
+        self.namespace_rebuilt.emit()
 
     def _eval_cell(self, cell: CellWidget, shared: dict) -> CellResult:
         """Evaluate one cell against the current shared namespace + grid."""
@@ -795,7 +817,8 @@ class CellListWidget(QWidget):
         """Force re-evaluate a data-mode CellWidget (→ button or focus-out)."""
         idx = self._index_of(cell_id)
         if idx >= 0:
-            self._cells[idx]._rng_state = None  # allow fresh draws on explicit re-run
+            cell = self._cells[idx]
+            cell._rng_seed = (cell._rng_seed + 1) % 2**32  # new seed → different draws
         self._rebuild_namespace()
 
     def _on_equation_cell_visibility_toggled(self, cell_id: str, _is_visible: bool) -> None:

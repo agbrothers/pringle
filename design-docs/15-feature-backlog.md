@@ -7,6 +7,76 @@ See [17-closed-features.md](17-closed-features.md) for implemented features.
 
 ---
 
+### FEAT-051 — Keyboard shortcuts: ENTER adds equation cell, SHIFT+ENTER adds newline, CMD+ENTER adds folder cell
+
+**Status:** Open  
+**Logged:** 2026-05-23
+
+**Description:**  
+Add three keyboard shortcuts in focused cells that control cell creation:
+
+| Key | Action |
+|---|---|
+| `Enter` | Add a new empty equation cell directly below the focused cell; focus moves to the new cell |
+| `Shift+Enter` | Insert a literal newline at the cursor position within the focused cell (current behavior of `Enter`, or close to it) |
+| `Cmd+Enter` / `Ctrl+Enter` | Add a new empty folder cell directly below the focused cell; focus moves to the new cell |
+
+This mirrors the behavior of Desmos and many REPL-style editors, where Enter is "new cell" and Shift+Enter is "newline in this cell."
+
+**Motivation:**  
+The current Enter behavior in `CellTextEdit` inserts a newline, which is appropriate for multi-line expressions but creates friction for the common case of adding consecutive single-line cells. Reversing the default — Enter = new cell, Shift+Enter = newline — matches user expectations from Desmos and makes cell-by-cell entry flow naturally.
+
+**UX notes:**
+- The new cell should be inserted immediately after the currently focused cell in the visual/cell list order.
+- Focus should automatically move to the new cell's text input so the user can type immediately.
+- If the focused cell is inside a folder, the new cell should be added inside the same folder.
+- Cmd+Enter adding a folder cell is "if possible" — if folder insertion at an arbitrary position proves complex, this part can be deferred.
+
+**Implementation sketch (`cell_widget.py`, `CellTextEdit.keyPressEvent`):**
+
+```python
+# Before the super() call:
+if key == Qt.Key.Key_Return and not (mod & Qt.KeyboardModifier.ShiftModifier):
+    # Enter without shift → request new cell below
+    self.new_cell_requested.emit()  # new signal on CellTextEdit
+    return
+# Shift+Enter falls through to super() → inserts newline (existing behavior)
+
+if key == Qt.Key.Key_Return and (mod & Qt.KeyboardModifier.ControlModifier):
+    # Cmd/Ctrl+Enter → request new folder cell below
+    self.new_folder_requested.emit()  # new signal on CellTextEdit
+    return
+```
+
+Note: `Qt.KeyboardModifier.ControlModifier` maps to `Cmd` on macOS and `Ctrl` on Linux/Windows.
+
+**`CellWidget` → `CellListWidget` wiring:**  
+`CellWidget` emits `new_cell_requested` / `new_folder_requested` signals (connected from `CellTextEdit`). `CellListWidget._on_cell_changed` handler (or a new dedicated slot) calls `_insert_cell_after(cell_id)` / `_insert_folder_after(cell_id)` which inserts a new `CellWidget` or `FolderCellWidget` immediately after the given cell in `_cells` and `_layout`, then calls `focus()` on the new cell.
+
+**Signal chain:**
+```
+CellTextEdit.keyPressEvent
+  → CellWidget.new_cell_requested  (propagated from CellTextEdit signal)
+  → CellListWidget._on_new_cell_requested(cell_id)
+    → _insert_equation_cell_after(cell_id)
+    → new_cell.focus()
+```
+
+**Edge cases:**
+- Empty focused cell + Enter: still creates a new cell below (don't skip creation for empty cells).
+- Last cell in list: append to end.
+- Inside a folder: new cell is inserted inside the folder, after the focused cell. If this is complex to implement cleanly, inserting after the folder as a fallback is acceptable in v1.
+- Comment cells: Enter should also create a new equation cell below (not a comment cell).
+
+**Tests to add:**
+- Pressing Enter in an equation cell creates a new `CellWidget` immediately after it and focuses it.
+- Pressing Shift+Enter inserts a newline in the current cell (no new cell created).
+- Pressing Cmd+Enter creates a new folder cell immediately after the focused cell (if implemented).
+- Enter on the last cell in the list appends a new cell at the end.
+- Enter with a focused cell inside a folder inserts the new cell in the correct position.
+
+---
+
 ### FEAT-048 — Cross-cell find and replace
 
 **Status:** Open  
@@ -242,7 +312,7 @@ The existing `_maybe_morph_to_comment` fires whenever any cell's content changes
 
 ### FEAT-039 — Compact per-cell RNG seed (replace full MT19937 state in YAML)
 
-**Status:** Open  
+**Status:** Closed (implemented 2026-05-23)  
 **Logged:** 2026-05-22
 
 **Description:**  

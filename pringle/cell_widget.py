@@ -288,6 +288,7 @@ class CellWidget(QWidget):
         self._data_mode: bool = False
         self._is_vector_cell: bool = False
         self._debounce_connected: bool = True  # textChanged → debounce connected
+        self._rng_seed: int = 0  # increments on each → press; seeds per-cell RandomState
 
         self._build_ui()
         self._debounce = QTimer(self)

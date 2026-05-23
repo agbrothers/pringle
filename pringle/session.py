@@ -108,6 +108,12 @@ def cell_to_dict(cell, folder_id: str | None = None) -> dict:
         base["min_val"] = float(cell._min)
         base["max_val"] = float(cell._max)
         base["step"] = float(cell._step_box.value())
+        if cell._min_box.expr():
+            base["min_expr"] = cell._min_box.expr()
+        if cell._max_box.expr():
+            base["max_expr"] = cell._max_box.expr()
+        if cell._step_box.expr():
+            base["step_expr"] = cell._step_box.expr()
         base["is_playing"] = cell._play_btn.isChecked()
         base["anim_mode"] = cell._anim_mode
         base["sub_cells"] = []
@@ -121,12 +127,7 @@ def cell_to_dict(cell, folder_id: str | None = None) -> dict:
             {"type": s.sub_type(), "source": s.source()}
             for s in cell._sub_cells
         ]
-        rng_state = getattr(cell, "_rng_state", None)
-        if rng_state is not None:
-            base["rng_state"] = rng_state[1].tolist()
-            base["rng_pos"] = int(rng_state[2])
-            base["rng_has_gauss"] = int(rng_state[3])
-            base["rng_gauss"] = float(rng_state[4])
+        base["rng_seed"] = getattr(cell, "_rng_seed", 0)
 
     return base
 
@@ -277,8 +278,18 @@ def restore_cell_list(
             cell._max_box.setValue(float(data.get("max_val", 10.0)))
             if "step" in data:
                 cell._step_box.setValue(float(data["step"]))
-            cell._spinbox.setRange(cell._min, cell._max)
+            cell._on_range_changed()  # sync cell._min/_max from boxes
             cell.set_value(float(data.get("value", cell.value)), emit=False)
+            # Restore expression strings (displayed as-is; re-resolved on first rebuild)
+            if "min_expr" in data:
+                cell._min_box._raw_expr = data["min_expr"]
+                cell._min_box.setText(data["min_expr"])
+            if "max_expr" in data:
+                cell._max_box._raw_expr = data["max_expr"]
+                cell._max_box.setText(data["max_expr"])
+            if "step_expr" in data:
+                cell._step_box._raw_expr = data["step_expr"]
+                cell._step_box.setText(data["step_expr"])
             if "anim_mode" in data:
                 cell.set_anim_mode(data["anim_mode"])
             if data.get("is_playing", False):
@@ -294,12 +305,12 @@ def restore_cell_list(
                     sub = cell.add_sub_cell(sub_data.get("type", "constraint"))
                     sub._edit.setPlainText(sub_data.get("source", ""))
                 if "rng_state" in data:
-                    arr = np.array(data["rng_state"], dtype=np.uint32)
-                    cell._pending_rng_state = (
-                        "MT19937", arr, int(data["rng_pos"]),
-                        int(data.get("rng_has_gauss", 0)),
-                        float(data.get("rng_gauss", 0.0)),
-                    )
+                    # Old MT19937 full-state format — migrate: discard state, start at seed 0
+                    cell._rng_seed = 0
+                elif "rng_seed" in data:
+                    cell._rng_seed = int(data["rng_seed"])
+                else:
+                    cell._rng_seed = 0
 
     cell_list._skip_folder_inference = False
     cell_list._skip_rebuild = False

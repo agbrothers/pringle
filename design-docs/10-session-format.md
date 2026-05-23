@@ -49,6 +49,7 @@ cells:
       colormap_reversed: false
       scatter_render_mode: "circles"    # "circles" | "line" | "spheres" | "arrows"
       normalize_arrows: false
+    rng_seed: 0                 # integer seed for per-cell RandomState; omitted = 0
     sub_cells:
       - type: constraint           # constraint | condition | initial_condition | recursion
         source: "x**2 + y**2 < 4"
@@ -61,6 +62,9 @@ cells:
     min_val: 0.0
     max_val: 10.0
     step: 0.1
+    min_expr: "b"        # optional: expression string for min; re-resolved on load
+    max_expr: "pi"       # optional: expression string for max
+    step_expr: "dt"      # optional: expression string for step
     is_playing: false
     anim_mode: "pingpong"   # "pingpong" | "loop"
     style:

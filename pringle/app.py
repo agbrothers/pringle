@@ -361,6 +361,7 @@ class PringleWindow(QMainWindow):
             grid=self._grid,
             eval_threaded=True,
         )
+        self._cell_list.namespace_rebuilt.connect(self._on_namespace_rebuilt)
         left_layout.addWidget(self._cell_list, 1)
 
         splitter.insertWidget(0, left)
@@ -488,6 +489,18 @@ class PringleWindow(QMainWindow):
                 cam.local.position = view["camera_position"]
                 cam.look_at(tgt)
                 self._viewport._pr._controller.target = tuple(tgt)
+            # Restore axis bound expression strings (values already set via set_bounds above)
+            for key, box in [
+                ("x_min_expr", self._view_settings._x_min),
+                ("x_max_expr", self._view_settings._x_max),
+                ("y_min_expr", self._view_settings._y_min),
+                ("y_max_expr", self._view_settings._y_max),
+                ("z_min_expr", self._view_settings._z_min),
+                ("z_max_expr", self._view_settings._z_max),
+            ]:
+                if key in view:
+                    box._raw_expr = view[key]
+                    box.setText(view[key])
 
         self._session_path = path
         self._modified = False
@@ -553,6 +566,16 @@ class PringleWindow(QMainWindow):
             "camera_position": [float(cam_pos[0]), float(cam_pos[1]), float(cam_pos[2])],
             "orbit_target":    [float(tgt[0]),     float(tgt[1]),     float(tgt[2])],
         }
+        for key, box in [
+            ("x_min_expr", self._view_settings._x_min),
+            ("x_max_expr", self._view_settings._x_max),
+            ("y_min_expr", self._view_settings._y_min),
+            ("y_max_expr", self._view_settings._y_max),
+            ("z_min_expr", self._view_settings._z_min),
+            ("z_max_expr", self._view_settings._z_max),
+        ]:
+            if box.expr():
+                view[key] = box.expr()
         try:
             save_session(path, self._cell_list, self._grid.config, view=view)
         except Exception as exc:
@@ -561,6 +584,10 @@ class PringleWindow(QMainWindow):
         self._session_path = path
         self._modified = False
         self._update_title()
+
+    def _on_namespace_rebuilt(self) -> None:
+        from pringle.cell_list import _make_resolver
+        self._view_settings.set_resolver(_make_resolver(self._cell_list._shared_ns))
 
     # ------------------------------------------------------------------
     # Viewport update callback

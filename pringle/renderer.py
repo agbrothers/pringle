@@ -361,8 +361,8 @@ def _apply_colormap(
 
 
 def _build_unit_arrow_geometry(
-    shaft_r: float = 0.03,
-    head_r: float = 0.09,
+    shaft_r: float = 0.3,
+    head_r: float = 0.9,
     head_frac: float = 0.25,
     segments: int = 8,
 ) -> gfx.Geometry:
@@ -392,10 +392,12 @@ def _build_unit_arrow_geometry(
 _ARROW_GEO: gfx.Geometry | None = None  # module-level singleton; built once
 
 
-def _arrow_matrix(tail: np.ndarray, head: np.ndarray) -> np.ndarray | None:
+def _arrow_matrix(tail: np.ndarray, head: np.ndarray, size: float = 1.0) -> np.ndarray | None:
     """
     4×4 float32 transform that rotates/scales the unit +Z arrow to point from tail to head.
-    Returns None for zero-length arrows (skipped by caller).
+
+    size scales the X and Y (radial) axes independently of the arrow length, so the
+    shaft/head radius = unit_geometry_radius * size. Returns None for zero-length arrows.
     """
     d = np.asarray(head, dtype=np.float64) - np.asarray(tail, dtype=np.float64)
     L = float(np.linalg.norm(d))
@@ -418,9 +420,9 @@ def _arrow_matrix(tail: np.ndarray, head: np.ndarray) -> np.ndarray | None:
         R = np.eye(3) + s * K + (1 - c) * (K @ K)  # Rodrigues
 
     M = np.eye(4, dtype=np.float32)
-    M[:3, 0] = R[:, 0]
-    M[:3, 1] = R[:, 1]
-    M[:3, 2] = R[:, 2] * L  # Z column scaled by length
+    M[:3, 0] = R[:, 0] * size  # X scaled by size → controls shaft/head radius
+    M[:3, 1] = R[:, 1] * size  # Y scaled by size
+    M[:3, 2] = R[:, 2] * L    # Z scaled by length
     M[:3, 3] = tail.astype(np.float32)
     return M
 
@@ -430,12 +432,15 @@ def make_arrow_mesh(
     color: tuple = (0.9, 0.6, 0.1, 1.0),
     opacity: float = 1.0,
     normalize: bool = False,
+    size: float = 0.1,
 ) -> gfx.InstancedMesh:
     """
     Build a pygfx InstancedMesh of 3D arrows from an (N, 6) array of tail+head pairs.
 
     normalize=True pins all arrows to equal length (mean magnitude) so that
     vector field direction is visually dominant over magnitude.
+    size controls the shaft/head radius in world units (maps to style.point_size).
+    The unit geometry has shaft_r=0.3 and head_r=0.9, so size=0.1 gives shaft_r=0.03.
     """
     global _ARROW_GEO
     if _ARROW_GEO is None:
@@ -456,7 +461,7 @@ def make_arrow_mesh(
         mat.alpha_mode = "weighted_blend"
     mesh = gfx.InstancedMesh(_ARROW_GEO, mat, len(arrows))
     for i, (t, h) in enumerate(zip(tails, heads)):
-        M = _arrow_matrix(t, h)
+        M = _arrow_matrix(t, h, size=size)
         if M is not None:
             mesh.set_matrix_at(i, M)
     return mesh
@@ -800,8 +805,11 @@ class PringleRenderer:
         delta = np.array([dx, dy, dz], dtype=np.float64)
         cam_pos = np.array(self._camera.local.position, dtype=np.float64)
         new_target = np.array(self._controller.target, dtype=np.float64) + delta
-        self._controller.target = new_target
+        # Move camera first: the target setter calls camera.look_at(new_target),
+        # which must read the updated camera position or the look direction tilts
+        # slightly each step, accumulating into visible crosshair drift.
         self._camera.local.position = cam_pos + delta
+        self._controller.target = new_target
 
     # ------------------------------------------------------------------
     # Overlay: axes + wireframe bounding box

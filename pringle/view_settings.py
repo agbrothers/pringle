@@ -15,6 +15,7 @@ fit_all_requested()
 
 from __future__ import annotations
 
+from typing import Callable
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QDoubleSpinBox, QSpinBox, QPushButton, QGroupBox, QCheckBox,
@@ -22,6 +23,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import pyqtSignal
 
 from pringle.grid import GridConfig
+from pringle.slider_widget import _ExprBox
 
 
 class ViewSettingsWidget(QWidget):
@@ -61,18 +63,12 @@ class ViewSettingsWidget(QWidget):
         ):
             row = QHBoxLayout()
             row.addWidget(QLabel(f"{axis}:"))
-            lo = QDoubleSpinBox()
-            lo.setRange(-1e4, 1e4)
-            lo.setDecimals(1)
-            lo.setValue(getattr(self._config, f"{axis.lower()}_min"))
+            lo = _ExprBox(getattr(self._config, f"{axis.lower()}_min"))
             lo.setFixedWidth(60)
             setattr(self, attr_min, lo)
             row.addWidget(lo)
             row.addWidget(QLabel("to"))
-            hi = QDoubleSpinBox()
-            hi.setRange(-1e4, 1e4)
-            hi.setDecimals(1)
-            hi.setValue(getattr(self._config, f"{axis.lower()}_max"))
+            hi = _ExprBox(getattr(self._config, f"{axis.lower()}_max"))
             hi.setFixedWidth(60)
             setattr(self, attr_max, hi)
             row.addWidget(hi)
@@ -182,23 +178,31 @@ class ViewSettingsWidget(QWidget):
         cl.addWidget(fit_btn)
         outer.addWidget(cam_box)
 
+    def set_resolver(self, fn: Callable[[str], float | None]) -> None:
+        """Inject namespace resolver so axis bound fields can accept expression strings."""
+        for box in (self._x_min, self._x_max, self._y_min, self._y_max, self._z_min, self._z_max):
+            box.set_resolve(fn)
+
+    def re_resolve(self, fn: Callable[[str], float | None]) -> None:
+        """Re-evaluate stored expression strings; does NOT emit bounds_changed."""
+        for box in (self._x_min, self._x_max, self._y_min, self._y_max, self._z_min, self._z_max):
+            box.re_resolve(fn)
+
     def set_bounds(
         self,
         x_min: float, x_max: float,
         y_min: float, y_max: float,
         z_min: float | None = None, z_max: float | None = None,
     ) -> None:
-        """Push new bounds into the spinboxes (used by equalize and session restore)."""
+        """Push new bounds into the boxes, clearing any stored expressions."""
         pairs = [
             (self._x_min, x_min), (self._x_max, x_max),
             (self._y_min, y_min), (self._y_max, y_max),
         ]
         if z_min is not None and z_max is not None:
             pairs += [(self._z_min, z_min), (self._z_max, z_max)]
-        for spin, val in pairs:
-            spin.blockSignals(True)
-            spin.setValue(val)
-            spin.blockSignals(False)
+        for box, val in pairs:
+            box.setValue(val)
 
     def _on_apply(self):
         self.bounds_changed.emit(

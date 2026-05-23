@@ -45,13 +45,13 @@ def cell_list(qapp, grid):
 # ---------------------------------------------------------------------------
 
 class TestEquationCellRNG:
-    def test_rng_state_captured_on_first_eval(self, qapp, grid):
-        """_rng_state is set on an equation cell after its first evaluation."""
+    def test_rng_seed_present_on_cell(self, qapp, grid):
+        """_rng_seed is initialised on an equation cell (FEAT-039: compact seed)."""
         from pringle.cell_list import CellListWidget
         cl = CellListWidget(on_cell_result=_noop_result, grid=grid)
         cell = cl.add_cell("M = random.random((10, 2)) * 6 - 3")
-        assert hasattr(cell, "_rng_state"), "_rng_state not set after first eval"
-        assert cell._rng_state is not None
+        assert hasattr(cell, "_rng_seed"), "_rng_seed not present on cell"
+        assert isinstance(cell._rng_seed, int)
 
     def test_random_draws_stable_across_rebuilds(self, qapp, grid):
         """Random equation cell produces identical exports on every _rebuild_namespace."""
@@ -81,8 +81,8 @@ class TestEquationCellRNG:
             assert np.allclose(random_cell._last_result.exports["M"], original_M), \
                 "M changed when an unrelated cell was updated"
 
-    def test_rng_state_round_trip_yaml(self, qapp, grid):
-        """rng_state is written to and read back from YAML with correct shape and dtype."""
+    def test_rng_seed_round_trip_yaml(self, qapp, grid):
+        """rng_seed (compact integer) is written to and read back from YAML (FEAT-039)."""
         from pringle.cell_list import CellListWidget
         from pringle.session import save_session, load_session
         cl = CellListWidget(on_cell_result=_noop_result, grid=grid)
@@ -94,11 +94,10 @@ class TestEquationCellRNG:
             save_session(path, cl, grid.config)
             data = load_session(path)
             cell_data = data["cells"][0]
-            assert "rng_state" in cell_data, "rng_state not written to YAML"
-            assert len(cell_data["rng_state"]) == 624
-            assert "rng_pos" in cell_data
-            assert "rng_has_gauss" in cell_data
-            assert "rng_gauss" in cell_data
+            assert "rng_seed" in cell_data, "rng_seed not written to YAML"
+            assert isinstance(cell_data["rng_seed"], int)
+            # Old 624-element MT state must not be written
+            assert "rng_state" not in cell_data
         finally:
             os.unlink(path)
 
@@ -174,19 +173,22 @@ class TestEquationCellRNG:
                 "M changed on passive rebuild after explicit re-run"
 
     def test_two_random_cells_independent(self, qapp, grid):
-        """Two random equation cells each pin their own state independently."""
+        """Re-running one cell (→) does not change the other cell's draws (FEAT-039)."""
         from pringle.cell_list import CellListWidget
         cl = CellListWidget(on_cell_result=_noop_result, grid=grid)
         c1 = cl.add_cell("A = random.random((5, 2))")
+        c1._rng_seed = 0
         c2 = cl.add_cell("B = random.random((5, 2))")
+        c2._rng_seed = 1  # different seed → different draws
+        cl._rebuild_namespace()
 
         orig_A = c1._last_result.exports["A"].copy()
         orig_B = c2._last_result.exports["B"].copy()
 
-        # A and B should be different from each other (drawn at different MT positions)
-        assert not np.allclose(orig_A, orig_B), "A and B coincidentally identical — seed issue"
+        # Different seeds must produce different arrays
+        assert not np.allclose(orig_A, orig_B), "Different seeds should produce different draws"
 
-        for _ in range(3):
-            cl._rebuild_namespace()
-            assert np.allclose(c1._last_result.exports["A"], orig_A)
-            assert np.allclose(c2._last_result.exports["B"], orig_B)
+        # Re-running c1 (→) must not change B
+        cl._on_run_requested(c1.cell_id)
+        assert np.allclose(c2._last_result.exports["B"], orig_B), \
+            "B changed when only A's seed was incremented"

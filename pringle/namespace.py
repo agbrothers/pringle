@@ -22,7 +22,8 @@ from numpy import (
     zeros, ones, empty, full,
     zeros_like, ones_like, empty_like, full_like,
     linspace, arange, meshgrid,
-    array, asarray, concatenate, stack, column_stack, row_stack,
+    array, asarray, concatenate, 
+    stack, column_stack, row_stack, hstack, vstack,
     # Shape
     reshape, ravel, transpose, squeeze,
     # Math
@@ -79,6 +80,7 @@ def build_equation_namespace() -> dict:
         "array": array, "asarray": asarray,
         "concatenate": concatenate, "stack": stack,
         "column_stack": column_stack, "row_stack": row_stack,
+        "hstack": hstack, "vstack": vstack,
         "reshape": reshape, "ravel": ravel,
         "transpose": transpose, "squeeze": squeeze,
         "sum": sum, "prod": prod, "cumsum": cumsum, "cumprod": cumprod,
