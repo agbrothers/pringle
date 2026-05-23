@@ -503,6 +503,10 @@ class CellWidget(QWidget):
                 return s.source().strip()
         return None
 
+    def has_recursion_sub_cell(self) -> bool:
+        """Return True if a recursion sub-cell exists (even if empty)."""
+        return any(s.sub_type() == "recursion" for s in self._sub_cells)
+
     def initial_condition_exprs(self) -> list[str]:
         return [s.source() for s in self._sub_cells
                 if s.sub_type() == "initial_condition" and s.source().strip()]

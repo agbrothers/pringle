@@ -767,8 +767,10 @@ class CellListWidget(QWidget):
         cell.set_preview(result.preview, result.shape_preview)
 
         # Auto-switch cell between expression mode and data-array mode based on return type.
-        # Skip if the cell has a recurrence rule — recurrence cells always stay in data mode.
-        if not cell.recurrence_expr():
+        # Skip if any recursion sub-cell is present (even empty) — adding the sub-cell is the
+        # user's explicit intent to use data mode, so we must not auto-disable it before the
+        # rule expression has been filled in.
+        if not cell.has_recursion_sub_cell():
             should_be_data = (
                 result.from_shape_inference
                 and result.render_type in ("scatter", "scatter_2d")

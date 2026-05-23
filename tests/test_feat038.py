@@ -67,6 +67,25 @@ class TestRecursionAutoEnablesDataMode:
         assert cell.is_data_mode()
         assert len(cell._sub_cells) == 1
 
+    def test_empty_recursion_sub_cell_survives_rebuild(self, cell_list):
+        """BUG: empty recursion sub-cell was removed on first _rebuild_namespace call.
+
+        Reproduction: add a cell producing a non-scatter array (e.g. (10,10)), add a
+        recursion sub-cell but leave it empty, trigger rebuild.  The auto-switch logic
+        saw recurrence_expr() == None (empty rule) and called set_data_mode(False),
+        which deleted the sub-cell immediately.  Fix: guard on has_recursion_sub_cell()
+        instead of recurrence_expr().
+        """
+        cell = cell_list.add_cell(source="A = zeros((10, 10))")
+        cell.add_sub_cell("recursion")  # empty — rule not yet typed
+        assert cell.is_data_mode()
+        assert len(cell._sub_cells) == 1
+
+        cell_list._rebuild_namespace()
+
+        assert cell.is_data_mode(), "data mode must survive rebuild with an empty recursion sub-cell"
+        assert len(cell._sub_cells) == 1, "empty recursion sub-cell must not be removed on rebuild"
+
 
 # ---------------------------------------------------------------------------
 # Step 2 & 3: _detect_shape used for render type after recurrence
