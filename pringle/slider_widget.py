@@ -44,6 +44,8 @@ class _SpinBox(QDoubleSpinBox):
     Shows integers without a decimal point; strips trailing zeros from floats.
     """
     new_cell_requested = pyqtSignal()
+    navigate_up = pyqtSignal()
+    navigate_down = pyqtSignal()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -56,6 +58,12 @@ class _SpinBox(QDoubleSpinBox):
         return f"{v:g}"
 
     def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key.Key_Up:
+            self.navigate_up.emit()
+            return
+        if event.key() == Qt.Key.Key_Down:
+            self.navigate_down.emit()
+            return
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             super().keyPressEvent(event)  # commits value via editingFinished
             self.new_cell_requested.emit()
@@ -74,6 +82,10 @@ class _ExprBox(QLineEdit):
     """Numeric input that also accepts expression strings resolvable to a scalar."""
     committed = pyqtSignal(float)
     new_cell_requested = pyqtSignal()
+    navigate_up = pyqtSignal()
+    navigate_down = pyqtSignal()
+    navigate_left = pyqtSignal()   # emitted when Left is pressed at position 0
+    navigate_right = pyqtSignal()  # emitted when Right is pressed at end of text
 
     def __init__(self, value: float = 0.0, parent=None):
         super().__init__(_fmt(value), parent)
@@ -124,7 +136,20 @@ class _ExprBox(QLineEdit):
             self.committed.emit(self._last_valid)
 
     def keyPressEvent(self, event) -> None:
-        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+        key = event.key()
+        if key == Qt.Key.Key_Up:
+            self.navigate_up.emit()
+            return
+        if key == Qt.Key.Key_Down:
+            self.navigate_down.emit()
+            return
+        if key == Qt.Key.Key_Left and self.cursorPosition() == 0:
+            self.navigate_left.emit()
+            return
+        if key == Qt.Key.Key_Right and self.cursorPosition() == len(self.text()):
+            self.navigate_right.emit()
+            return
+        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             self.editingFinished.emit()   # commit value first
             self.new_cell_requested.emit()
             return
@@ -157,6 +182,8 @@ class SliderWidget(QWidget):
     drag_started = pyqtSignal(str)              # cell_id
     drag_moved = pyqtSignal(str, int)           # cell_id, global_y
     drag_ended = pyqtSignal(str)                # cell_id
+    navigate_up_requested = pyqtSignal(str)     # cell_id — exit slider upward
+    navigate_down_requested = pyqtSignal(str)   # cell_id — exit slider downward
 
     _ANIM_INTERVAL_MS = 16   # ~60fps animation step
 
@@ -304,6 +331,35 @@ class SliderWidget(QWidget):
 
         outer.addLayout(row2)
 
+        # Arrow-key cross-cell navigation (FEAT-053)
+        # value → exit up / go to min row
+        self._spinbox.navigate_up.connect(lambda: self.navigate_up_requested.emit(self.cell_id))
+        self._spinbox.navigate_down.connect(lambda: self._min_box.setFocus())
+        # min → value / exit down / right to max
+        self._min_box.navigate_up.connect(lambda: self._spinbox.setFocus())
+        self._min_box.navigate_down.connect(lambda: self.navigate_down_requested.emit(self.cell_id))
+        self._min_box.navigate_right.connect(
+            lambda: (self._max_box.setFocus(), self._max_box.setCursorPosition(0))
+        )
+        # max → value / exit down / left to min / right to step
+        self._max_box.navigate_up.connect(lambda: self._spinbox.setFocus())
+        self._max_box.navigate_down.connect(lambda: self.navigate_down_requested.emit(self.cell_id))
+        self._max_box.navigate_left.connect(
+            lambda: (self._min_box.setFocus(),
+                     self._min_box.setCursorPosition(len(self._min_box.text())))
+        )
+        self._max_box.navigate_right.connect(
+            lambda: (self._step_box.setFocus(), self._step_box.setCursorPosition(0))
+        )
+        # step → value / exit down / left to max  (right at end is no-op: unconnected)
+        self._step_box.navigate_up.connect(lambda: self._spinbox.setFocus())
+        self._step_box.navigate_down.connect(lambda: self.navigate_down_requested.emit(self.cell_id))
+        self._step_box.navigate_left.connect(
+            lambda: (self._max_box.setFocus(),
+                     self._max_box.setCursorPosition(len(self._max_box.text())))
+        )
+        # min navigate_left and step navigate_right are deliberately unconnected (no-op)
+
         # Separator
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
@@ -326,6 +382,9 @@ class SliderWidget(QWidget):
 
     def focus(self) -> None:
         pass
+
+    def primary_focus_widget(self) -> "_SpinBox":
+        return self._spinbox
 
     def set_error(self, msg: str | None) -> None:
         pass

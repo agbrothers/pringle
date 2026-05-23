@@ -6,6 +6,24 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-053 — Arrow-key cross-cell navigation in the expression panel
+**Status:** Closed (implemented 2026-05-23)
+
+**Implementation:**
+- **`cell_widget.py` `CellTextEdit`**: Added `navigate_down_requested` and `navigate_up_requested` signals. `keyPressEvent` emits them when the cursor is on the last/first block and Down/Up is pressed; otherwise falls through to `super()` for normal cursor movement. Mid-line presses do not escape.
+- **`cell_widget.py` `SubCell`**: Added `cell_id: str = uuid4()` attribute and `primary_focus_widget()` returning `self._edit`.
+- **`cell_widget.py` `CellWidget`**: Added `navigate_down_requested(str)` and `navigate_up_requested(str)` signals (carry cell_id or subcell_id). `_build_ui` connects `_text_edit` navigate signals → emit with `self.cell_id`. `add_sub_cell` connects each new subcell's `_edit.navigate_*` signals → emit with `sub.cell_id` (captured by default argument). Added `sub_cells()` and `primary_focus_widget()` public methods.
+- **`comment_cell_widget.py` `_CommentEdit`**: Same navigate signals and `keyPressEvent` boundary detection as `CellTextEdit`.
+- **`comment_cell_widget.py` `CommentCellWidget`**: Added `navigate_down/up_requested(str)` signals wired from `_edit`; added `primary_focus_widget()`.
+- **`slider_widget.py` `_SpinBox`**: Added `navigate_up` and `navigate_down` signals. `keyPressEvent` emits them for Up/Down (overriding the default increment/decrement behavior) before the existing Return/Enter handling.
+- **`slider_widget.py` `_ExprBox`**: Added `navigate_up`, `navigate_down`, `navigate_left` (at pos 0), `navigate_right` (at end) signals. `keyPressEvent` emits them before the existing Return/Enter handling.
+- **`slider_widget.py` `SliderWidget`**: Added `navigate_up_requested(str)` and `navigate_down_requested(str)` signals. `_build_ui` wires the internal navigation graph: value↑→exit, value↓→min; min↑→value, min↓→exit, min→→max@0; max↑→value, max↓→exit, max←→min@end, max→→step@0; step↑→value, step↓→exit, step←→max@end. `min.navigate_left` and `step.navigate_right` are intentionally unconnected (no-op). Added `primary_focus_widget()` returning `self._spinbox`.
+- **`cell_list.py` `CellListWidget`**: Added `_focus_targets()` — builds a flat ordered list of `(id, QWidget)` pairs for all focusable cell/subcell fields, skipping `FolderCellWidget` headers and members of collapsed folders, with subcells interleaved immediately after their parent. Added `_on_navigate_down(cell_id)` and `_on_navigate_up(cell_id)` — simple index lookup + `setFocus()` on the adjacent target. Connected `navigate_*_requested` signals in `add_cell`, `add_comment_cell`, `_maybe_morph_to_slider`, and `_maybe_morph_to_comment`.
+
+**Tests:** `tests/test_feat053.py` — 34 cases covering `_focus_targets` structure, equation-cell boundary navigation, subcell traversal, comment-cell navigation, all slider internal navigation paths, cross-cell slider entry/exit, and no-op edge cases.
+
+---
+
 ### FEAT-051 — Keyboard shortcuts: Enter adds equation cell, Shift+Enter adds newline, Cmd+Enter adds folder cell
 **Status:** Closed (implemented 2026-05-23)
 

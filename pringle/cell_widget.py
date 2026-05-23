@@ -115,6 +115,7 @@ class SubCell(QWidget):
 
     def __init__(self, sub_type: str = "constraint", parent=None):
         super().__init__(parent)
+        self.cell_id: str = str(uuid.uuid4())
         self._sub_type = sub_type
         self._build_ui()
 
@@ -151,6 +152,9 @@ class SubCell(QWidget):
     def sub_type(self) -> str:
         return self._sub_type
 
+    def primary_focus_widget(self) -> "CellTextEdit":
+        return self._edit
+
 
 # ---------------------------------------------------------------------------
 # Expanding text edit that emits Enter and Backspace signals
@@ -173,11 +177,14 @@ class CellTextEdit(QPlainTextEdit):
     - Emits enter_at_end() when Enter is pressed at the end of text
     - Emits backspace_on_empty() when Backspace is pressed in an empty cell
     - Emits focus_lost() when keyboard focus leaves (used by data-mode cells)
+    - Emits navigate_down/up_requested() when arrow key is pressed at boundary line
     """
     enter_at_end = pyqtSignal()
     backspace_on_empty = pyqtSignal()
     focus_lost = pyqtSignal()
     folder_requested = pyqtSignal()
+    navigate_down_requested = pyqtSignal()
+    navigate_up_requested = pyqtSignal()
 
     def __init__(self, parent=None, allow_newline: bool = False):
         super().__init__(parent)
@@ -260,6 +267,15 @@ class CellTextEdit(QPlainTextEdit):
                 self.backspace_on_empty.emit()
                 return
 
+        if key == Qt.Key.Key_Down:
+            if self.textCursor().blockNumber() == self.document().blockCount() - 1:
+                self.navigate_down_requested.emit()
+                return
+        elif key == Qt.Key.Key_Up:
+            if self.textCursor().blockNumber() == 0:
+                self.navigate_up_requested.emit()
+                return
+
         super().keyPressEvent(event)
 
 
@@ -281,6 +297,8 @@ class CellWidget(QWidget):
     drag_ended = pyqtSignal(str)           # cell_id
     visibility_toggled = pyqtSignal(str, bool)  # cell_id, is_visible
     style_updated = pyqtSignal(str)        # cell_id — color/opacity/size changed, no re-eval needed
+    navigate_down_requested = pyqtSignal(str)  # cell_id or subcell_id
+    navigate_up_requested = pyqtSignal(str)    # cell_id or subcell_id
 
     _DEBOUNCE_MS = 300
 
@@ -344,6 +362,8 @@ class CellWidget(QWidget):
         self._text_edit.enter_at_end.connect(lambda: self.enter_pressed.emit(self.cell_id))
         self._text_edit.folder_requested.connect(lambda: self.new_folder_requested.emit(self.cell_id))
         self._text_edit.backspace_on_empty.connect(lambda: self.delete_requested.emit(self.cell_id))
+        self._text_edit.navigate_down_requested.connect(lambda: self.navigate_down_requested.emit(self.cell_id))
+        self._text_edit.navigate_up_requested.connect(lambda: self.navigate_up_requested.emit(self.cell_id))
         row.addWidget(self._text_edit, 1)
 
         self._eye_btn = QPushButton("👁")
@@ -511,6 +531,12 @@ class CellWidget(QWidget):
         else:
             sub.content_changed.connect(self._on_text_changed)
         sub.delete_requested.connect(lambda: self._remove_sub_cell(sub))
+        sub._edit.navigate_down_requested.connect(
+            lambda cid=sub.cell_id: self.navigate_down_requested.emit(cid)
+        )
+        sub._edit.navigate_up_requested.connect(
+            lambda cid=sub.cell_id: self.navigate_up_requested.emit(cid)
+        )
         self._sub_cells.append(sub)
         self._sub_layout.addWidget(sub)
         self._debounce.start()
@@ -615,6 +641,12 @@ class CellWidget(QWidget):
         cur = self._text_edit.textCursor()
         cur.movePosition(cur.MoveOperation.End)
         self._text_edit.setTextCursor(cur)
+
+    def sub_cells(self) -> list["SubCell"]:
+        return list(self._sub_cells)
+
+    def primary_focus_widget(self) -> CellTextEdit:
+        return self._text_edit
 
     # ------------------------------------------------------------------
     # Internal

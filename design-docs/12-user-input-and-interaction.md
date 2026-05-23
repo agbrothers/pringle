@@ -122,6 +122,12 @@ Standard text editor behavior in a `QPlainTextEdit`:
 
 These shortcuts apply to equation cells, comment cells, and all text fields on slider cells (value, min, max, step, name).
 
+- **Up arrow on first line / Down arrow on last line**: moves focus to the adjacent cell or subcell in the flat visual order (Jupyter-style cross-cell navigation). Pressing Up/Down on an interior line moves the cursor within the cell normally without escaping.
+
+**Cross-cell navigation flat order** (FEAT-053): `CellListWidget._focus_targets()` returns `(id, widget)` pairs in visual order — equation cell main edit, then its subcells in order, then next cell, etc. Folder headers are skipped; members of collapsed folders are excluded. Slider cells land on the `value` spinbox when navigated into. Navigation is a simple index ±1 lookup on this list.
+
+**Within-slider arrow navigation**: Up/Down always escape the slider (Up exits upward, Down exits downward) from any field (`value`, `min`, `max`, `step`). Exception: `value` Down → `min` (enters the bounds row). Within the bounds row, Left/Right at field boundaries traverse `min` ↔ `max` ↔ `step`. Left at `min` position 0 and Right at `step` end are no-ops. The `name` field does not participate in arrow-key navigation.
+
 ### Cell Deletion
 
 - **Backspace on an empty cell** → deletes the cell and moves focus to the cell above

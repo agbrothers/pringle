@@ -424,6 +424,8 @@ class CellListWidget(QWidget):
             cell.set_name_validator(self._make_name_validator(cell))
             cell.delete_requested.connect(self._on_delete_requested)
             cell.set_resolver(_make_resolver(self._shared_ns))
+            cell.navigate_up_requested.connect(self._on_navigate_up)
+            cell.navigate_down_requested.connect(self._on_navigate_down)
         else:
             cell = CellWidget(style=style)
             cell.content_changed.connect(self._on_cell_changed)
@@ -434,6 +436,8 @@ class CellListWidget(QWidget):
             cell.enter_pressed.connect(self._on_enter_pressed)
             cell.new_folder_requested.connect(self._on_new_folder_requested)
             cell.run_requested.connect(self._on_run_requested)
+            cell.navigate_up_requested.connect(self._on_navigate_up)
+            cell.navigate_down_requested.connect(self._on_navigate_down)
 
         cell.drag_started.connect(self._on_drag_started)
         cell.drag_moved.connect(self._on_drag_moved)
@@ -491,6 +495,8 @@ class CellListWidget(QWidget):
         cell.drag_started.connect(self._on_drag_started)
         cell.drag_moved.connect(self._on_drag_moved)
         cell.drag_ended.connect(self._on_drag_ended)
+        cell.navigate_up_requested.connect(self._on_navigate_up)
+        cell.navigate_down_requested.connect(self._on_navigate_down)
 
         if after_id is not None:
             idx = self._index_of(after_id)
@@ -666,6 +672,41 @@ class CellListWidget(QWidget):
 
     def _update_placeholder(self) -> None:
         self._placeholder.setVisible(len(self._cells) == 0)
+
+    def _focus_targets(self) -> list[tuple[str, "QWidget"]]:
+        """Flat ordered list of (id, widget) for all focusable cell/subcell fields.
+
+        Folder headers are skipped; their members appear at their natural visual
+        position. Members of collapsed folders are excluded so focus never lands
+        on a hidden widget.
+        """
+        from pringle.folder_cell_widget import FolderCellWidget
+        from pringle.comment_cell_widget import CommentCellWidget
+        targets: list[tuple[str, "QWidget"]] = []
+        for cell in self._cells:
+            if isinstance(cell, FolderCellWidget):
+                continue
+            # Skip members of collapsed folders
+            folder_id = self._cell_folder.get(cell.cell_id)
+            if folder_id is not None and self._folder_collapsed.get(folder_id, False):
+                continue
+            targets.append((cell.cell_id, cell.primary_focus_widget()))
+            if isinstance(cell, CellWidget) and not isinstance(cell, SliderWidget):
+                for sub in cell.sub_cells():
+                    targets.append((sub.cell_id, sub.primary_focus_widget()))
+        return targets
+
+    def _on_navigate_down(self, cell_id: str) -> None:
+        targets = self._focus_targets()
+        idx = next((i for i, (cid, _) in enumerate(targets) if cid == cell_id), None)
+        if idx is not None and idx + 1 < len(targets):
+            targets[idx + 1][1].setFocus()
+
+    def _on_navigate_up(self, cell_id: str) -> None:
+        targets = self._focus_targets()
+        idx = next((i for i, (cid, _) in enumerate(targets) if cid == cell_id), None)
+        if idx is not None and idx > 0:
+            targets[idx - 1][1].setFocus()
 
     # ------------------------------------------------------------------
     # Evaluation
@@ -904,6 +945,8 @@ class CellListWidget(QWidget):
         comment.drag_started.connect(self._on_drag_started)
         comment.drag_moved.connect(self._on_drag_moved)
         comment.drag_ended.connect(self._on_drag_ended)
+        comment.navigate_up_requested.connect(self._on_navigate_up)
+        comment.navigate_down_requested.connect(self._on_navigate_down)
 
         self._layout.replaceWidget(cell, comment)
         self._cells[idx] = comment
@@ -939,6 +982,8 @@ class CellListWidget(QWidget):
         slider.drag_moved.connect(self._on_drag_moved)
         slider.drag_ended.connect(self._on_drag_ended)
         slider.set_resolver(_make_resolver(self._shared_ns))
+        slider.navigate_up_requested.connect(self._on_navigate_up)
+        slider.navigate_down_requested.connect(self._on_navigate_down)
 
         # Swap in the layout and the cells list
         self._layout.replaceWidget(cell, slider)

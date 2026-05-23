@@ -84,6 +84,8 @@ class _CommentEdit(QPlainTextEdit):
 
     enter_at_end = pyqtSignal()    # plain Enter → new equation cell below
     folder_requested = pyqtSignal()  # Ctrl+Enter → new folder cell below
+    navigate_down_requested = pyqtSignal()
+    navigate_up_requested = pyqtSignal()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         key = event.key()
@@ -96,6 +98,14 @@ class _CommentEdit(QPlainTextEdit):
                 self.enter_at_end.emit()
                 return
             # Shift+Enter → insert newline (fall through to super)
+        elif key == Qt.Key.Key_Down:
+            if self.textCursor().blockNumber() == self.document().blockCount() - 1:
+                self.navigate_down_requested.emit()
+                return
+        elif key == Qt.Key.Key_Up:
+            if self.textCursor().blockNumber() == 0:
+                self.navigate_up_requested.emit()
+                return
         super().keyPressEvent(event)
 
 
@@ -109,6 +119,8 @@ class CommentCellWidget(QWidget):
     drag_started = pyqtSignal(str)           # cell_id
     drag_moved = pyqtSignal(str, int)        # cell_id, global_y
     drag_ended = pyqtSignal(str)             # cell_id
+    navigate_down_requested = pyqtSignal(str)  # cell_id
+    navigate_up_requested = pyqtSignal(str)    # cell_id
 
     def __init__(
         self,
@@ -123,6 +135,8 @@ class CommentCellWidget(QWidget):
         self._build_ui()
         self._edit.enter_at_end.connect(lambda: self.enter_pressed.emit(self.cell_id))
         self._edit.folder_requested.connect(lambda: self.new_folder_requested.emit(self.cell_id))
+        self._edit.navigate_down_requested.connect(lambda: self.navigate_down_requested.emit(self.cell_id))
+        self._edit.navigate_up_requested.connect(lambda: self.navigate_up_requested.emit(self.cell_id))
         if source:
             self.set_source(source)
 
@@ -204,6 +218,9 @@ class CommentCellWidget(QWidget):
         cursor = self._edit.textCursor()
         cursor.movePosition(cursor.MoveOperation.End)
         self._edit.setTextCursor(cursor)
+
+    def primary_focus_widget(self) -> "_CommentEdit":
+        return self._edit
 
     def set_error(self, msg: str | None) -> None:
         pass
