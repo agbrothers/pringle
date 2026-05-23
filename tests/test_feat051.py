@@ -112,6 +112,20 @@ class TestSliderEnterPressed:
         s.enter_pressed.emit(s.cell_id)
         assert received == [s.cell_id]
 
+    def test_morphed_slider_enter_creates_cell(self, qapp, grid):
+        """Slider created via focus-out morph (not add_cell) must also wire enter_pressed."""
+        clist = self._make_list(qapp, grid)
+        cell = clist.add_cell()
+        cell.set_source("a = 5")
+        cell._text_edit.focus_lost.emit()   # trigger morph
+        qapp.processEvents()
+        slider = clist._cells[0]
+        assert isinstance(slider, SliderWidget)
+        count_before = len(clist._cells)
+        _press_enter(slider._spinbox)
+        qapp.processEvents()
+        assert len(clist._cells) == count_before + 1
+
     def test_slider_value_field_enter_creates_cell(self, qapp, grid):
         clist = self._make_list(qapp, grid)
         slider = clist.add_cell("a = 5")

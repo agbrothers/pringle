@@ -932,6 +932,7 @@ class CellListWidget(QWidget):
         )
         slider.value_changed.connect(self._on_slider_value_changed)
         slider.name_changed.connect(self._on_slider_name_changed)
+        slider.enter_pressed.connect(self._on_enter_pressed)
         slider.set_name_validator(self._make_name_validator(slider))
         slider.delete_requested.connect(self._on_delete_requested)
         slider.drag_started.connect(self._on_drag_started)
