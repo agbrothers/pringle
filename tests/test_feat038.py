@@ -67,6 +67,28 @@ class TestRecursionAutoEnablesDataMode:
         assert cell.is_data_mode()
         assert len(cell._sub_cells) == 1
 
+    def test_recursion_sub_cell_survives_invalidating_source_change(self, cell_list):
+        """BUG: changing cell source so the recurrence rule no longer matches removed the sub-cell.
+
+        When the variable name referenced in the rule doesn't exist in result.exports, the
+        recurrence branch is silently skipped.  In _eval_spec (the dispatch path), should_be_data
+        was computed without a recursion guard, so any non-scatter result caused set_data_mode(False)
+        and deleted the sub-cell.  Fix: guard the apply-back in _on_eval_results with
+        has_recursion_sub_cell().
+        """
+        cell = cell_list.add_cell(source="V = zeros((10, 6))")
+        rec = cell.add_sub_cell("recursion")
+        rec._edit.setPlainText("V[n] = V[n-1]")
+        cell_list._rebuild_namespace()
+        assert cell.is_data_mode()
+
+        # Rename the variable — rule now references a name that doesn't exist
+        cell._text_edit.setPlainText("W = zeros((10, 6))")
+        cell_list._rebuild_namespace()
+
+        assert cell.is_data_mode(), "data mode must survive mismatched rule variable name"
+        assert len(cell._sub_cells) == 1, "recursion sub-cell must not be deleted on source change"
+
     def test_empty_recursion_sub_cell_survives_rebuild(self, cell_list):
         """BUG: empty recursion sub-cell was removed on first _rebuild_namespace call.
 

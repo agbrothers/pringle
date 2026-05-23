@@ -103,11 +103,12 @@ def _eval_spec(spec: _CellSpec, shared: dict, grid: Grid) -> _CellWorkerResult:
                     {**build_equation_namespace(), **shared, **result.exports},
                 )
                 result.exports[arr_name] = arr
-                if arr.ndim == 2 and arr.shape[1] in (2, 3):
+                rt, data = _detect_shape(arr)
+                if rt is not None:
                     with warnings.catch_warnings(record=True) as _w:
                         warnings.simplefilter("always")
-                        result.data = arr.astype(np.float32)
-                    result.render_type = "scatter"
+                        result.data = data.astype(np.float32)
+                    result.render_type = rt
                     if _w:
                         result.warning = "Overflow: values exceed float32 range — integration may have diverged"
                     elif warn:
@@ -1018,7 +1019,7 @@ class CellListWidget(QWidget):
                         cell.set_warning(wr.warning)
                     cell.set_preview(wr.preview, wr.shape_preview)
                     cell._last_result = wr.result
-                    if wr.should_be_data != cell.is_data_mode():
+                    if not cell.has_recursion_sub_cell() and wr.should_be_data != cell.is_data_mode():
                         cell.set_data_mode(wr.should_be_data)
                     if wr.is_vector != cell.is_vector_cell():
                         cell.set_vector_cell(wr.is_vector)
