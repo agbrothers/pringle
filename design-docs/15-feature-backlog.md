@@ -7,6 +7,241 @@ See [17-closed-features.md](17-closed-features.md) for implemented features.
 
 ---
 
+### FEAT-048 — Cross-cell find and replace
+
+**Status:** Open  
+**Logged:** 2026-05-22
+
+**Description:**  
+A panel (UI TBD — to be refined) that lets the user search for text across all cells and optionally replace matches, covering the primary use case of renaming a variable across an entire session in one action. Find is plain-text substring matching by default; a whole-word option handles the variable-rename case cleanly.
+
+**Motivation:**  
+Renaming a variable used in many cells currently requires editing each cell manually. A session-wide find-and-replace brings this to a single action.
+
+**Scope:**  
+Search and replace operates on all non-comment cells. Comment cells are skipped (their source is not evaluated). Folder and slider cells are included.
+
+---
+
+**UI — deferred; to be refined in a follow-up.** Rough intent:
+- A small panel (floating dialog or collapsible section at the top of the left panel) with Find and Replace text inputs.
+- "Find All" highlights all matches across cells.
+- "Replace All" applies the substitution and triggers a single namespace rebuild.
+- Options: case-sensitive toggle, whole-word toggle (required for safe variable rename).
+- Keyboard shortcut to open: `Cmd+H` / `Ctrl+H` (standard across editors).
+
+---
+
+**Implementation sketch (`cell_list.py`):**
+
+```python
+def find_replace_all(
+    self,
+    find: str,
+    replace: str,
+    *,
+    case_sensitive: bool = True,
+    whole_word: bool = False,
+) -> int:
+    """Replace all occurrences of find with replace across all cells.
+    Returns the number of cells modified."""
+    import re
+    if not find:
+        return 0
+    flags = 0 if case_sensitive else re.IGNORECASE
+    pattern = re.escape(find)
+    if whole_word:
+        pattern = r"\b" + pattern + r"\b"
+    rx = re.compile(pattern, flags)
+    modified = 0
+    with self._suppress_rebuilds():   # suppress per-cell rebuilds during batch
+        for cell in self._cells:
+            old = cell.source()
+            new = rx.sub(replace, old)
+            if new != old:
+                cell.set_source(new)
+                modified += 1
+    if modified:
+        self._rebuild_namespace()
+    return modified
+```
+
+`_suppress_rebuilds()` is a context manager that sets a flag to skip `_rebuild_namespace()` inside `_on_cell_changed`, equivalent to the existing `_suppress_rebuild` flag used during bulk session restore.
+
+For **highlighting** (find-without-replace), iterate cells and call `setExtraSelections()` on their `CellTextEdit` with all match ranges. Clearing highlights = call with an empty list.
+
+**Whole-word matching for variable names:**  
+`\b` word boundaries work correctly for Python identifiers because identifier characters (`[A-Za-z0-9_]`) are all `\w`. Searching for `a` with whole-word on will not match `alpha` or `_a`. This is the safe default for variable rename.
+
+**Session persistence:**  
+Find/replace state is not persisted to YAML — it is transient UI state only.
+
+**Tests to add:**
+
+- `find_replace_all("a", "b", whole_word=True)` renames standalone `a` but does not touch `alpha` or `a_val`.
+- Returns correct count of modified cells.
+- No rebuild fires during the batch; exactly one `_rebuild_namespace()` fires after.
+- Empty `find` string is a no-op and returns 0.
+- Case-insensitive replace: `find_replace_all("Pi", "pi", case_sensitive=False)` matches `PI`, `Pi`, `pi`.
+
+---
+
+### FEAT-047 — Cmd+L / Ctrl+L: select current line in focused cell
+
+**Status:** Open  
+**Logged:** 2026-05-22
+
+**Description:**  
+Pressing `Cmd+L` (macOS) or `Ctrl+L` (Linux/Windows) in a focused `CellTextEdit` selects the entire current line, matching the VSCode behavior. No cross-cell behavior; this is purely a within-cell cursor operation.
+
+**Implementation (`cell_widget.py`, `CellTextEdit.keyPressEvent`):**
+
+Add a branch before the `super()` call:
+
+```python
+ctrl = Qt.KeyboardModifier.ControlModifier
+if key == Qt.Key.Key_L and mod == ctrl:
+    cursor = self.textCursor()
+    cursor.select(QTextCursor.SelectionType.LineUnderCursor)
+    self.setTextCursor(cursor)
+    return
+```
+
+`QTextCursor.SelectionType.LineUnderCursor` selects from the start to end of the line the cursor is on, excluding the trailing newline — identical to VSCode `Cmd+L`. No additional imports required (`QTextCursor` is already imported in `cell_widget.py`).
+
+On macOS, `Qt.KeyboardModifier.ControlModifier` maps to the Command key, so this fires on `Cmd+L` on Mac and `Ctrl+L` on Linux/Windows — consistent with the `QKeySequence("Ctrl+/")` pattern used elsewhere.
+
+**Note:** `Ctrl+L` in web browsers focuses the address bar. Since Pringle is a desktop Qt app (not browser-embedded), there is no conflict.
+
+**Tests to add:**
+
+- With cursor on `z = x**2 + y**2`, pressing `Ctrl+L` selects the full line text.
+- With cursor on the second line of a multi-line cell, only that line is selected (not the whole cell).
+- Works in `_CommentEdit` as well (comment cells inherit the same `keyPressEvent` override or the same change is applied there).
+
+---
+
+### FEAT-046 — Cmd+/ / Ctrl+/ toggle cell comment
+
+**Status:** Open  
+**Logged:** 2026-05-22
+
+**Description:**  
+Pressing `Cmd+/` (macOS) or `Ctrl+/` (Linux/Windows) on a focused cell should toggle it between an equation cell and a comment cell, mirroring the standard "toggle line comment" shortcut in VSCode and most modern editors.
+
+- **Equation or slider cell → comment:** Prepend `# ` to the cell source, morph to `CommentCellWidget`. The expression is preserved verbatim as the comment body so the user can uncomment and resume editing.
+- **Comment cell → equation:** Strip the leading `# ` (or `#`) from the source and morph back to a `CellWidget`. If the recovered source matches a slider pattern (e.g. `a = 1`), it continues to morph to `SliderWidget` via the existing `_maybe_morph_to_slider` path.
+
+**UX:**  
+Consistent with standard editor behavior — the shortcut works on the currently focused cell and does not require the text area to have a selection. Cursor/focus stays on the cell after the toggle.
+
+---
+
+**Implementation — new `toggle_comment` method on `CellListWidget` (`cell_list.py`):**
+
+```python
+def toggle_comment_focused_cell(self) -> None:
+    """Toggle the focused cell between equation and comment."""
+    from pringle.comment_cell_widget import CommentCellWidget
+    cell_id = self._focused_cell_id()
+    if cell_id is None:
+        return
+    idx = self._index_of(cell_id)
+    if idx < 0:
+        return
+    cell = self._cells[idx]
+
+    if isinstance(cell, CommentCellWidget):
+        self._morph_comment_to_equation(cell_id)
+    else:
+        self._morph_equation_to_comment(cell_id)
+```
+
+**Forward morph (equation → comment):**
+
+```python
+def _morph_equation_to_comment(self, cell_id: str) -> None:
+    from pringle.comment_cell_widget import CommentCellWidget
+    idx = self._index_of(cell_id)
+    cell = self._cells[idx]
+    # SliderWidget.source() returns "a = 1.0"; CellWidget.source() returns expression text.
+    source = "# " + cell.source().strip()
+    style = cell.style
+    comment = CommentCellWidget(source=source, style=style, cell_id=cell_id)
+    # connect signals (same as _maybe_morph_to_comment)
+    comment.delete_requested.connect(self._on_delete_requested)
+    comment.content_changed.connect(self._on_cell_changed)
+    comment.drag_started.connect(self._on_drag_started)
+    comment.drag_moved.connect(self._on_drag_moved)
+    comment.drag_ended.connect(self._on_drag_ended)
+    self._layout.replaceWidget(cell, comment)
+    self._cells[idx] = comment
+    cell.deleteLater()
+    comment.focus()
+    self._rebuild_namespace()
+```
+
+**Reverse morph (comment → equation):**
+
+```python
+def _morph_comment_to_equation(self, cell_id: str) -> None:
+    from pringle.comment_cell_widget import CommentCellWidget
+    idx = self._index_of(cell_id)
+    cell = self._cells[idx]
+    if not isinstance(cell, CommentCellWidget):
+        return
+    # CommentCellWidget.source() returns "# <body>"; strip to recover expression.
+    raw = _HASH_RE.sub("", cell.source()).strip()  # reuse the regex from comment_cell_widget
+    style = cell.style
+    new_cell = CellWidget(source=raw, style=style, cell_id=cell_id)
+    new_cell.content_changed.connect(self._on_cell_changed)
+    new_cell.delete_requested.connect(self._on_delete_requested)
+    new_cell.run_requested.connect(self._on_run_requested)
+    new_cell.drag_started.connect(self._on_drag_started)
+    new_cell.drag_moved.connect(self._on_drag_moved)
+    new_cell.drag_ended.connect(self._on_drag_ended)
+    self._layout.replaceWidget(cell, new_cell)
+    self._cells[idx] = new_cell
+    cell.deleteLater()
+    new_cell.focus()
+    # Re-run standard morphs — recovered source may be a slider assignment.
+    self._maybe_morph_to_slider(cell_id)
+    self._rebuild_namespace()
+```
+
+Note: `_HASH_RE` is already defined in `comment_cell_widget.py`. Import it in `cell_list.py` or duplicate the one-line pattern.
+
+**Shortcut registration (`app.py`):**
+
+Add alongside the existing `QShortcut` entries:
+
+```python
+(QKeySequence("Ctrl+/"), self._cell_list.toggle_comment_focused_cell),
+```
+
+On macOS, Qt maps `Cmd` to `Ctrl` for application-level `QKeySequence` shortcuts, so `"Ctrl+/"` fires on `Cmd+/` on Mac and `Ctrl+/` on Linux/Windows.
+
+**Note on `_maybe_morph_to_comment` (`cell_list.py:844`):**  
+The existing `_maybe_morph_to_comment` fires whenever any cell's content changes and the source now starts with `#`. The forward morph in `toggle_comment_focused_cell` bypasses this (it calls `_morph_equation_to_comment` directly, which constructs the `CommentCellWidget` immediately), so there is no double-morph risk. No change to the existing morph path is needed.
+
+**Note on slider → comment:**  
+`SliderWidget.source()` returns `"a = 1.0"` (the current value, not the original text). Toggling a slider to a comment preserves the current value as the comment body. Toggling back creates a plain `CellWidget` with source `"a = 1.0"`, which then morphs back to a slider via `_maybe_morph_to_slider`. Min/max/step and expression strings (FEAT-045) are NOT preserved through a comment round-trip — the slider is rebuilt with defaults.
+
+**Desirable enhancement:** Preserve slider range state across a comment round-trip. When a `SliderWidget` is commented out, stash its full state (`_min`, `_max`, `_step`, expression strings) on the new `CommentCellWidget` as hidden metadata (e.g. a `_stashed_slider_state: dict | None` attribute). When the reverse morph fires and a slider is about to be created, check for stashed state on the originating comment and restore min/max/step/exprs rather than using defaults. This avoids the frustration of losing a carefully configured range just to temporarily disable a parameter. The stash is not persisted to YAML (it is transient in-session only); a save → reload still reverts to defaults, which is acceptable.
+
+---
+
+**Tests to add:**
+
+- Focusing an equation cell and pressing `Ctrl+/` morphs it to `CommentCellWidget` with source `"# <original>"`.
+- Focusing a `CommentCellWidget` and pressing `Ctrl+/` morphs it to `CellWidget` with the `#` prefix stripped.
+- Comment → equation on `"# a = 2.5"` produces a `SliderWidget` with name `a` and value `2.5`.
+- Shortcut with no focused cell does nothing (no crash).
+- Equation → comment removes the cell from the namespace (downstream cells get an undefined-variable warning on the next rebuild).
+- Comment → equation re-adds the cell to the namespace on the next rebuild.
+
+---
+
 ### FEAT-045 — Expression references in slider bounds and axis limits
 
 **Status:** Open  
@@ -635,18 +870,6 @@ Extend the existing per-cell style popover (`style_popover.py`) with a proper co
 - The color dot in the cell row should update live as the picker changes.
 
 ---
-
-### FEAT-015 — Application icon
-**Status:** Open  
-**Logged:** 2026-05-16
-
-**Description:**  
-Add a custom icon for the application window and macOS Dock entry.
-
-**Implementation notes:**
-- Set via `QMainWindow.setWindowIcon(QIcon("path/to/icon.png"))` and `QApplication.setWindowIcon(...)` early in startup.
-- macOS Dock icon additionally requires a `.icns` file referenced in the app bundle's `Info.plist` (relevant if packaging with PyInstaller or py2app).
-- A simple `.png` (256×256 or 512×512) is sufficient for the window title bar on all platforms.
 
 ---
 

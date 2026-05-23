@@ -6,6 +6,13 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-015 — Application icon
+**Status:** Closed (implemented 2026-05-22)
+
+**Implementation:** Icon moved from repo root to `pringle/assets/icon.png` (inside the package so it's reachable regardless of working directory). `pyproject.toml` updated with `[tool.setuptools.package-data] pringle = ["assets/*.png"]`. In `app.py`, `_ICON_PATH = Path(__file__).parent / "assets" / "icon.png"` is resolved at import time; `QIcon(_ICON_PATH)` is set on both `QApplication` (Dock/taskbar) and `PringleWindow` (title bar) at startup.
+
+---
+
 ### FEAT-044 — Text editing improvements: tab width, scroll pass-through, bracket wrapping
 **Status:** Closed (implemented 2026-05-22)
 

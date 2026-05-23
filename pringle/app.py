@@ -22,7 +22,10 @@ from PyQt6.QtWidgets import (
     QPushButton, QDialog,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QKeySequence, QShortcut, QKeyEvent
+from PyQt6.QtGui import QIcon, QKeySequence, QShortcut, QKeyEvent
+from pathlib import Path
+
+_ICON_PATH = Path(__file__).parent / "assets" / "icon.png"
 from rendercanvas.qt import QRenderWidget
 
 import pygfx as gfx
@@ -297,6 +300,7 @@ class PringleWindow(QMainWindow):
     def __init__(self, grid: Grid | None = None):
         super().__init__()
         self.setWindowTitle("pringle")
+        self.setWindowIcon(QIcon(str(_ICON_PATH)))
         self.resize(*self.DEFAULT_SIZE)
         self._grid = grid or make_grid()
 
@@ -638,7 +642,7 @@ class PringleWindow(QMainWindow):
                 if len(pts) >= 2:
                     arrows = np.concatenate([pts[:-1], pts[1:]], axis=1)  # (N-1, 6)
                     obj = make_arrow_mesh(arrows, color=style.color, opacity=style.opacity,
-                                         normalize=style.normalize_arrows)
+                                         normalize=style.normalize_arrows, size=style.point_size)
                     vp.add_object(cell_id, obj)
                 else:
                     vp.remove_object(cell_id)
@@ -658,7 +662,7 @@ class PringleWindow(QMainWindow):
                     data[:, 2:], np.zeros(len(data), dtype=np.float32),
                 ])
             obj = make_arrow_mesh(data, color=style.color, opacity=style.opacity,
-                                  normalize=style.normalize_arrows)
+                                  normalize=style.normalize_arrows, size=style.point_size)
             vp.add_object(cell_id, obj)
 
         else:
@@ -779,6 +783,7 @@ def launch(argv=None) -> int:
     """Start the Pringle Qt application. Returns exit code."""
     app = QApplication(argv or sys.argv)
     app.setApplicationName("pringle")
+    app.setWindowIcon(QIcon(str(_ICON_PATH)))
 
     win = PringleWindow(grid=make_grid(GridConfig(n=64)))
     win.show()
