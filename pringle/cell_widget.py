@@ -711,13 +711,19 @@ class CellWidget(QWidget):
         from PyQt6.QtWidgets import QColorDialog
         from PyQt6.QtGui import QColor
         from dataclasses import replace
-        r, g, b, _ = self.style.color
-        color = QColorDialog.getColor(QColor.fromRgbF(r, g, b), self, "Pick color")
-        if color.isValid():
-            new_style = replace(self.style, color=(
-                color.redF(), color.greenF(), color.blueF(), self.style.color[3],
-            ))
-            self._on_style_changed(new_style)
+        original_color = self.style.color
+        r, g, b, _ = original_color
+        dlg = QColorDialog(QColor.fromRgbF(r, g, b), self)
+
+        def _apply(qcolor: QColor) -> None:
+            self._on_style_changed(replace(self.style, color=(
+                qcolor.redF(), qcolor.greenF(), qcolor.blueF(), self.style.color[3],
+            )))
+
+        dlg.currentColorChanged.connect(_apply)
+        if not dlg.exec():
+            # Cancelled — restore original
+            self._on_style_changed(replace(self.style, color=original_color))
 
     def _on_style_changed(self, new_style):
         from dataclasses import replace
