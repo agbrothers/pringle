@@ -177,6 +177,7 @@ class CellTextEdit(QPlainTextEdit):
     enter_at_end = pyqtSignal()
     backspace_on_empty = pyqtSignal()
     focus_lost = pyqtSignal()
+    folder_requested = pyqtSignal()
 
     def __init__(self, parent=None, allow_newline: bool = False):
         super().__init__(parent)
@@ -243,12 +244,14 @@ class CellTextEdit(QPlainTextEdit):
             return
 
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            if not self._allow_newline and mod == Qt.KeyboardModifier.NoModifier:
-                cursor = self.textCursor()
-                at_end = cursor.atEnd()
-                if at_end:
-                    self.enter_at_end.emit()
-                    return  # don't insert newline — move to next cell
+            if not self._allow_newline:
+                if mod == Qt.KeyboardModifier.ControlModifier:
+                    self.folder_requested.emit()
+                    return
+                if mod == Qt.KeyboardModifier.NoModifier:
+                    self.enter_at_end.emit()   # new cell below (any cursor position)
+                    return
+                # Shift+Enter falls through to super → inserts newline
             super().keyPressEvent(event)
             return
 
@@ -271,6 +274,7 @@ class CellWidget(QWidget):
     commit_requested = pyqtSignal(str)     # cell_id — fires on focus-out (deferred morph check)
     delete_requested = pyqtSignal(str)     # cell_id
     enter_pressed = pyqtSignal(str)        # cell_id
+    new_folder_requested = pyqtSignal(str) # cell_id
     run_requested = pyqtSignal(str)        # cell_id (data-mode forced re-eval)
     drag_started = pyqtSignal(str)         # cell_id
     drag_moved = pyqtSignal(str, int)      # cell_id, global_y
@@ -338,6 +342,7 @@ class CellWidget(QWidget):
 
         self._text_edit = CellTextEdit(self)
         self._text_edit.enter_at_end.connect(lambda: self.enter_pressed.emit(self.cell_id))
+        self._text_edit.folder_requested.connect(lambda: self.new_folder_requested.emit(self.cell_id))
         self._text_edit.backspace_on_empty.connect(lambda: self.delete_requested.emit(self.cell_id))
         row.addWidget(self._text_edit, 1)
 

@@ -43,6 +43,7 @@ class _SpinBox(QDoubleSpinBox):
 
     Shows integers without a decimal point; strips trailing zeros from floats.
     """
+    new_cell_requested = pyqtSignal()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -53,6 +54,13 @@ class _SpinBox(QDoubleSpinBox):
         if v == int(v) and abs(v) < 1e15:
             return str(int(v))
         return f"{v:g}"
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            super().keyPressEvent(event)  # commits value via editingFinished
+            self.new_cell_requested.emit()
+            return
+        super().keyPressEvent(event)
 
 
 def _fmt(v: float) -> str:
@@ -65,6 +73,7 @@ def _fmt(v: float) -> str:
 class _ExprBox(QLineEdit):
     """Numeric input that also accepts expression strings resolvable to a scalar."""
     committed = pyqtSignal(float)
+    new_cell_requested = pyqtSignal()
 
     def __init__(self, value: float = 0.0, parent=None):
         super().__init__(_fmt(value), parent)
@@ -114,9 +123,28 @@ class _ExprBox(QLineEdit):
             self._last_valid = float(resolved)
             self.committed.emit(self._last_valid)
 
+    def keyPressEvent(self, event) -> None:
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self.editingFinished.emit()   # commit value first
+            self.new_cell_requested.emit()
+            return
+        super().keyPressEvent(event)
+
     def _indicate_error(self) -> None:
         self.setStyleSheet("border: 1px solid #c0392b;")
         QTimer.singleShot(500, lambda: self.setStyleSheet(""))
+
+
+class _NameLineEdit(QLineEdit):
+    """Inline name editor for SliderWidget; Enter commits then requests a new cell."""
+    new_cell_requested = pyqtSignal()
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self.editingFinished.emit()   # commits the name
+            self.new_cell_requested.emit()
+            return
+        super().keyPressEvent(event)
 
 
 class SliderWidget(QWidget):
@@ -124,6 +152,7 @@ class SliderWidget(QWidget):
 
     value_changed = pyqtSignal(str, float)     # (name, value)
     name_changed = pyqtSignal(str, str, str)   # (old_name, new_name, cell_id)
+    enter_pressed = pyqtSignal(str)            # cell_id — any field Enter → new cell below
     delete_requested = pyqtSignal(str)          # cell_id
     drag_started = pyqtSignal(str)              # cell_id
     drag_moved = pyqtSignal(str, int)           # cell_id, global_y
@@ -221,6 +250,7 @@ class SliderWidget(QWidget):
         self._delete_btn.clicked.connect(lambda: self.delete_requested.emit(self.cell_id))
         row1.addWidget(self._delete_btn)
 
+        self._spinbox.new_cell_requested.connect(lambda: self.enter_pressed.emit(self.cell_id))
         outer.addLayout(row1)
 
         # --- Row 2: play + min + slider (stretch) + max + · + step label + step ---
@@ -268,6 +298,9 @@ class SliderWidget(QWidget):
         self._step_box = _ExprBox(self._step)
         self._step_box.setFixedWidth(60)
         row2.addWidget(self._step_box)
+
+        for box in (self._min_box, self._max_box, self._step_box):
+            box.new_cell_requested.connect(lambda: self.enter_pressed.emit(self.cell_id))
 
         outer.addLayout(row2)
 
@@ -356,13 +389,14 @@ class SliderWidget(QWidget):
     def _on_name_clicked(self) -> None:
         if self._name_edit is not None:
             return
-        self._name_edit = QLineEdit(self.name)
+        self._name_edit = _NameLineEdit(self.name)
         self._name_edit.setFixedWidth(self._name_label.width())
         self._name_edit.selectAll()
         self._row1.replaceWidget(self._name_label, self._name_edit)
         self._name_label.hide()
         self._name_edit.textChanged.connect(self._on_name_text_changed)
         self._name_edit.editingFinished.connect(self._on_name_commit)
+        self._name_edit.new_cell_requested.connect(lambda: self.enter_pressed.emit(self.cell_id))
         self._name_edit.setFocus()
 
     def _on_name_text_changed(self, text: str) -> None:

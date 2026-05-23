@@ -420,6 +420,7 @@ class CellListWidget(QWidget):
             )
             cell.value_changed.connect(self._on_slider_value_changed)
             cell.name_changed.connect(self._on_slider_name_changed)
+            cell.enter_pressed.connect(self._on_enter_pressed)
             cell.set_name_validator(self._make_name_validator(cell))
             cell.delete_requested.connect(self._on_delete_requested)
             cell.set_resolver(_make_resolver(self._shared_ns))
@@ -431,6 +432,7 @@ class CellListWidget(QWidget):
             cell.style_updated.connect(self._on_equation_cell_style_updated)
             cell.delete_requested.connect(self._on_delete_requested)
             cell.enter_pressed.connect(self._on_enter_pressed)
+            cell.new_folder_requested.connect(self._on_new_folder_requested)
             cell.run_requested.connect(self._on_run_requested)
 
         cell.drag_started.connect(self._on_drag_started)
@@ -1092,6 +1094,10 @@ class CellListWidget(QWidget):
 
     def _on_enter_pressed(self, cell_id: str) -> None:
         self.add_cell(after_id=cell_id)
+
+    def _on_new_folder_requested(self, cell_id: str) -> None:
+        folder = self.add_folder(after_id=cell_id)
+        folder.focus()
 
     # ------------------------------------------------------------------
     # Drag-to-reorder

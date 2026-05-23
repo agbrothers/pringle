@@ -7,73 +7,44 @@ See [17-closed-features.md](17-closed-features.md) for implemented features.
 
 ---
 
-### FEAT-051 — Keyboard shortcuts: ENTER adds equation cell, SHIFT+ENTER adds newline, CMD+ENTER adds folder cell
+### FEAT-052 — Strip trailing zeros from float display in style and axis settings panels
 
 **Status:** Open  
 **Logged:** 2026-05-23
 
 **Description:**  
-Add three keyboard shortcuts in focused cells that control cell creation:
+Numeric input fields that display float values currently show unnecessary trailing zeros (e.g. `1.000000`, `0.500000`). These should be stripped so the displayed value is as compact as possible while remaining unambiguous — `1`, `0.5`, `0.1` — matching the convention in Desmos and standard scientific tools.
 
-| Key | Action |
-|---|---|
-| `Enter` | Add a new empty equation cell directly below the focused cell; focus moves to the new cell |
-| `Shift+Enter` | Insert a literal newline at the cursor position within the focused cell (current behavior of `Enter`, or close to it) |
-| `Cmd+Enter` / `Ctrl+Enter` | Add a new empty folder cell directly below the focused cell; focus moves to the new cell |
+**Affected fields:**
+- All numeric fields in the **visual styles panel** (`StylePopoverWidget`): opacity, line width, point size, and any other float-valued inputs.
+- The **shadow opacity** field in the **axis settings panel**.
 
-This mirrors the behavior of Desmos and many REPL-style editors, where Enter is "new cell" and Shift+Enter is "newline in this cell."
-
-**Motivation:**  
-The current Enter behavior in `CellTextEdit` inserts a newline, which is appropriate for multi-line expressions but creates friction for the common case of adding consecutive single-line cells. Reversing the default — Enter = new cell, Shift+Enter = newline — matches user expectations from Desmos and makes cell-by-cell entry flow naturally.
-
-**UX notes:**
-- The new cell should be inserted immediately after the currently focused cell in the visual/cell list order.
-- Focus should automatically move to the new cell's text input so the user can type immediately.
-- If the focused cell is inside a folder, the new cell should be added inside the same folder.
-- Cmd+Enter adding a folder cell is "if possible" — if folder insertion at an arbitrary position proves complex, this part can be deferred.
-
-**Implementation sketch (`cell_widget.py`, `CellTextEdit.keyPressEvent`):**
+**Fix:**  
+Use Python's `g` format specifier, which removes trailing zeros and the decimal point when unnecessary:
 
 ```python
-# Before the super() call:
-if key == Qt.Key.Key_Return and not (mod & Qt.KeyboardModifier.ShiftModifier):
-    # Enter without shift → request new cell below
-    self.new_cell_requested.emit()  # new signal on CellTextEdit
-    return
-# Shift+Enter falls through to super() → inserts newline (existing behavior)
-
-if key == Qt.Key.Key_Return and (mod & Qt.KeyboardModifier.ControlModifier):
-    # Cmd/Ctrl+Enter → request new folder cell below
-    self.new_folder_requested.emit()  # new signal on CellTextEdit
-    return
+def _fmt(value: float) -> str:
+    """Format a float without trailing zeros: 1.0 → '1', 0.5 → '0.5', 0.123456 → '0.123456'."""
+    return f"{value:g}"
 ```
 
-Note: `Qt.KeyboardModifier.ControlModifier` maps to `Cmd` on macOS and `Ctrl` on Linux/Windows.
+Apply `_fmt` wherever a float value is written into a `QLineEdit` or `QLabel` in the style popover and axis settings panel — i.e., in the widget constructor and in any slot that refreshes the displayed value after a programmatic change.
 
-**`CellWidget` → `CellListWidget` wiring:**  
-`CellWidget` emits `new_cell_requested` / `new_folder_requested` signals (connected from `CellTextEdit`). `CellListWidget._on_cell_changed` handler (or a new dedicated slot) calls `_insert_cell_after(cell_id)` / `_insert_folder_after(cell_id)` which inserts a new `CellWidget` or `FolderCellWidget` immediately after the given cell in `_cells` and `_layout`, then calls `focus()` on the new cell.
+Parsing on commit is unaffected: `float(text)` already handles both `"1"` and `"1.0"` correctly.
 
-**Signal chain:**
-```
-CellTextEdit.keyPressEvent
-  → CellWidget.new_cell_requested  (propagated from CellTextEdit signal)
-  → CellListWidget._on_new_cell_requested(cell_id)
-    → _insert_equation_cell_after(cell_id)
-    → new_cell.focus()
-```
-
-**Edge cases:**
-- Empty focused cell + Enter: still creates a new cell below (don't skip creation for empty cells).
-- Last cell in list: append to end.
-- Inside a folder: new cell is inserted inside the folder, after the focused cell. If this is complex to implement cleanly, inserting after the folder as a fallback is acceptable in v1.
-- Comment cells: Enter should also create a new equation cell below (not a comment cell).
+**Scope:** display-only change — no effect on stored values, YAML serialization, or evaluation.
 
 **Tests to add:**
-- Pressing Enter in an equation cell creates a new `CellWidget` immediately after it and focuses it.
-- Pressing Shift+Enter inserts a newline in the current cell (no new cell created).
-- Pressing Cmd+Enter creates a new folder cell immediately after the focused cell (if implemented).
-- Enter on the last cell in the list appends a new cell at the end.
-- Enter with a focused cell inside a folder inserts the new cell in the correct position.
+- `_fmt(1.0)` → `"1"`
+- `_fmt(0.5)` → `"0.5"`
+- `_fmt(0.0)` → `"0"`
+- `_fmt(10.0)` → `"10"`
+- `_fmt(0.123456)` → `"0.123456"`
+- Style popover opacity field initialized with `0.5` displays `"0.5"`, not `"0.500000"`.
+
+**Affected files:**  
+- `pringle/style_popover.py` — all float field initializations and refresh slots
+- `pringle/app.py` or `pringle/axis_settings.py` — shadow opacity field
 
 ---
 
