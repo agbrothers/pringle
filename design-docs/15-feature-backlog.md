@@ -297,44 +297,6 @@ if key in _WRAP_PAIRS and self.textCursor().hasSelection():
 
 ---
 
-### FEAT-043 — Slider visual cleanup: remove color dot, align name with cell text
-
-**Status:** Open  
-**Logged:** 2026-05-22
-
-**Description:**  
-Constant slider cells currently show a colored dot (the same palette-assigned color as equation cells) and have their name label indented slightly differently from the text area of regular equation cells. Since sliders don't render anything, the color dot is visual noise. The fix is to remove the color dot from slider row 1 and align the name label (or, once FEAT-042 is implemented, the inline name edit) with the left edge of the text content in `CellWidget`.
-
-**Color dot removal:**  
-`SliderWidget._build_ui` (row 1) adds `self._color_dot = QPushButton()` — a colored 18×18 circle. This should be removed from the layout entirely. The `style.color` field on the slider's `CellStyle` can remain (for potential future use), but the UI widget should be dropped. Remove `self._color_dot` construction, `_update_color_dot()`, and the `row1.addWidget(self._color_dot)` call.
-
-**Alignment:**  
-After removing the dot, `_name_label` becomes the first content widget in row 1. In `CellWidget`, the text edit starts after the drag handle (14 px) + color dot (18 px) + spacing (6 px) = 38 px from the left edge of the content area. With the dot removed, `SliderWidget`'s name label starts at 14 + spacing = 20 px — creating a misalignment.
-
-Two options to align:
-1. **Left-pad the name label** to match the expected offset: add a fixed spacer of the same width as the removed color dot + spacing (24 px) before the name.
-2. **Remove the color dot from `CellWidget` too** (if that is also desired) and then both start at the same position.
-
-Option 1 is minimal scope. Option 2 would require a separate decision about whether equation cells should also lose their dots (they serve a purpose — the dot drives the render color and opens the style popover). Recommend option 1 unless the team decides to rethink equation cell dots as well.
-
-**Implementation (option 1):**
-
-```python
-# In SliderWidget._build_ui, row 1:
-# Remove: self._color_dot = ... (all 4 lines)
-# Remove: row1.addWidget(self._color_dot)
-
-spacer = QWidget()
-spacer.setFixedWidth(24)   # match removed dot (18px) + spacing (6px)
-row1.addWidget(spacer)
-
-row1.addWidget(self._name_label)
-```
-
-**Note:** This is a visual/UX issue — do not commit without visual confirmation from the user.
-
----
-
 ### FEAT-039 — Compact per-cell RNG seed (replace full MT19937 state in YAML)
 
 **Status:** Open  

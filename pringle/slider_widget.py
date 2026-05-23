@@ -130,20 +130,14 @@ class SliderWidget(QWidget):
         outer.setSpacing(2)
         outer_h.addWidget(content, 1)
 
-        # --- Row 1: dot + name + value spinbox (stretch) + delete ---
+        # --- Row 1: name + value spinbox (stretch) + delete ---
         row1 = QHBoxLayout()
         row1.setContentsMargins(4, 0, 6, 0)
         row1.setSpacing(6)
         self._row1 = row1
 
-        self._color_dot = QPushButton()
-        self._color_dot.setFixedSize(18, 18)
-        self._color_dot.setFlat(True)
-        self._update_color_dot()
-        row1.addWidget(self._color_dot)
-
         self._name_label = _ClickableLabel(f"<b>{self.name}</b>")
-        self._name_label.setFixedWidth(50)
+        self._name_label.setFixedWidth(62)  # aligns spinbox with min_box below
         self._name_label.setCursor(Qt.CursorShape.IBeamCursor)
         self._name_label.setToolTip("Click to rename")
         self._name_label.clicked.connect(self._on_name_clicked)
@@ -328,14 +322,6 @@ class SliderWidget(QWidget):
 
     def _int_to_float(self, i: int) -> float:
         return self._min + (i / 1000.0) * (self._max - self._min)
-
-    def _update_color_dot(self):
-        r, g, b, _ = self.style.color
-        hex_color = "#{:02x}{:02x}{:02x}".format(int(r*255), int(g*255), int(b*255))
-        self._color_dot.setStyleSheet(
-            f"QPushButton {{ background-color: {hex_color}; "
-            f"border-radius: 9px; border: 1px solid rgba(0,0,0,0.15); }}"
-        )
 
     def _on_slider_moved(self, pos: int):
         v = self._int_to_float(pos)

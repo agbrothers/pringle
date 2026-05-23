@@ -6,6 +6,14 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-043 — Slider visual cleanup: remove color dot, align name with cell text
+**Status:** Closed (implemented 2026-05-22)
+
+**Implementation:**
+- **`slider_widget.py`**: Removed `self._color_dot` (QPushButton construction, `row1.addWidget`, and `_update_color_dot()` call and method). Name label is now the first widget in row 1, left-aligned with the color dots of equation cells (both start at the 4px content margin). `_name_label.setFixedWidth` set to 62px so the spinbox's left edge aligns with the min_box's left edge in row 2 (`4 + 62 + 6 = 72 = 4 + 28 + 6 + 28 + 6`). `style.color` on the slider's `CellStyle` is preserved for potential future use.
+
+---
+
 ### FEAT-042 — Editable slider variable name (rename by clicking the name label)
 **Status:** Closed (implemented 2026-05-22)
 
