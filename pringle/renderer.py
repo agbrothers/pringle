@@ -15,7 +15,9 @@ renderer falls back to face normals (faceted appearance).
 
 from __future__ import annotations
 
+import collections
 import math
+import time
 import numpy as np
 import pygfx as gfx
 import pylinalg as la
@@ -725,6 +727,9 @@ class _IncrementalOrbitHandler:
         self._drag_button: int | None = None
         self._last_x: float = 0.0
         self._last_y: float = 0.0
+        # Coast state: (ω_az, ω_el) in rad/s; None = not coasting.
+        self._coast_velocity: tuple[float, float] | None = None
+        self._vel_samples: collections.deque = collections.deque(maxlen=10)
         renderer.add_event_handler(
             self._handle,
             "pointer_down",
@@ -741,6 +746,8 @@ class _IncrementalOrbitHandler:
         t = event.type
         if t == "pointer_down":
             if self._drag_button is None:
+                self._coast_velocity = None
+                self._vel_samples.clear()
                 self._drag_button = event.button
                 self._last_x = float(event.x)
                 self._last_y = float(event.y)
@@ -752,18 +759,40 @@ class _IncrementalOrbitHandler:
             self._last_x = float(event.x)
             self._last_y = float(event.y)
             if self._drag_button == 1:
-                self._controller.rotate(
-                    (dx * self._ORBIT_SENSITIVITY, dy * self._ORBIT_SENSITIVITY),
-                    self._rect(),
-                )
+                daz = dx * self._ORBIT_SENSITIVITY
+                del_ = dy * self._ORBIT_SENSITIVITY
+                self._vel_samples.append((daz, del_, time.perf_counter()))
+                self._controller.rotate((daz, del_), self._rect())
             elif self._drag_button in (2, 3):
                 self._controller.pan((dx, dy), self._rect())
         elif t == "pointer_up":
             if event.button == self._drag_button:
+                if self._drag_button == 1:
+                    self._compute_coast_velocity()
                 self._drag_button = None
         elif t == "wheel":
             d = (event.dy or event.dx) * self._ZOOM_SENSITIVITY
             self._controller.zoom((d, d), self._rect())
+
+    def _compute_coast_velocity(self) -> None:
+        """Compute (ω_az, ω_el) in rad/s from the last ~100ms of drag samples."""
+        _WINDOW = 0.1
+        if not self._vel_samples:
+            self._coast_velocity = None
+            return
+        t_cutoff = self._vel_samples[-1][2] - _WINDOW
+        recent = [(daz, del_, t) for daz, del_, t in self._vel_samples if t >= t_cutoff]
+        if len(recent) < 2:
+            self._coast_velocity = None
+            return
+        dt = recent[-1][2] - recent[0][2]
+        if dt < 1e-3:
+            self._coast_velocity = None
+            return
+        total_daz = sum(s[0] for s in recent)
+        total_del = sum(s[1] for s in recent)
+        self._coast_velocity = (total_daz / dt, total_del / dt)
+        self._vel_samples.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -841,6 +870,13 @@ class PringleRenderer:
         # Keyboard panning is handled at the Qt level in PringleViewport,
         # not here, so that event.accept() can suppress macOS accent popovers.
 
+        # Drop shadows — projected silhouettes at the z_min floor plane
+        self._shadow_objects: dict[str, gfx.WorldObject] = {}
+        self._shadow_visible: bool = False
+        self._shadow_opacity: float = 0.5
+        # Light color so shadows show against the default dark background
+        self._shadow_color: tuple[float, float, float] = (0.15, 0.15, 0.15)
+
         # Overlay: axis lines + wireframe bounding box + orbit crosshair
         self._axes_visible = True
         self._bbox_visible = True
@@ -848,15 +884,9 @@ class PringleRenderer:
         self._overlay: list[gfx.WorldObject] = []
         self._overlay_bounds = (-5.0, 5.0, -5.0, 5.0, -5.0, 5.0)  # xn,xx,yn,yx,zn,zx
         self._crosshair_group: gfx.WorldObject | None = None
+        self._crosshair_shadow_group: gfx.Group | None = None
         self._rebuild_overlay()
         self._rebuild_crosshair()
-
-        # Drop shadows — projected silhouettes at the z_min floor plane
-        self._shadow_objects: dict[str, gfx.WorldObject] = {}
-        self._shadow_visible: bool = False
-        self._shadow_opacity: float = 0.5
-        # Light color so shadows show against the default dark background
-        self._shadow_color: tuple[float, float, float] = (0.15, 0.15, 0.15)
 
     def _pan_target(self, dx: float, dy: float, dz: float) -> None:
         """Translate the orbit target (and camera by the same delta) in world space."""
@@ -944,10 +974,14 @@ class PringleRenderer:
         self._crosshair_visible = visible
         if self._crosshair_group is not None:
             self._crosshair_group.visible = visible
+        if self._crosshair_shadow_group is not None:
+            self._crosshair_shadow_group.visible = self._shadow_visible and visible
 
     def _rebuild_crosshair(self) -> None:
         if self._crosshair_group is not None:
             self._scene.remove(self._crosshair_group)
+        if self._crosshair_shadow_group is not None:
+            self._scene.remove(self._crosshair_shadow_group)
 
         xn, xx, yn, yx, zn, zx = self._overlay_bounds
         arm = max(xx - xn, yx - yn, zx - zn) * 0.0125
@@ -966,6 +1000,21 @@ class PringleRenderer:
         group.visible = self._crosshair_visible
         self._scene.add(group)
         self._crosshair_group = group
+
+        # Shadow: X and Y arms only (Z arm collapses to a point at z_floor)
+        sc = (*self._shadow_color, self._shadow_opacity)
+        shadow_group = gfx.Group()
+        for p0, p1 in [
+            ((-arm, 0, 0), (arm, 0, 0)),
+            ((0, -arm, 0), (0, arm, 0)),
+        ]:
+            pts = np.array([p0, p1], dtype=np.float32)
+            geo = gfx.Geometry(positions=pts)
+            mat = gfx.LineMaterial(color=sc, thickness=2.5)
+            shadow_group.add(gfx.Line(geo, mat))
+        shadow_group.visible = self._shadow_visible and self._crosshair_visible
+        self._scene.add(shadow_group)
+        self._crosshair_shadow_group = shadow_group
 
     def get_scene_bsphere(self) -> tuple | None:
         """Return (cx, cy, cz, radius) of the scene bounding sphere, or None."""
@@ -1034,12 +1083,17 @@ class PringleRenderer:
         for cell_id, shadow in self._shadow_objects.items():
             src = self._objects.get(cell_id)
             shadow.visible = visible and (src is None or src.visible)
+        if self._crosshair_shadow_group is not None:
+            self._crosshair_shadow_group.visible = visible and self._crosshair_visible
 
     def set_shadow_opacity(self, opacity: float) -> None:
         self._shadow_opacity = opacity
         color = (*self._shadow_color, opacity)
         for shadow in self._shadow_objects.values():
             shadow.material.color = color
+        if self._crosshair_shadow_group is not None:
+            for line in self._crosshair_shadow_group.children:
+                line.material.color = color
 
     def set_shadow_color_for_bg(self, light_bg: bool) -> None:
         """Switch shadow colour to contrast with the active background."""
@@ -1047,6 +1101,9 @@ class PringleRenderer:
         color = (*self._shadow_color, self._shadow_opacity)
         for shadow in self._shadow_objects.values():
             shadow.material.color = color
+        if self._crosshair_shadow_group is not None:
+            for line in self._crosshair_shadow_group.children:
+                line.material.color = color
 
     # ------------------------------------------------------------------
     # Object management
@@ -1216,6 +1273,8 @@ class PringleRenderer:
         # Temporarily hide shadows so they don't inflate the bounding sphere
         for shadow in self._shadow_objects.values():
             shadow.visible = False
+        if self._crosshair_shadow_group is not None:
+            self._crosshair_shadow_group.visible = False
         bsphere = self._scene.get_world_bounding_sphere()
         if bsphere is not None:
             self._camera.show_object(self._scene, up=(0, 0, 1))
@@ -1226,11 +1285,17 @@ class PringleRenderer:
         for cell_id, shadow in self._shadow_objects.items():
             src = self._objects.get(cell_id)
             shadow.visible = self._shadow_visible and (src is None or src.visible)
+        if self._crosshair_shadow_group is not None:
+            self._crosshair_shadow_group.visible = self._shadow_visible and self._crosshair_visible
 
     def render(self) -> None:
         if self._crosshair_group is not None:
             t = self._controller.target
             self._crosshair_group.local.position = (float(t[0]), float(t[1]), float(t[2]))
+        if self._crosshair_shadow_group is not None:
+            t = self._controller.target
+            z_floor = float(self._overlay_bounds[4]) + 1e-3
+            self._crosshair_shadow_group.local.position = (float(t[0]), float(t[1]), z_floor)
         self._renderer.render(self._scene, self._camera)
 
     def snapshot(self) -> np.ndarray:

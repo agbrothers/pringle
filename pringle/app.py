@@ -52,6 +52,9 @@ _PAN_KEYS: dict[int, tuple[float, float, float]] = {
 }
 _PAN_SPEED = 0.007  # fraction of camera-to-target distance per frame at 60 fps
 
+_COAST_DECAY = 1.0    # angular velocity fraction retained per second (1.0 = no decay)
+_COAST_STOP  = 0.005  # stop threshold in rad/s (either component)
+
 
 class PringleViewport(QRenderWidget):
     """
@@ -82,15 +85,34 @@ class PringleViewport(QRenderWidget):
         else:
             self.request_draw(self._pr.render)
 
+        self._last_tick_time: float = _time.perf_counter()
         self._draw_timer = QTimer(self)
         self._draw_timer.setInterval(16)  # ~60fps
         self._draw_timer.timeout.connect(self._tick)
         self._draw_timer.start()
 
     def _tick(self) -> None:
+        now = _time.perf_counter()
+        dt = now - self._last_tick_time
+        self._last_tick_time = now
         if self._held_keys:
             self._apply_movement()
+        self._apply_coast(dt)
         self.request_draw()
+
+    def _apply_coast(self, dt: float) -> None:
+        handler = self._pr._orbit_handler
+        vel = handler._coast_velocity
+        if vel is None:
+            return
+        if abs(vel[0]) < _COAST_STOP and abs(vel[1]) < _COAST_STOP:
+            handler._coast_velocity = None
+            return
+        handler._coast_velocity = (
+            vel[0] * _COAST_DECAY ** dt,
+            vel[1] * _COAST_DECAY ** dt,
+        )
+        self._pr._controller.rotate((vel[0] * dt, vel[1] * dt), handler._rect())
 
     def _timed_render(self) -> None:
         t0 = _time.perf_counter()
@@ -499,6 +521,9 @@ class PringleWindow(QMainWindow):
                 cam.local.position = view["camera_position"]
                 cam.look_at(tgt)
                 self._viewport._pr._controller.target = tuple(tgt)
+            if "angular_velocity" in view:
+                av = view["angular_velocity"]
+                self._viewport._pr._orbit_handler._coast_velocity = (float(av[0]), float(av[1]))
             # Restore axis bound expression strings (values already set via set_bounds above)
             for key, box in [
                 ("x_min_expr", self._view_settings._x_min),
@@ -576,6 +601,9 @@ class PringleWindow(QMainWindow):
             "camera_position": [float(cam_pos[0]), float(cam_pos[1]), float(cam_pos[2])],
             "orbit_target":    [float(tgt[0]),     float(tgt[1]),     float(tgt[2])],
         }
+        vel = self._viewport._pr._orbit_handler._coast_velocity
+        if vel is not None:
+            view["angular_velocity"] = [float(vel[0]), float(vel[1])]
         for key, box in [
             ("x_min_expr", self._view_settings._x_min),
             ("x_max_expr", self._view_settings._x_max),

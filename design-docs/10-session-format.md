@@ -33,6 +33,7 @@ view:
   show_light_bg: false
   camera_position: [6.0, -8.0, 6.0]
   orbit_target: [0.0, 0.0, 0.0]
+  angular_velocity: [0.3, 0.0]  # optional; [ω_az, ω_el] in rad/s (FEAT-030 coast state)
 
 cells:
   - id: "550e8400-..."

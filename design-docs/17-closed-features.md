@@ -6,6 +6,45 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-030 — Camera inertia: orbit coast after mouse release
+**Status:** Closed (implemented 2026-05-23)
+
+**Implementation:**
+- **`pringle/renderer.py`**: Added `collections` and `time` imports. Extended `_IncrementalOrbitHandler` with `_coast_velocity: tuple[float, float] | None` (ω_az, ω_el in rad/s) and a 10-sample `_vel_samples` deque. On each left-drag `pointer_move`, records `(daz, del_, timestamp)`. On `pointer_up` for left button, `_compute_coast_velocity()` takes the last 100ms of samples, divides total angle by elapsed time to get rad/s, and stores it. On `pointer_down`, cancels any coast.
+- **`pringle/app.py`**: Added `_COAST_DECAY = 0.88` and `_COAST_STOP = 0.005` module-level constants. Added `_last_tick_time` to `PringleViewport.__init__`. `_tick()` now computes actual `dt` and calls `_apply_coast(dt)`. `_apply_coast` stops the coast when both components fall below threshold, otherwise applies `vel * dt` to `controller.rotate()` and multiplies velocity by `decay ** dt`. `angular_velocity` is written to and read from the session `view` block so coast state survives reload.
+- **`design-docs/10-session-format.md`**: Added `angular_velocity` field to the `view` block example.
+
+---
+
+### FEAT-049 — Crosshair shadow
+**Status:** Closed (implemented 2026-05-23)
+
+**Implementation:**
+- **`pringle/renderer.py`**: Added `self._crosshair_shadow_group: gfx.Group | None = None` instance variable. Shadow vars (`_shadow_color`, `_shadow_opacity`, `_shadow_visible`) moved before the `_rebuild_crosshair()` call in `__init__` so the method can read them at startup. Extended `_rebuild_crosshair` to tear down and rebuild the shadow group (X and Y arms only, at local z=0; group `local.position` is set to `(target.x, target.y, z_floor)` each frame in `render()`). Extended `set_crosshair_visible`, `set_shadow_visible`, `set_shadow_opacity`, `set_shadow_color_for_bg`, and `fit_camera` to keep the shadow group in sync. No session persistence needed — derived from the existing `show_shadow` and `show_crosshair` flags.
+
+---
+
+### FEAT-050 — Integer-type casting for array indexing in equation cells
+**Status:** Closed (implemented 2026-05-23)
+
+**Implementation:**
+- **`pringle/namespace.py`**: Added `int_` and `intp` to the top-level numpy import and to the `ns` dict in `build_equation_namespace()`. Both are numpy scalar/array type constructors that accept only numeric arguments and are safe under the existing security model.
+- **`design-docs/03-expression-evaluation.md`**: Added integer-casting bullet to the Expression Language Conventions section documenting `int_(expr)` and `intp`, and the distinction from the existing `int` builtin.
+
+---
+
+### FEAT-051 — Auto-scroll cell list to follow keyboard navigation focus
+**Status:** Closed (implemented 2026-05-23)
+
+**Implementation:**
+- **`pringle/cell_list.py`**: Stored the `QScrollArea` as `self._scroll` (was a local variable `scroll` in `_build_ui`). Added `self._scroll.ensureWidgetVisible(widget)` calls after every `setFocus()` / `focus()` call that moves keyboard focus to a new cell:
+  - `_on_navigate_down` / `_on_navigate_up` — after cross-cell arrow-key navigation.
+  - `add_cell` / `add_comment_cell` — after inserting and focusing a new cell (covers Enter-to-add).
+  - `remove_cell` — after focusing the cell above the deleted one (covers Backspace on empty cell).
+  - `_maybe_morph_to_comment`, `_morph_equation_to_comment`, `_morph_comment_to_equation` — after each morph that moves focus to the replacement widget.
+
+---
+
 ### FEAT-046 — Cmd+/ / Ctrl+/ toggle cell comment
 **Status:** Closed (implemented 2026-05-23)
 
