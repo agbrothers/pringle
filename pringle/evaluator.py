@@ -482,10 +482,14 @@ def run_cell(
                     )
                 break
 
-    # Value preview: first user-defined variable — scalar/1D inline text + shape for any ndarray.
-    # Iterate result.exports (source-execution order) rather than user_stores (unordered set).
-    # Magic and spatial names are already excluded from exports.
-    for _name, val in result.exports.items():
+    # Value preview: first variable assigned by this cell — scalar/1D inline text + shape for any ndarray.
+    # Iterate result.exports in dict order (source-execution order) but skip variables that came
+    # from shared_namespace rather than from this cell's own assignments (user_stores).
+    for name, val in result.exports.items():
+        if name not in user_stores:
+            continue
+        if name in MAGIC_NAMES or name in SPATIAL_NAMES:
+            continue
         if isinstance(val, np.ndarray):
             result.shape_preview = str(val.shape)
             try:
