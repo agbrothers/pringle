@@ -6,6 +6,20 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-046 — Cmd+/ / Ctrl+/ toggle cell comment
+**Status:** Closed (implemented 2026-05-23)
+
+**Implementation:**
+- **`pringle/cell_list.py`**: Added three methods to `CellListWidget`:
+  - `toggle_comment_focused_cell()` — dispatches to the forward or reverse morph based on the focused cell's type.
+  - `_morph_equation_to_comment(cell_id)` — replaces any `CellWidget` or `SliderWidget` with a `CommentCellWidget` whose source is `"# " + original_source`. Connects all standard comment signals and calls `_rebuild_namespace`.
+  - `_morph_comment_to_equation(cell_id)` — strips the leading `#` from the comment source, constructs a `CellWidget` with the recovered text, connects all standard equation signals, then calls `_maybe_morph_to_slider` (so a recovered `"a = 1.0"` continues to morph into a `SliderWidget`) and `_rebuild_namespace`.
+- **`pringle/app.py`**: Added `(QKeySequence("Ctrl+/"), self._cell_list.toggle_comment_focused_cell)` to `_setup_shortcuts`. On macOS, Qt maps `Cmd` → `Ctrl` for `QKeySequence`, so this fires on `Cmd+/` on Mac and `Ctrl+/` on Linux/Windows.
+
+**Tests:** `tests/test_feat046.py` — 8 cases covering: equation → comment source format, slider → comment removes from namespace, empty source, comment → equation strip, comment → slider morph, namespace re-add, noop on non-comment cell, no-crash when nothing is focused.
+
+---
+
 ### FEAT-052 — Strip trailing zeros from float display in style and axis settings panels
 **Status:** Closed (implemented 2026-05-23)
 

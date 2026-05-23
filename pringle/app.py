@@ -404,6 +404,7 @@ class PringleWindow(QMainWindow):
             (QKeySequence.StandardKey.Redo,   self._on_redo),
             (QKeySequence.StandardKey.Copy,   self._on_copy),
             (QKeySequence.StandardKey.Paste,  self._on_paste),
+            (QKeySequence("Ctrl+/"),          self._cell_list.toggle_comment_focused_cell),
         ]:
             sc = QShortcut(keys, self)
             sc.activated.connect(slot)

@@ -990,6 +990,82 @@ class CellListWidget(QWidget):
         self._cells[idx] = slider
         cell.deleteLater()
 
+    # ------------------------------------------------------------------
+    # Comment toggle (FEAT-046)
+    # ------------------------------------------------------------------
+
+    def toggle_comment_focused_cell(self) -> None:
+        """Toggle the focused cell between equation/slider and comment (Ctrl+/)."""
+        from pringle.comment_cell_widget import CommentCellWidget
+        cell_id = self._focused_cell_id()
+        if cell_id is None:
+            return
+        idx = self._index_of(cell_id)
+        if idx < 0:
+            return
+        cell = self._cells[idx]
+        if isinstance(cell, CommentCellWidget):
+            self._morph_comment_to_equation(cell_id)
+        else:
+            self._morph_equation_to_comment(cell_id)
+
+    def _morph_equation_to_comment(self, cell_id: str) -> None:
+        from pringle.comment_cell_widget import CommentCellWidget
+        idx = self._index_of(cell_id)
+        if idx < 0:
+            return
+        cell = self._cells[idx]
+        source = "# " + cell.source().strip()
+        style = cell.style
+        comment = CommentCellWidget(source=source, style=style, cell_id=cell_id)
+        comment.delete_requested.connect(self._on_delete_requested)
+        comment.content_changed.connect(self._on_comment_changed)
+        comment.enter_pressed.connect(self._on_enter_pressed)
+        comment.new_folder_requested.connect(self._on_new_folder_requested)
+        comment.drag_started.connect(self._on_drag_started)
+        comment.drag_moved.connect(self._on_drag_moved)
+        comment.drag_ended.connect(self._on_drag_ended)
+        comment.navigate_up_requested.connect(self._on_navigate_up)
+        comment.navigate_down_requested.connect(self._on_navigate_down)
+        self._layout.replaceWidget(cell, comment)
+        self._cells[idx] = comment
+        cell.deleteLater()
+        comment.focus()
+        self._rebuild_namespace()
+
+    def _morph_comment_to_equation(self, cell_id: str) -> None:
+        from pringle.comment_cell_widget import CommentCellWidget, _HASH_RE
+        idx = self._index_of(cell_id)
+        if idx < 0:
+            return
+        cell = self._cells[idx]
+        if not isinstance(cell, CommentCellWidget):
+            return
+        raw = _HASH_RE.sub("", cell.source()).strip()
+        style = cell.style
+        new_cell = CellWidget(cell_id=cell_id, style=style)
+        new_cell.content_changed.connect(self._on_cell_changed)
+        new_cell.commit_requested.connect(self._maybe_morph_to_slider)
+        new_cell.visibility_toggled.connect(self._on_equation_cell_visibility_toggled)
+        new_cell.style_updated.connect(self._on_equation_cell_style_updated)
+        new_cell.delete_requested.connect(self._on_delete_requested)
+        new_cell.enter_pressed.connect(self._on_enter_pressed)
+        new_cell.new_folder_requested.connect(self._on_new_folder_requested)
+        new_cell.run_requested.connect(self._on_run_requested)
+        new_cell.drag_started.connect(self._on_drag_started)
+        new_cell.drag_moved.connect(self._on_drag_moved)
+        new_cell.drag_ended.connect(self._on_drag_ended)
+        new_cell.navigate_up_requested.connect(self._on_navigate_up)
+        new_cell.navigate_down_requested.connect(self._on_navigate_down)
+        self._layout.replaceWidget(cell, new_cell)
+        self._cells[idx] = new_cell
+        cell.deleteLater()
+        new_cell.set_source(raw)
+        new_cell.focus()
+        # Recovered source may be a slider assignment; run the standard morph check.
+        self._maybe_morph_to_slider(cell_id)
+        self._rebuild_namespace()
+
     def _make_name_validator(self, slider: SliderWidget) -> Callable[[str], bool]:
         """Return a callback that rejects names already used by other sliders."""
         def validate(name: str) -> bool:

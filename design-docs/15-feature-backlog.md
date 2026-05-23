@@ -7,6 +7,271 @@ See [17-closed-features.md](17-closed-features.md) for implemented features.
 
 ---
 
+### FEAT-051 — Auto-scroll cell list to follow keyboard navigation focus
+
+**Status:** Open  
+**Logged:** 2026-05-23
+
+**Description:**  
+When the user navigates between cells using the Up/Down arrow keys (cross-cell navigation), the cell panel's scroll bar stays fixed even if the newly focused cell lies outside the visible scroll area. The scroll area should automatically scroll the minimum distance needed to keep the focused cell fully visible — the standard behavior of any scrollable panel that contains focusable inputs.
+
+**Motivation:**  
+A session with many cells extends past the visible panel height. Navigating down with the arrow key should feel continuous; having the focused cell disappear below the visible area breaks the editing flow and forces the user to manually scroll.
+
+**Affected navigation paths:**
+- Arrow-key cross-cell navigation (`_on_navigate_down`, `_on_navigate_up` in `cell_list.py`)
+- `Enter` to add a new cell below and focus it
+- `Backspace` on an empty cell (deletes cell, focuses the one above — that cell may be above the viewport if the user was near the bottom)
+- Morph operations that replace a widget (slider morph, comment morph) — focus lands on the replacement widget
+
+**Implementation (`cell_list.py`):**
+
+`QScrollArea.ensureWidgetVisible(widget)` scrolls the minimum amount to make `widget` fully visible in the scroll area viewport. It is the correct Qt API for this use case.
+
+**Step 1 — store the scroll area as an instance variable:**
+
+In `CellListWidget.__init__`, the local variable `scroll` is created but not retained. Change:
+
+```python
+scroll = QScrollArea()
+# ... configure ...
+scroll.setWidget(self._container)
+```
+
+to:
+
+```python
+self._scroll = QScrollArea()
+# ... configure (same as before, replacing `scroll` with `self._scroll`) ...
+self._scroll.setWidget(self._container)
+```
+
+**Step 2 — ensure visibility after navigation:**
+
+In `_on_navigate_down` and `_on_navigate_up`, after calling `setFocus()` on the target widget, immediately call `ensureWidgetVisible`:
+
+```python
+def _on_navigate_down(self, cell_id: str) -> None:
+    targets = self._focus_targets()
+    idx = next((i for i, (cid, _) in enumerate(targets) if cid == cell_id), None)
+    if idx is not None and idx + 1 < len(targets):
+        widget = targets[idx + 1][1]
+        widget.setFocus()
+        self._scroll.ensureWidgetVisible(widget)
+
+def _on_navigate_up(self, cell_id: str) -> None:
+    targets = self._focus_targets()
+    idx = next((i for i, (cid, _) in enumerate(targets) if cid == cell_id), None)
+    if idx is not None and idx > 0:
+        widget = targets[idx - 1][1]
+        widget.setFocus()
+        self._scroll.ensureWidgetVisible(widget)
+```
+
+**Step 3 — ensure visibility after new cell creation:**
+
+When a new cell is added and focused (e.g. after Enter), the adding method should also call `self._scroll.ensureWidgetVisible(new_cell)` after the cell is inserted and focus is set.
+
+**Step 4 — ensure visibility after morph / deletion:**
+
+After any operation that moves focus to a different widget (morph, backspace-delete), call `self._scroll.ensureWidgetVisible(focused_widget)` on the widget that receives focus.
+
+**Note on `ensureWidgetVisible` arguments:**  
+`QScrollArea.ensureWidgetVisible(childWidget, xmargin=50, ymargin=50)` accepts optional margin arguments. The defaults (50 px) add a small cushion so the focused widget isn't flush against the viewport edge. The defaults are reasonable; no tuning needed initially.
+
+**Tests to add:**
+- Navigate down past the bottom of the visible area; verify `ensureWidgetVisible` is called on the newly focused widget.
+- Navigate up past the top; same check.
+- Press Enter on the last visible cell; new cell below should be visible after creation.
+- Backspace on an empty cell at the bottom of the list; the cell above (which receives focus) should be visible.
+
+---
+
+### FEAT-050 — Integer-type casting for array indexing in equation cells
+
+**Status:** Open  
+**Logged:** 2026-05-23
+
+**Description:**  
+Add `int_` (and `intp`) to the equation namespace whitelist so users can explicitly cast float values to integer type for use as array indices. This fills the gap between slider auto-promotion (which converts whole-number slider floats to Python `int` automatically) and equation-cell outputs (which remain numpy floats and cannot be used as array indices without explicit casting).
+
+**Motivation:**  
+Slider values are automatically promoted to Python `int` when they are whole numbers (e.g. `path[:time]` works when `time` is a slider). But when an index is derived from an equation cell — such as `n = floor(k * 10)` — the result is a `np.float64` scalar. NumPy raises `IndexError: only integer scalar arrays can be converted to a scalar index` when a float scalar is used as an index. Currently there is no in-namespace way to perform this cast without reaching for `int()` (which works only for Python scalars, not numpy arrays).
+
+**What already exists:**  
+- `int` is already in the equation namespace (`namespace.py:97`) and works for Python scalar → int conversion.  
+- `floor` and `ceil` return `np.float64`, not `np.int_`.  
+- `round` is in the namespace but also returns `np.float64`.
+
+**Proposed additions to `build_equation_namespace()` (`namespace.py`):**
+
+```python
+from numpy import int_, intp   # add to the top-level import block
+
+# in the ns dict:
+"int_":  int_,   # numpy default integer type; scalar or array casting
+"intp":  intp,   # pointer-sized integer; correct type for array indices
+```
+
+Usage examples:
+```python
+n = int_(round(k * 10))   # cast scalar float to numpy int
+arr[n]                     # now legal — n is np.int_
+
+mask = arange(100)
+indices = int_(mask / 2)   # element-wise int cast on an array
+arr[indices]               # fancy indexing
+```
+
+**Safety:** `np.int_` and `np.intp` are numpy scalar/array type constructors — their call signatures accept only numeric arguments. They cannot trigger I/O, imports, or class traversal. Both are safe to add under the existing security model (namespace restriction + AST checker).
+
+**`int` vs `int_`:**  
+`int` (already present) accepts Python scalars and returns a Python `int`. `int_` accepts numpy scalars and arrays and returns `np.int_` (or an array of `np.int_`). Users working with numpy outputs should prefer `int_`; the `int` alias remains for compatibility with the existing documented pattern `int(round(t))`.
+
+**Documentation update (`design-docs/03-expression-evaluation.md`):**  
+Add to the Expression Language Conventions section:
+
+> **Integer casting for array indices:** Use `int_(expr)` to cast a float scalar or array to integer type for use as an array index. For scalars, `int(expr)` also works (Python builtin, already in namespace). Prefer `int_(round(expr))` over `int_(floor(expr))` to avoid floating-point off-by-one errors at whole numbers. The `intp` type is equivalent but sized for indexing on the current platform — either is acceptable.
+
+**Tests to add:**
+- `int_(np.float64(3.5))` returns an integer-typed scalar equal to `3`.
+- `int_(np.array([1.9, 2.1, 3.0]))` returns an integer array `[1, 2, 3]`.
+- `arr[int_(round(k))]` does not raise `IndexError` in an equation cell when `k` is a float cell output.
+- `intp` is available and behaves identically for indexing purposes.
+- Neither `int_` nor `intp` can be used to access dangerous attributes (AST check still applies).
+
+---
+
+### FEAT-049 — Crosshair shadow
+
+**Status:** Open  
+**Logged:** 2026-05-23
+
+**Description:**  
+When the shadow overlay is enabled, also cast a projected shadow for the orbit-target crosshair onto the z_min floor plane. The crosshair shadow follows the orbit target just like the crosshair itself does, making the target's XY position readable at a glance relative to the floor plane even when the camera is at an oblique angle.
+
+**Motivation:**  
+The shadow toggle currently projects scene objects (surfaces, curves, scatter) onto the floor. The crosshair, which marks the camera's orbit pivot, is excluded. Adding its shadow makes it consistent with the rest of the shadow system and reinforces the crosshair's role as a 3D position indicator.
+
+**Scope:**  
+- Only the X and Y arms are projected (horizontal arms cast a visible shadow line at the floor level).  
+- The Z arm is vertical; its shadow collapses to a single point at the crosshair's XY position and is omitted.
+- The shadow renders using `_shadow_color` and `_shadow_opacity` — consistent with all other shadows.
+- Visibility rule: shown when `_shadow_visible AND _crosshair_visible`; hidden when either is off.
+
+**Implementation (`renderer.py`, `PringleRenderer`):**
+
+**New instance variable:**
+```python
+self._crosshair_shadow_group: gfx.Group | None = None
+```
+Initialized alongside `_crosshair_group` in `__init__` via a `_rebuild_crosshair()` call (which already runs at startup).
+
+**Extend `_rebuild_crosshair` to also build the shadow group:**
+
+```python
+def _rebuild_crosshair(self) -> None:
+    # --- existing crosshair teardown ---
+    if self._crosshair_group is not None:
+        self._scene.remove(self._crosshair_group)
+    if self._crosshair_shadow_group is not None:
+        self._scene.remove(self._crosshair_shadow_group)
+
+    xn, xx, yn, yx, zn, zx = self._overlay_bounds
+    arm = max(xx - xn, yx - yn, zx - zn) * 0.0125
+
+    # --- existing crosshair build (unchanged) ---
+    group = gfx.Group()
+    for p0, p1, color in [
+        ((-arm, 0, 0), (arm, 0, 0),  (0.85, 0.35, 0.35, 1.0)),
+        ((0, -arm, 0), (0, arm, 0),  (0.35, 0.75, 0.35, 1.0)),
+        ((0, 0, -arm), (0, 0, arm),  (0.35, 0.50, 0.90, 1.0)),
+    ]:
+        ...
+    group.visible = self._crosshair_visible
+    self._scene.add(group)
+    self._crosshair_group = group
+
+    # --- new: crosshair shadow (X and Y arms only, at local z=0) ---
+    z_floor = float(self._overlay_bounds[4]) + 1e-3  # same offset as _make_shadow_object
+    sc = (*self._shadow_color, self._shadow_opacity)
+    shadow_group = gfx.Group()
+    for p0, p1 in [
+        ((-arm, 0, 0), (arm, 0, 0)),   # X arm
+        ((0, -arm, 0), (0, arm, 0)),   # Y arm
+    ]:
+        pts = np.array([p0, p1], dtype=np.float32)
+        geo = gfx.Geometry(positions=pts)
+        mat = gfx.LineMaterial(color=sc, thickness=2.5)
+        shadow_group.add(gfx.Line(geo, mat))
+    shadow_group.visible = self._shadow_visible and self._crosshair_visible
+    self._scene.add(shadow_group)
+    self._crosshair_shadow_group = shadow_group
+```
+
+The shadow group's arms are built identically to the crosshair's X/Y arms (same local coordinates). Its `local.position` is tracked to `(target.x, target.y, z_floor)` each frame — this places the arms at world z = z_floor regardless of the target's z height.
+
+**Per-frame position update (existing render loop, `renderer.py` ~line 1231):**
+
+```python
+if self._crosshair_group is not None:
+    t = self._controller.target
+    self._crosshair_group.local.position = (float(t[0]), float(t[1]), float(t[2]))
+
+# new: shadow tracks XY of target but stays at floor z
+if self._crosshair_shadow_group is not None:
+    z_floor = float(self._overlay_bounds[4]) + 1e-3
+    self._crosshair_shadow_group.local.position = (float(t[0]), float(t[1]), z_floor)
+```
+
+**Visibility updates — extend existing toggle methods:**
+
+```python
+def set_crosshair_visible(self, visible: bool) -> None:
+    self._crosshair_visible = visible
+    if self._crosshair_group is not None:
+        self._crosshair_group.visible = visible
+    if self._crosshair_shadow_group is not None:
+        self._crosshair_shadow_group.visible = self._shadow_visible and visible
+
+def set_shadow_visible(self, visible: bool) -> None:
+    self._shadow_visible = visible
+    for cell_id, shadow in self._shadow_objects.items():
+        src = self._objects.get(cell_id)
+        shadow.visible = visible and (src is None or src.visible)
+    # new: also toggle crosshair shadow
+    if self._crosshair_shadow_group is not None:
+        self._crosshair_shadow_group.visible = visible and self._crosshair_visible
+```
+
+**Color updates — extend `set_shadow_color_for_bg` and `set_shadow_opacity`:**
+
+Both methods iterate `self._shadow_objects` to update color/opacity. They must also update the crosshair shadow lines:
+
+```python
+# in set_shadow_opacity and set_shadow_color_for_bg:
+if self._crosshair_shadow_group is not None:
+    new_color = (*self._shadow_color, self._shadow_opacity)
+    for line in self._crosshair_shadow_group.children:
+        line.material.color = new_color
+```
+
+**z_min change handling:**  
+`_rebuild_crosshair` is already called from `set_overlay_bounds` when z_min changes (`renderer.py:929`). Since the shadow group is rebuilt inside `_rebuild_crosshair`, it is automatically rebuilt with the new z_floor whenever bounds change. No additional call site needed.
+
+**No session persistence needed:**  
+The crosshair shadow is a derived visual from the existing `show_shadow` and `show_crosshair` session flags. No new YAML field is required.
+
+**Tests to add:**
+- With shadows on and crosshair on, two `gfx.Line` objects (X and Y arms) exist in `_crosshair_shadow_group`.
+- Shadow group z-position equals z_floor (z_min + 1e-3) regardless of orbit target z.
+- Toggling crosshair off hides the shadow group.
+- Toggling shadows off hides the shadow group.
+- Changing shadow opacity updates line material color on the crosshair shadow group.
+- z_min change triggers `_rebuild_crosshair` and the shadow group uses the new z_floor.
+
+---
+
 ### FEAT-048 — Cross-cell find and replace
 
 **Status:** Open  
@@ -118,127 +383,6 @@ On macOS, `Qt.KeyboardModifier.ControlModifier` maps to the Command key, so this
 - With cursor on `z = x**2 + y**2`, pressing `Ctrl+L` selects the full line text.
 - With cursor on the second line of a multi-line cell, only that line is selected (not the whole cell).
 - Works in `_CommentEdit` as well (comment cells inherit the same `keyPressEvent` override or the same change is applied there).
-
----
-
-### FEAT-046 — Cmd+/ / Ctrl+/ toggle cell comment
-
-**Status:** Open  
-**Logged:** 2026-05-22
-
-**Description:**  
-Pressing `Cmd+/` (macOS) or `Ctrl+/` (Linux/Windows) on a focused cell should toggle it between an equation cell and a comment cell, mirroring the standard "toggle line comment" shortcut in VSCode and most modern editors.
-
-- **Equation or slider cell → comment:** Prepend `# ` to the cell source, morph to `CommentCellWidget`. The expression is preserved verbatim as the comment body so the user can uncomment and resume editing.
-- **Comment cell → equation:** Strip the leading `# ` (or `#`) from the source and morph back to a `CellWidget`. If the recovered source matches a slider pattern (e.g. `a = 1`), it continues to morph to `SliderWidget` via the existing `_maybe_morph_to_slider` path.
-
-**UX:**  
-Consistent with standard editor behavior — the shortcut works on the currently focused cell and does not require the text area to have a selection. Cursor/focus stays on the cell after the toggle.
-
----
-
-**Implementation — new `toggle_comment` method on `CellListWidget` (`cell_list.py`):**
-
-```python
-def toggle_comment_focused_cell(self) -> None:
-    """Toggle the focused cell between equation and comment."""
-    from pringle.comment_cell_widget import CommentCellWidget
-    cell_id = self._focused_cell_id()
-    if cell_id is None:
-        return
-    idx = self._index_of(cell_id)
-    if idx < 0:
-        return
-    cell = self._cells[idx]
-
-    if isinstance(cell, CommentCellWidget):
-        self._morph_comment_to_equation(cell_id)
-    else:
-        self._morph_equation_to_comment(cell_id)
-```
-
-**Forward morph (equation → comment):**
-
-```python
-def _morph_equation_to_comment(self, cell_id: str) -> None:
-    from pringle.comment_cell_widget import CommentCellWidget
-    idx = self._index_of(cell_id)
-    cell = self._cells[idx]
-    # SliderWidget.source() returns "a = 1.0"; CellWidget.source() returns expression text.
-    source = "# " + cell.source().strip()
-    style = cell.style
-    comment = CommentCellWidget(source=source, style=style, cell_id=cell_id)
-    # connect signals (same as _maybe_morph_to_comment)
-    comment.delete_requested.connect(self._on_delete_requested)
-    comment.content_changed.connect(self._on_cell_changed)
-    comment.drag_started.connect(self._on_drag_started)
-    comment.drag_moved.connect(self._on_drag_moved)
-    comment.drag_ended.connect(self._on_drag_ended)
-    self._layout.replaceWidget(cell, comment)
-    self._cells[idx] = comment
-    cell.deleteLater()
-    comment.focus()
-    self._rebuild_namespace()
-```
-
-**Reverse morph (comment → equation):**
-
-```python
-def _morph_comment_to_equation(self, cell_id: str) -> None:
-    from pringle.comment_cell_widget import CommentCellWidget
-    idx = self._index_of(cell_id)
-    cell = self._cells[idx]
-    if not isinstance(cell, CommentCellWidget):
-        return
-    # CommentCellWidget.source() returns "# <body>"; strip to recover expression.
-    raw = _HASH_RE.sub("", cell.source()).strip()  # reuse the regex from comment_cell_widget
-    style = cell.style
-    new_cell = CellWidget(source=raw, style=style, cell_id=cell_id)
-    new_cell.content_changed.connect(self._on_cell_changed)
-    new_cell.delete_requested.connect(self._on_delete_requested)
-    new_cell.run_requested.connect(self._on_run_requested)
-    new_cell.drag_started.connect(self._on_drag_started)
-    new_cell.drag_moved.connect(self._on_drag_moved)
-    new_cell.drag_ended.connect(self._on_drag_ended)
-    self._layout.replaceWidget(cell, new_cell)
-    self._cells[idx] = new_cell
-    cell.deleteLater()
-    new_cell.focus()
-    # Re-run standard morphs — recovered source may be a slider assignment.
-    self._maybe_morph_to_slider(cell_id)
-    self._rebuild_namespace()
-```
-
-Note: `_HASH_RE` is already defined in `comment_cell_widget.py`. Import it in `cell_list.py` or duplicate the one-line pattern.
-
-**Shortcut registration (`app.py`):**
-
-Add alongside the existing `QShortcut` entries:
-
-```python
-(QKeySequence("Ctrl+/"), self._cell_list.toggle_comment_focused_cell),
-```
-
-On macOS, Qt maps `Cmd` to `Ctrl` for application-level `QKeySequence` shortcuts, so `"Ctrl+/"` fires on `Cmd+/` on Mac and `Ctrl+/` on Linux/Windows.
-
-**Note on `_maybe_morph_to_comment` (`cell_list.py:844`):**  
-The existing `_maybe_morph_to_comment` fires whenever any cell's content changes and the source now starts with `#`. The forward morph in `toggle_comment_focused_cell` bypasses this (it calls `_morph_equation_to_comment` directly, which constructs the `CommentCellWidget` immediately), so there is no double-morph risk. No change to the existing morph path is needed.
-
-**Note on slider → comment:**  
-`SliderWidget.source()` returns `"a = 1.0"` (the current value, not the original text). Toggling a slider to a comment preserves the current value as the comment body. Toggling back creates a plain `CellWidget` with source `"a = 1.0"`, which then morphs back to a slider via `_maybe_morph_to_slider`. Min/max/step and expression strings (FEAT-045) are NOT preserved through a comment round-trip — the slider is rebuilt with defaults.
-
-**Desirable enhancement:** Preserve slider range state across a comment round-trip. When a `SliderWidget` is commented out, stash its full state (`_min`, `_max`, `_step`, expression strings) on the new `CommentCellWidget` as hidden metadata (e.g. a `_stashed_slider_state: dict | None` attribute). When the reverse morph fires and a slider is about to be created, check for stashed state on the originating comment and restore min/max/step/exprs rather than using defaults. This avoids the frustration of losing a carefully configured range just to temporarily disable a parameter. The stash is not persisted to YAML (it is transient in-session only); a save → reload still reverts to defaults, which is acceptable.
-
----
-
-**Tests to add:**
-
-- Focusing an equation cell and pressing `Ctrl+/` morphs it to `CommentCellWidget` with source `"# <original>"`.
-- Focusing a `CommentCellWidget` and pressing `Ctrl+/` morphs it to `CellWidget` with the `#` prefix stripped.
-- Comment → equation on `"# a = 2.5"` produces a `SliderWidget` with name `a` and value `2.5`.
-- Shortcut with no focused cell does nothing (no crash).
-- Equation → comment removes the cell from the namespace (downstream cells get an undefined-variable warning on the next rebuild).
-- Comment → equation re-adds the cell to the namespace on the next rebuild.
 
 ---
 
