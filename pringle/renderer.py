@@ -1210,6 +1210,8 @@ class PringleRenderer:
         if colormap is not None:
             geo.colors.data[:] = _apply_colormap(z.ravel(), colormap, colormap_reversed)
             geo.colors.update_full()
+        else:
+            mesh.material.color = color
 
         if opacity < 1.0:
             mesh.material.opacity = opacity
