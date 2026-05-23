@@ -102,12 +102,18 @@ def is_slider_cell(source: str) -> tuple[bool, str, float]:
     if name in MAGIC_NAMES or name in SPATIAL_NAMES:
         return False, "", 0.0
 
-    if not isinstance(node.value, ast.Constant):
+    # Accept `a = 3` (Constant) and `a = -3` (UnaryOp USub over Constant).
+    val_node = node.value
+    sign = 1.0
+    if isinstance(val_node, ast.UnaryOp) and isinstance(val_node.op, ast.USub):
+        val_node = val_node.operand
+        sign = -1.0
+    if not isinstance(val_node, ast.Constant):
         return False, "", 0.0
-    if not isinstance(node.value.value, (int, float)):
+    if not isinstance(val_node.value, (int, float)):
         return False, "", 0.0
 
-    return True, name, float(node.value.value)
+    return True, name, sign * float(val_node.value)
 
 
 def get_func_auto_render(func_name: str, args_str: str) -> str | None:

@@ -251,56 +251,6 @@ Add to the existing evaluator test suite (e.g., `tests/test_phase3.py`):
 
 ---
 
-### BUG-044 — Constant values outside default slider range (min=0, max=10) do not morph to slider
-
-**Status:** Open  
-**Logged:** 2026-05-23  
-**Related:** BUG-043 (morph timing)
-
-**Description:**  
-When a scalar assignment like `a = 15` or `a = -3` is typed, the morph to `SliderWidget` does not occur because the value falls outside the hardcoded default range `[0, 10]`. The value is either silently rejected, displayed as a plain equation cell, or clamped. This makes it impossible to quickly create sliders for parameters with natural values outside that range.
-
-**Reproduction:**
-1. Type `a = 15` in an equation cell and press Enter (or click away).  
-2. The cell does not become a slider — it remains an equation cell (or produces unexpected behavior).
-
-**Root cause:**  
-`_maybe_morph_to_slider` (or the `SliderWidget` constructor) validates that the initial value fits within `[_DEFAULT_MIN, _DEFAULT_MAX]` (currently `0` and `10`) and bails out if it does not, instead of expanding the range to accommodate the value.
-
-**Fix:**  
-When constructing the initial slider range for a new morph, derive the bounds dynamically from the value rather than using a hardcoded `[0, 10]`:
-
-```python
-def _initial_slider_range(value: float) -> tuple[float, float]:
-    """Choose a sensible default range that always contains value."""
-    if value == 0:
-        return 0.0, 10.0
-    elif value > 0:
-        return 0.0, _round_up_nice(value * 2)
-    else:  # value < 0
-        return _round_down_nice(value * 2), 0.0
-
-def _round_up_nice(x: float) -> float:
-    """Round x up to a round number (next power of 10, or nearest 5/10 multiple)."""
-    import math
-    mag = 10 ** math.floor(math.log10(abs(x)))
-    return math.ceil(x / mag) * mag
-```
-
-Simpler alternative (acceptable for v1): `min = min(0, value)`, `max = max(10, value)`. This is less elegant but always contains the value and avoids the rounding logic.
-
-**Tests to add:**
-- `a = 15` → morphs to `SliderWidget` with value `15.0` and `max >= 15`.
-- `a = -3` → morphs to `SliderWidget` with value `-3.0` and `min <= -3`.
-- `a = 0` → morphs to `SliderWidget` with value `0.0` and default range `[0, 10]`.
-- `a = 5` → morphs to `SliderWidget` with value `5.0`, range still contains `5`.
-
-**Affected files:**  
-- `pringle/cell_list.py` — `_maybe_morph_to_slider` (initial range selection)
-- `pringle/cell_widget.py` (or `slider_widget.py`) — `SliderWidget` constructor validation
-
----
-
 ### BUG-045 — Slider value clamped to range bounds instead of flagging the offending bound
 
 **Status:** Open  

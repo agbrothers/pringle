@@ -6,6 +6,17 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-044 — Constant values outside default slider range do not morph to slider
+**Status:** Closed (fixed 2026-05-23)
+
+**Root cause:** `is_slider_cell` in `preprocess.py` checked `isinstance(node.value, ast.Constant)`, but negative literals like `a = -3` are parsed as `UnaryOp(USub, Constant(3))` — not a `Constant` — so the check returned `False` and the morph was silently skipped. (`a = 15` worked because positive literals parse directly as `Constant(15)`; range expansion for out-of-range positives was already handled in the `SliderWidget` constructor.)
+
+**Fix:** In `is_slider_cell`, unwrap a leading `UnaryOp(USub, ...)` before the `Constant` check and negate the value. The `SliderWidget` constructor's existing range expansion (`value * 2` if out of bounds) handles the range correctly once the value reaches it.
+
+**Tests:** `tests/test_bug044.py` — `TestIsSliderCellNegative` (5 cases) and `TestSliderMorphOutOfRange` (4 cases).
+
+---
+
 ### BUG-043 — Slider morph fires eagerly on every keystroke instead of on Enter/focus loss
 **Status:** Closed (fixed 2026-05-23)
 
