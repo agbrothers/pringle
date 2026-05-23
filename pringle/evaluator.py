@@ -482,12 +482,19 @@ def run_cell(
                     )
                 break
 
-    # Value preview: first previewable (scalar or 1D) user-defined variable
-    for name in user_stores:
-        if name in MAGIC_NAMES or name in SPATIAL_NAMES:
-            continue
+    # Value preview: first user-defined variable — scalar/1D inline text + shape for any ndarray.
+    # Iterate result.exports (source-execution order) rather than user_stores (unordered set).
+    # Magic and spatial names are already excluded from exports.
+    for _name, val in result.exports.items():
+        if isinstance(val, np.ndarray):
+            result.shape_preview = str(val.shape)
+            try:
+                result.preview = _make_preview(val)   # None for ndim > 1; that's fine
+            except Exception:
+                pass
+            break
         try:
-            preview = _make_preview(local_ns.get(name))
+            preview = _make_preview(val)
         except Exception:
             preview = None
         if preview is not None:
@@ -568,6 +575,8 @@ def run_cell(
 
     result.render_type = render_type
     result.data = data
-    if isinstance(data, np.ndarray):
+    # Only set shape_preview from render data when the preview loop didn't already
+    # set it from the user's variable (which may differ, e.g. FEAT-049 flattening).
+    if isinstance(data, np.ndarray) and result.shape_preview is None:
         result.shape_preview = str(data.shape)
     return result

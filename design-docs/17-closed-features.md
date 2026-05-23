@@ -6,6 +6,19 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-050 — Shape preview for all array-valued assignment cells
+**Status:** Closed (implemented 2026-05-23)
+
+**Implementation:**
+- **`evaluator.py` (preview loop ~line 486)**: Changed iteration from `user_stores` (unordered `set`) to `result.exports.items()` (dict, source-execution order). Magic and spatial names are already excluded from exports so the explicit skip check was removed. Added ndarray branch: when the first export is an ndarray, `result.shape_preview = str(val.shape)` is always set and `result.preview = _make_preview(val)` is attempted (None for ndim > 1); non-array scalars fall through to the original `_make_preview` branch unchanged.
+- **`evaluator.py` (line ~579)**: Added `and result.shape_preview is None` guard on the end-of-function shape_preview assignment so that the render-data shape doesn't overwrite the user-variable shape set by the preview loop. This is visible for FEAT-049 grid shapes (e.g. `(4, n, n)` → vectors_2d flattened to `(n², 4)`) where the user expects to see their original shape.
+
+**Deviation from spec:** The spec's fix iterated `user_stores` (unordered set). Switched to `result.exports` to get source-execution order, which makes "first variable wins" deterministic. The MAGIC_NAMES/SPATIAL_NAMES guards were dropped since exports already excludes those variables.
+
+**Tests:** `tests/test_feat050.py` — 11 tests covering 2D/3D array shape_preview, 1D array shape+preview, scalar preview (computed to avoid slider detection), multi-assignment ordering (scalar-first and array-first), FEAT-049 grid vector shape preservation, 1D scatter original shape, and unchanged bare-expression paths.
+
+---
+
 ### FEAT-049 — Grid-shaped vector field input: `(n, n, 4/6)` and `(4/6, n, n)`
 **Status:** Closed (implemented 2026-05-23)
 
