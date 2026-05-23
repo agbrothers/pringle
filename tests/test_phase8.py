@@ -207,10 +207,12 @@ class TestSubCellDataModeSignals:
         sub._edit.setPlainText("x > 0")
         assert cell._debounce.isActive()
 
-    def test_switch_to_data_mode_rewires_existing_sub_cells(self, qapp):
+    def test_sub_cell_in_data_mode_does_not_start_debounce_after_add_recursion(self, qapp):
+        # add_sub_cell("recursion") auto-enables data mode, so the sub-cell is
+        # wired to _mark_data_stale from creation — debounce must not fire.
         cell = CellWidget()
-        sub = cell.add_sub_cell("recursion")  # connected to _on_text_changed
-        cell.set_data_mode(True)              # should rewire to _mark_data_stale
+        sub = cell.add_sub_cell("recursion")
+        assert cell.is_data_mode()
         cell._debounce.stop()
         sub._edit.setPlainText("x[n+1] = x[n] + 1")
         assert not cell._debounce.isActive()

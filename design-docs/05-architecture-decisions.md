@@ -33,7 +33,7 @@ This document tracks the high-level design decisions for Pringle and the open qu
 | Auto-plot output detection | Priority: (1) magic name, (2) function signature, (3) return shape inference | Tries to plot anything plottable; never plots scalars, 1D arrays, or plain lists |
 | Bare (N,3) / (N,2) arrays | Default render type: scatter; style panel allows switching to line (connected points) | Matches Desmos behavior; resolves ambiguity without parse-time inference |
 | Visibility toggle | Per-cell boolean; off = skip renderer submission but still evaluate namespace | Allows modular helpers that are never directly rendered |
-| Recurrence relations | Data cell sub-cells: `initial_condition:` and `recursion:`; executed as a generated for loop | Confined to data panel; no equation panel changes; valid Python rule syntax |
+| Recurrence relations | Sub-cells `initial_condition:` and `recursion:` available on any cell; adding a recursion sub-cell auto-enables data mode; rendered shape inferred via `_detect_shape` (vectors, scatter, etc.); unrecognised shapes exported namespace-only | `add_sub_cell("recursion")` calls `set_data_mode(True)`; `_eval_cell` skips auto-switch when recurrence rule present |
 | Session persistence | YAML file serializing all cell content, sub-cells, style, slider config, and viewport state | Diffable, version-controllable, shareable; human-readable |
 | Grid evaluation (v1) | CPU numpy vectorized eval + buffer re-upload | Simple, debuggable, sufficient for 30fps at 128×128 |
 | Magic variable scoping | Magic names (`z`, `y`, `xyz`, etc.) are local to cell execution; never exported to shared namespace | Allows multiple `z = expr` cells without collision; spatial grid vars are never shadowed |

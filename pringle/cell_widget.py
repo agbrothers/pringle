@@ -471,6 +471,8 @@ class CellWidget(QWidget):
 
     def add_sub_cell(self, sub_type: str = "constraint") -> SubCell:
         """Append a constraint or condition sub-cell below this cell."""
+        if sub_type == "recursion":
+            self.set_data_mode(True)
         sub = SubCell(sub_type=sub_type, parent=self)
         if self._data_mode:
             sub.content_changed.connect(self._mark_data_stale)
@@ -606,12 +608,10 @@ class CellWidget(QWidget):
 
     def _on_add_sub_clicked(self):
         menu = QMenu(self)
-        if self._data_mode:
-            menu.addAction("Add Recursion Rule", lambda: self.add_sub_cell("recursion"))
-            menu.addAction("Add Initial Condition", lambda: self.add_sub_cell("initial_condition"))
-        else:
-            menu.addAction("Add Constraint (filter surface)", lambda: self.add_sub_cell("constraint"))
-            menu.addAction("Add Condition (piecewise branch)", lambda: self.add_sub_cell("condition"))
+        menu.addAction("Add Recursion Rule", lambda: self.add_sub_cell("recursion"))
+        menu.addAction("Add Initial Condition", lambda: self.add_sub_cell("initial_condition"))
+        menu.addAction("Add Constraint (filter surface)", lambda: self.add_sub_cell("constraint"))
+        menu.addAction("Add Condition (piecewise branch)", lambda: self.add_sub_cell("condition"))
         menu.exec(self._add_sub_btn.mapToGlobal(
             self._add_sub_btn.rect().bottomLeft()
         ))

@@ -34,7 +34,7 @@ from pringle.cell_widget import CellWidget
 from pringle.slider_widget import SliderWidget
 from pringle.style import CellStyle, palette_color
 from pringle.grid import Grid, make_grid, GridConfig
-from pringle.evaluator import run_cell, CellResult
+from pringle.evaluator import run_cell, CellResult, _detect_shape
 from pringle.preprocess import is_slider_cell
 
 _MAX_UNDO = 50
@@ -736,11 +736,12 @@ class CellListWidget(QWidget):
                         {**build_equation_namespace(), **shared, **result.exports},
                     )
                     result.exports[arr_name] = arr
-                    if arr.ndim == 2 and arr.shape[1] in (2, 3):
+                    rt, data = _detect_shape(arr)
+                    if rt is not None:
                         with warnings.catch_warnings(record=True) as _w:
                             warnings.simplefilter("always")
-                            result.data = arr.astype(np.float32)
-                        result.render_type = "scatter"
+                            result.data = data.astype(np.float32)
+                        result.render_type = rt
                         if _w:
                             result.warning = "Overflow: values exceed float32 range — integration may have diverged"
                         elif warn:
@@ -765,13 +766,15 @@ class CellListWidget(QWidget):
             cell.set_warning(result.warning)
         cell.set_preview(result.preview, result.shape_preview)
 
-        # Auto-switch cell between expression mode and data-array mode based on return type
-        should_be_data = (
-            result.from_shape_inference
-            and result.render_type in ("scatter", "scatter_2d")
-        )
-        if should_be_data != cell.is_data_mode():
-            cell.set_data_mode(should_be_data)
+        # Auto-switch cell between expression mode and data-array mode based on return type.
+        # Skip if the cell has a recurrence rule — recurrence cells always stay in data mode.
+        if not cell.recurrence_expr():
+            should_be_data = (
+                result.from_shape_inference
+                and result.render_type in ("scatter", "scatter_2d")
+            )
+            if should_be_data != cell.is_data_mode():
+                cell.set_data_mode(should_be_data)
 
         is_vector = result.render_type in ("vectors", "vectors_2d")
         if is_vector != cell.is_vector_cell():

@@ -6,6 +6,23 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-038 — Recurrence and initial condition sub-cells for all renderable array shapes
+**Status:** Closed (implemented 2026-05-22)
+
+**Implementation:**
+
+Three changes:
+
+1. **Sub-cell menu ungated** (`cell_widget.py:_on_add_sub_clicked`): All four options — "Add Recursion Rule", "Add Initial Condition", "Add Constraint", "Add Condition" — are now shown unconditionally regardless of `_data_mode`. Previously, recursion/initial-condition options were hidden from non-data-mode cells.
+
+2. **Auto-enable data mode on recursion add** (`cell_widget.py:add_sub_cell`): When `sub_type == "recursion"`, `set_data_mode(True)` is called before the sub-cell is appended. Recurrence requires data mode because the sequential Python loop is too expensive for reactive evaluation.
+
+3. **Shape-aware render type after recurrence** (`cell_list.py:_eval_cell`): The hardcoded `arr.ndim == 2 and arr.shape[1] in (2, 3)` scatter guard is replaced with a call to `_detect_shape(arr)` from `evaluator.py`. This makes recurrence cells render `(N, 6)` as vectors, `(N, 4)` as vectors_2d, `(N, 3)` as scatter, `(N, 2)` as scatter_2d. 3D or otherwise unrecognised shapes fall through to namespace-only export (`render_type = None`). The auto-switch logic that infers data mode from shape is skipped when a recurrence rule is present (to prevent auto-disabling data mode for vector/unrecognised shapes).
+
+**Tests:** `tests/test_feat038.py`
+
+---
+
 ### FEAT-014 — Vector / arrow rendering (flow chains and explicit tail+head pairs)
 **Status:** Closed (implemented 2026-05-22)
 
