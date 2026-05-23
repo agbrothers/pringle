@@ -8,6 +8,7 @@ Tests cover:
 - Ctrl+Enter (≡ Cmd on macOS) creates a new FolderCellWidget after it
 - Enter on last cell appends to end
 - Enter from slider value/min/max/step fields creates a new equation cell below
+- Same shortcuts work identically in comment cells
 """
 
 import sys
@@ -144,3 +145,40 @@ class TestSliderEnterPressed:
         _press_enter(slider._step_box)
         qapp.processEvents()
         assert len(clist._cells) == count_before + 1
+
+
+# ---------------------------------------------------------------------------
+# Comment cell — same shortcuts
+# ---------------------------------------------------------------------------
+
+class TestEnterInCommentCell:
+    def _make_list(self, qapp, grid):
+        return CellListWidget(on_cell_result=lambda *a: None, grid=grid)
+
+    def test_enter_adds_equation_cell_below(self, qapp, grid):
+        clist = self._make_list(qapp, grid)
+        comment = clist.add_comment_cell("# hello")
+        count_before = len(clist._cells)
+        _press_enter(comment._edit)
+        qapp.processEvents()
+        assert len(clist._cells) == count_before + 1
+        assert isinstance(clist._cells[1], CellWidget)
+
+    def test_shift_enter_inserts_newline(self, qapp, grid):
+        clist = self._make_list(qapp, grid)
+        comment = clist.add_comment_cell("# hello")
+        count_before = len(clist._cells)
+        _press_enter(comment._edit, Qt.KeyboardModifier.ShiftModifier)
+        qapp.processEvents()
+        assert len(clist._cells) == count_before   # no new cell
+        assert "\n" in comment._edit.toPlainText()
+
+    def test_ctrl_enter_adds_folder_below(self, qapp, grid):
+        from pringle.folder_cell_widget import FolderCellWidget
+        clist = self._make_list(qapp, grid)
+        comment = clist.add_comment_cell("# hello")
+        count_before = len(clist._cells)
+        _press_enter(comment._edit, Qt.KeyboardModifier.ControlModifier)
+        qapp.processEvents()
+        assert len(clist._cells) == count_before + 1
+        assert isinstance(clist._cells[1], FolderCellWidget)

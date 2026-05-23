@@ -24,7 +24,7 @@ from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QPlainTextEdit, QPushButton, QLabel, QSizePolicy,
 )
 from PyQt6.QtCore import pyqtSignal, Qt
-from PyQt6.QtGui import QFontMetricsF, QTextOption
+from PyQt6.QtGui import QFontMetricsF, QKeyEvent, QTextOption
 
 from pringle.style import CellStyle
 from pringle.cell_widget import DragHandle
@@ -82,15 +82,33 @@ class _CommentEdit(QPlainTextEdit):
     def wheelEvent(self, event) -> None:
         event.ignore()
 
+    enter_at_end = pyqtSignal()    # plain Enter → new equation cell below
+    folder_requested = pyqtSignal()  # Ctrl+Enter → new folder cell below
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        key = event.key()
+        mod = event.modifiers()
+        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            if mod == Qt.KeyboardModifier.ControlModifier:
+                self.folder_requested.emit()
+                return
+            if mod == Qt.KeyboardModifier.NoModifier:
+                self.enter_at_end.emit()
+                return
+            # Shift+Enter → insert newline (fall through to super)
+        super().keyPressEvent(event)
+
 
 class CommentCellWidget(QWidget):
     """Free-text annotation — not evaluated, not rendered."""
 
-    delete_requested = pyqtSignal(str)   # cell_id
-    content_changed = pyqtSignal(str)    # cell_id
-    drag_started = pyqtSignal(str)       # cell_id
-    drag_moved = pyqtSignal(str, int)    # cell_id, global_y
-    drag_ended = pyqtSignal(str)         # cell_id
+    delete_requested = pyqtSignal(str)       # cell_id
+    content_changed = pyqtSignal(str)        # cell_id
+    enter_pressed = pyqtSignal(str)          # cell_id — Enter → new equation cell below
+    new_folder_requested = pyqtSignal(str)   # cell_id — Ctrl+Enter → new folder cell below
+    drag_started = pyqtSignal(str)           # cell_id
+    drag_moved = pyqtSignal(str, int)        # cell_id, global_y
+    drag_ended = pyqtSignal(str)             # cell_id
 
     def __init__(
         self,
@@ -103,6 +121,8 @@ class CommentCellWidget(QWidget):
         self.cell_id: str = cell_id or str(uuid.uuid4())
         self.style: CellStyle = style or CellStyle()
         self._build_ui()
+        self._edit.enter_at_end.connect(lambda: self.enter_pressed.emit(self.cell_id))
+        self._edit.folder_requested.connect(lambda: self.new_folder_requested.emit(self.cell_id))
         if source:
             self.set_source(source)
 
