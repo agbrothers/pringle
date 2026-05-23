@@ -250,3 +250,117 @@ Add to the existing evaluator test suite (e.g., `tests/test_phase3.py`):
 - `z = x**2 + y**2` → still produces `render_type == "surface"` (z is not blocked)
 
 ---
+
+### BUG-044 — Constant values outside default slider range (min=0, max=10) do not morph to slider
+
+**Status:** Open  
+**Logged:** 2026-05-23  
+**Related:** BUG-043 (morph timing)
+
+**Description:**  
+When a scalar assignment like `a = 15` or `a = -3` is typed, the morph to `SliderWidget` does not occur because the value falls outside the hardcoded default range `[0, 10]`. The value is either silently rejected, displayed as a plain equation cell, or clamped. This makes it impossible to quickly create sliders for parameters with natural values outside that range.
+
+**Reproduction:**
+1. Type `a = 15` in an equation cell and press Enter (or click away).  
+2. The cell does not become a slider — it remains an equation cell (or produces unexpected behavior).
+
+**Root cause:**  
+`_maybe_morph_to_slider` (or the `SliderWidget` constructor) validates that the initial value fits within `[_DEFAULT_MIN, _DEFAULT_MAX]` (currently `0` and `10`) and bails out if it does not, instead of expanding the range to accommodate the value.
+
+**Fix:**  
+When constructing the initial slider range for a new morph, derive the bounds dynamically from the value rather than using a hardcoded `[0, 10]`:
+
+```python
+def _initial_slider_range(value: float) -> tuple[float, float]:
+    """Choose a sensible default range that always contains value."""
+    if value == 0:
+        return 0.0, 10.0
+    elif value > 0:
+        return 0.0, _round_up_nice(value * 2)
+    else:  # value < 0
+        return _round_down_nice(value * 2), 0.0
+
+def _round_up_nice(x: float) -> float:
+    """Round x up to a round number (next power of 10, or nearest 5/10 multiple)."""
+    import math
+    mag = 10 ** math.floor(math.log10(abs(x)))
+    return math.ceil(x / mag) * mag
+```
+
+Simpler alternative (acceptable for v1): `min = min(0, value)`, `max = max(10, value)`. This is less elegant but always contains the value and avoids the rounding logic.
+
+**Tests to add:**
+- `a = 15` → morphs to `SliderWidget` with value `15.0` and `max >= 15`.
+- `a = -3` → morphs to `SliderWidget` with value `-3.0` and `min <= -3`.
+- `a = 0` → morphs to `SliderWidget` with value `0.0` and default range `[0, 10]`.
+- `a = 5` → morphs to `SliderWidget` with value `5.0`, range still contains `5`.
+
+**Affected files:**  
+- `pringle/cell_list.py` — `_maybe_morph_to_slider` (initial range selection)
+- `pringle/cell_widget.py` (or `slider_widget.py`) — `SliderWidget` constructor validation
+
+---
+
+### BUG-045 — Slider value clamped to range bounds instead of flagging the offending bound
+
+**Status:** Open  
+**Logged:** 2026-05-23  
+**Related:** BUG-044 (range bounds)
+
+**Description:**  
+When the user manually types a value into the slider's value field that falls outside `[min, max]`, the value is silently snapped back to the nearest bound. The desired behavior is to keep the typed value and instead show a red border on whichever bound is now invalid — identical to the existing red-border pattern for invalid text inputs elsewhere in the UI — so the user knows to widen the range rather than having their value overwritten.
+
+**Reproduction:**
+1. Create a slider `a = 5` with default range `[0, 10]`.
+2. Click the value field and type `15`, then press Tab or Enter.
+3. The value snaps back to `10` — the typed `15` is lost.
+
+**Expected behavior:**
+- The value field shows `15`.
+- The `max` field gets a red border (since `max=10 < value=15`).
+- The red border on `max` clears once the user sets `max >= 15`.
+- Symmetrically: if the user types `-3` and `min=0`, the `min` field gets the red border.
+
+**Root cause:**  
+The `SliderWidget` value-commit handler clamps the incoming value via `np.clip(value, self._min, self._max)` (or equivalent) before storing it, discarding out-of-range input. There is no validation pass that checks the bound fields against the current value and applies a red-border style.
+
+**Fix:**
+
+In the value-field commit handler (`SliderWidget`):
+```python
+def _on_value_committed(self, text: str) -> None:
+    try:
+        v = float(text)
+    except ValueError:
+        self._value_edit.setStyleSheet("border: 1px solid red;")
+        return
+    self._value = v   # store unclamped
+    self._value_edit.setStyleSheet("")  # clear any previous error
+    self._validate_bounds()             # check if bounds need flagging
+    self._update_handle_position()
+    self.value_changed.emit(self._value)
+
+def _validate_bounds(self) -> None:
+    """Flag min/max fields with red border if they conflict with current value."""
+    min_invalid = self._value < self._min
+    max_invalid = self._value > self._max
+    red = "border: 1px solid red;"
+    self._min_edit.setStyleSheet(red if min_invalid else "")
+    self._max_edit.setStyleSheet(red if max_invalid else "")
+```
+
+Call `_validate_bounds()` also from the min/max commit handlers so the border clears as soon as the user fixes the bound. The slider handle position should clamp visually to `[min, max]` when the value is outside bounds (so the track remains usable), but the stored value and namespace value must reflect the actual typed number.
+
+**UX note:**  
+The slider track handle should clamp visually to the nearer end when the value is outside range (same as today), but the namespace-exported value and the value field text must be the true un-clamped value. This ensures downstream expressions see `a = 15` even if the track shows the handle pegged at the right end.
+
+**Tests to add:**
+- Typing `15` into the value field of a `[0, 10]` slider stores value `15`, shows red border on `max`, no red on `min`.
+- Typing `-3` stores `-3`, red border on `min`, none on `max`.
+- After correcting `max` to `20`, the red border clears and the handle repositions.
+- Typing a non-numeric string shows red on the value field itself (existing behavior).
+
+**Affected files:**  
+- `pringle/cell_widget.py` or `pringle/slider_widget.py` — value/bound commit handlers, `_validate_bounds` helper
+
+---

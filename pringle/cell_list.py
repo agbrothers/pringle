@@ -426,6 +426,7 @@ class CellListWidget(QWidget):
         else:
             cell = CellWidget(style=style)
             cell.content_changed.connect(self._on_cell_changed)
+            cell.commit_requested.connect(self._maybe_morph_to_slider)
             cell.visibility_toggled.connect(self._on_equation_cell_visibility_toggled)
             cell.style_updated.connect(self._on_equation_cell_style_updated)
             cell.delete_requested.connect(self._on_delete_requested)
@@ -871,7 +872,6 @@ class CellListWidget(QWidget):
 
     def _on_cell_changed(self, cell_id: str) -> None:
         self._maybe_morph_to_comment(cell_id)
-        self._maybe_morph_to_slider(cell_id)
         self._rebuild_namespace()
 
     def _maybe_morph_to_comment(self, cell_id: str) -> None:

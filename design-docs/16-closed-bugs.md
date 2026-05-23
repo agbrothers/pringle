@@ -6,6 +6,17 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-043 — Slider morph fires eagerly on every keystroke instead of on Enter/focus loss
+**Status:** Closed (fixed 2026-05-23)
+
+**Root cause:** `_on_cell_changed` called `_maybe_morph_to_slider` on every `content_changed` event (every keystroke), so typing `a = 5` immediately snapped the cell to a `SliderWidget` mid-edit.
+
+**Fix:** Added `commit_requested = pyqtSignal(str)` to `CellWidget`, wired to `_text_edit.focus_lost` (already emitted from `CellTextEdit.focusOutEvent`). In `CellListWidget.add_cell`, connected `cell.commit_requested` → `_maybe_morph_to_slider`. Removed `_maybe_morph_to_slider` from `_on_cell_changed` — namespace rebuild (`_rebuild_namespace`) still fires on every keystroke for live evaluation; only the morph is deferred.
+
+**Tests:** `tests/test_bug043.py` — `test_typing_scalar_does_not_morph_mid_edit`, `test_focus_out_morphs_to_slider`, `test_clear_before_commit_prevents_morph`.
+
+---
+
 ### BUG-039 (crosshair) — Zooming disconnects camera from crosshair after WASD panning
 **Status:** Closed (fixed 2026-05-23)
 

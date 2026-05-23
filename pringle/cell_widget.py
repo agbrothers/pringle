@@ -268,6 +268,7 @@ class CellWidget(QWidget):
     """One cell in the expression panel."""
 
     content_changed = pyqtSignal(str)      # cell_id
+    commit_requested = pyqtSignal(str)     # cell_id — fires on focus-out (deferred morph check)
     delete_requested = pyqtSignal(str)     # cell_id
     enter_pressed = pyqtSignal(str)        # cell_id
     run_requested = pyqtSignal(str)        # cell_id (data-mode forced re-eval)
@@ -296,6 +297,7 @@ class CellWidget(QWidget):
         self._debounce.setInterval(self._DEBOUNCE_MS)
         self._debounce.timeout.connect(self._emit_changed)
         self._text_edit.textChanged.connect(self._on_text_changed)
+        self._text_edit.focus_lost.connect(lambda: self.commit_requested.emit(self.cell_id))
 
     # ------------------------------------------------------------------
     # UI construction
