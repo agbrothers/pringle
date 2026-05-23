@@ -337,7 +337,6 @@ def run_cell(
     source: str,
     shared_namespace: dict,
     grid: Grid,
-    t: float = 0.0,
     constraint_exprs: list[str] | None = None,
     condition_exprs: list[str] | None = None,
     is_data_cell: bool = False,
@@ -350,7 +349,6 @@ def run_cell(
     source            : raw cell source text
     shared_namespace  : the cumulative namespace from all prior cells
     grid              : current spatial grid
-    t                 : current animation time
     constraint_exprs  : list of boolean expr strings (constraint sub-cells)
     condition_exprs   : list of boolean expr strings (piecewise conditions)
     is_data_cell      : skip AST safety check for data panel cells
@@ -398,7 +396,7 @@ def run_cell(
     # Layer 2+3+4: shared namespace (sliders, lambdas, data outputs)
     local_ns.update(shared_namespace)
     # Layer 5: grid vars (highest priority — cannot be shadowed)
-    local_ns.update(grid_vars(grid, t))
+    local_ns.update(grid_vars(grid))
 
     # --- Execute ---
     # np.errstate suppresses floating-point warnings (NaN from sqrt of negative,

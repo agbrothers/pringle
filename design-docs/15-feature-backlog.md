@@ -7,6 +7,178 @@ See [17-closed-features.md](17-closed-features.md) for implemented features.
 
 ---
 
+### FEAT-044 — Text editing improvements: tab width, scroll pass-through, bracket wrapping
+
+**Status:** Open  
+**Logged:** 2026-05-22
+
+**Scope:** All changes are confined to `CellTextEdit` in `cell_widget.py` and (where noted) `_CommentEdit` in `comment_cell_widget.py`. `SubCell` uses `CellTextEdit` directly so it inherits all fixes automatically.
+
+---
+
+**Part A — 4-space tab width**
+
+Qt's default `QPlainTextEdit` tab stop is 80 px, which renders as ~8–9 character widths in a monospace font. Set it to exactly 4 character widths in `CellTextEdit.__init__`:
+
+```python
+from PyQt6.QtGui import QFontMetricsF
+self.setTabStopDistance(QFontMetricsF(self.font()).horizontalAdvance(' ') * 4)
+```
+
+This affects how `\t` characters are *displayed*. If actual space indentation (rather than a tab character) is preferred, also intercept Tab in `keyPressEvent` before the `super()` call:
+
+```python
+if key == Qt.Key.Key_Tab:
+    self.insertPlainText("    ")   # 4 literal spaces
+    return
+```
+
+Both are small, independent changes. Apply the same `setTabStopDistance` call to `_CommentEdit` for consistency.
+
+---
+
+**Part B — Wheel-event pass-through (no internal scroll)**
+
+Scrollbars are already disabled on `CellTextEdit` (`ScrollBarAlwaysOff`), and auto-height is implemented via `documentSizeChanged`. However, `QAbstractScrollArea` (the base of `QPlainTextEdit`) still consumes wheel events even when the scrollbar is hidden, so scrolling the mouse wheel while the cursor is inside a cell does not scroll the outer panel. `_CommentEdit` already fixes this with `wheelEvent → event.ignore()`; `CellTextEdit` is missing it.
+
+Add to `CellTextEdit`:
+
+```python
+def wheelEvent(self, event) -> None:
+    event.ignore()   # propagate to CellListScrollArea
+```
+
+---
+
+**Part C — Bracket wrapping (VSCode-style)**
+
+When text is selected and the user presses an opening bracket key, wrap the selection with the bracket pair instead of replacing it. This is a standard editor affordance that Qt doesn't provide out of the box but is straightforward to add in `keyPressEvent`.
+
+**Feasibility:** Fully achievable. `CellTextEdit` already overrides `keyPressEvent`; checking `cursor.hasSelection()` before `super()` is all that's needed.
+
+Add a module-level constant and extend `keyPressEvent`:
+
+```python
+_WRAP_PAIRS: dict[int, tuple[str, str]] = {
+    Qt.Key.Key_ParenLeft:   ('(', ')'),
+    Qt.Key.Key_BracketLeft: ('[', ']'),
+    Qt.Key.Key_BraceLeft:   ('{', '}'),
+}
+
+# inside keyPressEvent, before super():
+if key in _WRAP_PAIRS and self.textCursor().hasSelection():
+    open_, close = _WRAP_PAIRS[key]
+    cursor = self.textCursor()
+    selected = cursor.selectedText()
+    cursor.insertText(open_ + selected + close)
+    return
+```
+
+**Other VSCode-style editing features that are also achievable** (not in scope for this issue but worth noting):
+- **Auto-close brackets** — type `(` without a selection → inserts `()` with cursor placed between them. Same `keyPressEvent` hook, different branch.
+- **Smart backspace** — when cursor is between a matching pair `(|)`, delete both. Requires checking the character before and after the cursor.
+- **Auto-indent on newline** — when Enter is pressed inside brackets, indent the new line by one level. Requires inspecting the line context at `keyPressEvent` for `Key_Return`.
+- **Quote wrapping** — add `Qt.Key.Key_Apostrophe` and `Qt.Key.Key_QuoteDbl` to `_WRAP_PAIRS` (both open and close are the same character). This is a one-line addition to the constant.
+
+**Tests to add:**
+- Tab key inserts exactly 4 spaces (not a tab character) into a `CellTextEdit`.
+- `setTabStopDistance` is set to 4 character widths on construction.
+- Wheel event on a `CellTextEdit` calls `event.ignore()` (propagates to parent).
+- Selecting `abc` and pressing `(` produces `(abc)` with the full wrapped text selected or cursor placed after `)`.
+- Pressing `(` with no selection falls through to default behavior (inserts `(`).
+
+---
+
+### FEAT-042 — Editable slider variable name (rename by clicking the name label)
+
+**Status:** Open  
+**Logged:** 2026-05-22
+
+**Description:**  
+Once a constant slider is created (e.g., `a = 1`), the variable name `a` is fixed. The only way to rename it is to delete the slider and retype a new cell with the desired name. The feature request is to make the name label in row 1 of `SliderWidget` clickable/editable so the user can rename the variable in place.
+
+**UX:**  
+Single-click on the bold name label (`a`) in row 1 switches it to an inline `QLineEdit`. The user edits the name and presses Enter (or clicks away) to confirm. Invalid input (non-identifier, empty, or name already used by another slider) is indicated by a red border on the field and the name reverts on blur. On success, the slider takes the new name and the session reflects the change.
+
+**Implementation:**
+
+**Step 1 — Replace `_name_label` with an editable widget (`slider_widget.py`).**  
+Swap the static `QLabel` for a custom widget that toggles between display and edit modes. The simplest approach: keep a `QLabel` as the display state and replace it with a `QLineEdit` (same size, same position) on click:
+
+```python
+def _on_name_clicked(self):
+    edit = QLineEdit(self.name, self)
+    edit.setFixedWidth(self._name_label.width())
+    edit.setFont(self._name_label.font())
+    edit.selectAll()
+    edit.editingFinished.connect(lambda: self._on_name_commit(edit))
+    # swap label → edit in layout
+    row1.replaceWidget(self._name_label, edit)
+    self._name_label.hide()
+    edit.setFocus()
+    self._name_edit = edit
+```
+
+**Step 2 — Validate and commit the new name.**  
+On `editingFinished` (Enter or focus lost):
+- Strip whitespace; if empty, revert.
+- Check `str.isidentifier()` and that the name is not in `MAGIC_NAMES | SPATIAL_NAMES`.
+- Check no other `SliderWidget` in the session already uses the name (requires access to sibling cells; pass a validation callback at construction time, or use a signal to the parent).
+- If valid: set `self.name = new_name`, update `_name_label` text, emit `name_changed(old_name, new_name, cell_id)`, swap edit → label.
+- If invalid: flash red border, revert to old name, swap edit → label.
+
+**Step 3 — Add `name_changed` signal and handler in `CellListWidget`.**  
+`SliderWidget` emits `name_changed = pyqtSignal(str, str, str)` (old_name, new_name, cell_id). `CellListWidget` connects this and calls `_rebuild_namespace()`. The old name is dropped from the shared namespace on the next rebuild (it won't be emitted since the slider's `source()` returns the new name). Downstream cells that referenced the old name will receive "undefined variable" warnings — this is acceptable; the user updates references manually, as with any variable rename.
+
+**Note on `value_changed` signal:** The existing signal carries `(name, value)`. After rename, subsequent value changes will emit with the new name automatically since `self.name` is updated on the widget. No change to that signal's signature.
+
+**Tests to add:**
+- Clicking the name label opens an inline edit field pre-filled with the current name.
+- Valid rename: `a → b` updates `slider.name == "b"`, `name_changed` signal fires with `("a", "b", cell_id)`, namespace rebuild uses `b`.
+- Invalid rename (non-identifier, e.g. `1x`): field reverts to `a`, no signal emitted.
+- Duplicate rename (name already used by another slider): reverts, no signal.
+- Reserved name (e.g. `z`, `x`): reverts, no signal.
+
+---
+
+### FEAT-043 — Slider visual cleanup: remove color dot, align name with cell text
+
+**Status:** Open  
+**Logged:** 2026-05-22
+
+**Description:**  
+Constant slider cells currently show a colored dot (the same palette-assigned color as equation cells) and have their name label indented slightly differently from the text area of regular equation cells. Since sliders don't render anything, the color dot is visual noise. The fix is to remove the color dot from slider row 1 and align the name label (or, once FEAT-042 is implemented, the inline name edit) with the left edge of the text content in `CellWidget`.
+
+**Color dot removal:**  
+`SliderWidget._build_ui` (row 1) adds `self._color_dot = QPushButton()` — a colored 18×18 circle. This should be removed from the layout entirely. The `style.color` field on the slider's `CellStyle` can remain (for potential future use), but the UI widget should be dropped. Remove `self._color_dot` construction, `_update_color_dot()`, and the `row1.addWidget(self._color_dot)` call.
+
+**Alignment:**  
+After removing the dot, `_name_label` becomes the first content widget in row 1. In `CellWidget`, the text edit starts after the drag handle (14 px) + color dot (18 px) + spacing (6 px) = 38 px from the left edge of the content area. With the dot removed, `SliderWidget`'s name label starts at 14 + spacing = 20 px — creating a misalignment.
+
+Two options to align:
+1. **Left-pad the name label** to match the expected offset: add a fixed spacer of the same width as the removed color dot + spacing (24 px) before the name.
+2. **Remove the color dot from `CellWidget` too** (if that is also desired) and then both start at the same position.
+
+Option 1 is minimal scope. Option 2 would require a separate decision about whether equation cells should also lose their dots (they serve a purpose — the dot drives the render color and opens the style popover). Recommend option 1 unless the team decides to rethink equation cell dots as well.
+
+**Implementation (option 1):**
+
+```python
+# In SliderWidget._build_ui, row 1:
+# Remove: self._color_dot = ... (all 4 lines)
+# Remove: row1.addWidget(self._color_dot)
+
+spacer = QWidget()
+spacer.setFixedWidth(24)   # match removed dot (18px) + spacing (6px)
+row1.addWidget(spacer)
+
+row1.addWidget(self._name_label)
+```
+
+**Note:** This is a visual/UX issue — do not commit without visual confirmation from the user.
+
+---
+
 ### FEAT-039 — Compact per-cell RNG seed (replace full MT19937 state in YAML)
 
 **Status:** Open  

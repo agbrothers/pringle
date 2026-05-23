@@ -6,6 +6,20 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-041 — Remove `t` from spatial variables so `t = value` creates a slider
+**Status:** Closed (implemented 2026-05-22)
+
+**Implementation:**
+- `preprocess.py`: removed `"t"` from `SPATIAL_NAMES` so `is_slider_cell("t = 1")` now returns `(True, "t", 1.0)`.
+- `grid.py`: removed `"t"` from `grid_vars()` return dict and dropped the `t` parameter from the signature.
+- `evaluator.py`: updated `run_cell` to drop the dead `t: float = 0.0` parameter and the `grid_vars(grid, t)` call (now `grid_vars(grid)`).
+
+`x`, `y`, `u`, `v` remain reserved spatial names. Animation time is not implemented in v1; a future `t`-variation feature should use a dedicated mechanism.
+
+**Tests:** `tests/test_phase2.py::TestPreprocess::test_t_is_slider`, `test_t_float_is_slider`, `test_t_not_in_grid_vars`, `test_t_slider_not_shadowed_by_grid`.
+
+---
+
 ### FEAT-038 — Recurrence and initial condition sub-cells for all renderable array shapes
 **Status:** Closed (implemented 2026-05-22)
 

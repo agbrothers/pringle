@@ -20,7 +20,7 @@ This document tracks the high-level design decisions for Pringle and the open qu
 | Expression security | Whitelisted namespace (numpy/scipy only) + no builtins + AST safety check | Strong posture for personal/trusted use; upgrade to subprocess isolation before full public release |
 | Data panel security | Whitelisted namespace + no builtins (no AST check) | Data panel is intentionally more permissive; document clearly |
 | Data re-evaluation | Per-cell ▶ Run button only; never automatic | Prevents stochastic re-sampling from being tied to slider/animation updates |
-| Time variation | `t` is a reserved scalar injected per frame; slider UI for all named params | Makes time first-class while preserving Desmos's parameter-looping model |
+| Time variation | `t` is **not** reserved — it is a regular slider name in v1; a dedicated animation mechanism is deferred to v2 | `t` removed from `SPATIAL_NAMES` and `grid_vars()` (FEAT-041); injecting `t=0` was dead code that blocked a common slider name |
 | Evaluation order | Dependency graph (topological sort), not visual order | Visual order is for organization only; cells can be freely dragged/reordered |
 | Undefined variable handling | Static AST free-variable analysis → inline warning + "add slider" suggestion button | Mirrors Desmos UX; guides users toward correct cell structure |
 | Shape validation | Validate output shapes after exec; show inline cell warning on mismatch | Never crash the renderer; isolate errors to the offending cell |

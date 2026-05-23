@@ -158,6 +158,33 @@ class TestPreprocess:
         ok, _, _ = is_slider_cell("a = sin(x)")
         assert not ok
 
+    # FEAT-041: t is no longer a spatial name
+    def test_t_is_slider(self):
+        ok, name, val = is_slider_cell("t = 1")
+        assert ok and name == "t" and val == 1.0
+
+    def test_t_float_is_slider(self):
+        ok, name, val = is_slider_cell("t = 3.14")
+        assert ok and name == "t" and pytest.approx(val) == 3.14
+
+    def test_t_not_in_grid_vars(self):
+        from pringle.grid import make_grid, GridConfig, grid_vars
+        g = make_grid(GridConfig(n=8))
+        assert "t" not in grid_vars(g)
+
+    def test_t_slider_not_shadowed_by_grid(self):
+        """z = x**2 + t with slider t=2 evaluates using the slider value."""
+        from pringle.grid import make_grid, GridConfig
+        g = make_grid(GridConfig(n=8))
+        slider_result = run_cell("t = 2", {}, g)
+        shared = slider_result.exports
+        surf_result = run_cell("z = x**2 + t", shared, g)
+        assert surf_result.error is None
+        # z at x=0 should equal t=2
+        assert surf_result.data is not None
+        # If t were shadowed by grid_vars (old bug), min(z) ≈ 0; with t=2 it must be > 1
+        assert float(surf_result.data.min()) > 1.0
+
 
 # ---------------------------------------------------------------------------
 # Full pipeline: run_cell

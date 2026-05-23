@@ -55,7 +55,7 @@ def make_grid(config: GridConfig | None = None) -> Grid:
     return Grid(config=config, x=x, y=y, u=u, v=v, x1d=x1d, y1d=y1d)
 
 
-def grid_vars(grid: Grid, t: float = 0.0) -> dict:
+def grid_vars(grid: Grid) -> dict:
     """
     Return the dict of grid variables to inject into a cell's local namespace.
 
@@ -67,5 +67,4 @@ def grid_vars(grid: Grid, t: float = 0.0) -> dict:
         "y": grid.y,
         "u": grid.u,
         "v": grid.v,
-        "t": np.float32(t),
     }

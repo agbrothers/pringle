@@ -22,7 +22,7 @@ _FUNC_DEF = re.compile(r"^(\w+)\(([^)]*)\)\s*=\s*(.+)$", re.DOTALL)
 MAGIC_NAMES = frozenset({"z", "y", "x", "xyz", "points", "vectors"})
 
 # Spatial grid variables — these are reserved and injected per-execution
-SPATIAL_NAMES = frozenset({"x", "y", "u", "v", "t"})
+SPATIAL_NAMES = frozenset({"x", "y", "u", "v"})
 
 
 def preprocess(source: str) -> tuple[str, str | None]:
