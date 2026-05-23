@@ -702,9 +702,22 @@ class CellWidget(QWidget):
         popover = StylePopoverWidget(self.style, parent=self, show_render_mode=self._data_mode,
                                      show_normalize=self._is_vector_cell)
         popover.style_changed.connect(self._on_style_changed)
+        popover.color_picker_requested.connect(self._open_color_picker)
         pos = self._color_dot.mapToGlobal(self._color_dot.rect().bottomLeft())
         popover.move(pos)
         popover.show()
+
+    def _open_color_picker(self):
+        from PyQt6.QtWidgets import QColorDialog
+        from PyQt6.QtGui import QColor
+        from dataclasses import replace
+        r, g, b, _ = self.style.color
+        color = QColorDialog.getColor(QColor.fromRgbF(r, g, b), self, "Pick color")
+        if color.isValid():
+            new_style = replace(self.style, color=(
+                color.redF(), color.greenF(), color.blueF(), self.style.color[3],
+            ))
+            self._on_style_changed(new_style)
 
     def _on_style_changed(self, new_style):
         from dataclasses import replace

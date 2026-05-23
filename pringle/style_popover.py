@@ -53,7 +53,8 @@ class StylePopoverWidget(QFrame):
     CellWidget updates its style and re-renders.
     """
 
-    style_changed = pyqtSignal(object)  # CellStyle
+    style_changed = pyqtSignal(object)      # CellStyle
+    color_picker_requested = pyqtSignal()   # swatch clicked — parent opens QColorDialog
 
     def __init__(self, style: CellStyle, parent=None, show_render_mode: bool = False,
                  show_normalize: bool = False):
@@ -111,8 +112,10 @@ class StylePopoverWidget(QFrame):
 
         self._swatch = QPushButton()
         self._swatch.setFixedSize(20, 20)
-        self._swatch.setEnabled(False)
         self._swatch.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._swatch.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._swatch.setToolTip("Open color picker…")
+        self._swatch.clicked.connect(self.color_picker_requested.emit)
         self._refresh_swatch()
         color_row.addWidget(self._swatch)
         color_row.addStretch()

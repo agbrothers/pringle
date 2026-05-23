@@ -6,6 +6,15 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-016 — Color picker in style popover
+**Status:** Closed (implemented 2026-05-23; default-color sequence split to FEAT-056)
+
+**Implementation:**
+- **`pringle/style_popover.py`**: Added `color_picker_requested = pyqtSignal()`. Made the existing color swatch `QPushButton` enabled and clickable (removed `setEnabled(False)`), added `PointingHandCursor` and tooltip. Swatch click emits `color_picker_requested` — color dialog logic intentionally kept out of the popup to avoid Qt `Popup` window-type focus-loss destroying the widget mid-call.
+- **`pringle/cell_widget.py`**: Connected `popover.color_picker_requested` to `_open_color_picker`. Added `_open_color_picker`: opens `QColorDialog.getColor()` initialized to the current RGB, updates style RGB on acceptance (preserving `color[3]`), and calls `_on_style_changed` to propagate.
+
+---
+
 ### FEAT-030 — Camera inertia: orbit coast after mouse release
 **Status:** Closed (implemented 2026-05-23)
 

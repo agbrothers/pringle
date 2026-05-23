@@ -390,19 +390,19 @@ Add a toggle (checkbox or button) to switch the application between a dark and a
 
 ---
 
-### FEAT-016 — Color defaults and color picker/slider in style popup
+### FEAT-056 — Default color sequence for new cells
 **Status:** Open  
-**Logged:** 2026-05-16
+**Logged:** 2026-05-23
 
 **Description:**  
-Extend the existing per-cell style popover (`style_popover.py`) with a proper color picker and opacity slider, replacing the current color dot (which only cycles through a fixed palette). Also establish a global default color sequence so new cells get predictable, Desmos-like colors in order.
+Establish a global default color sequence so new cells get predictable, Desmos-like colors in order (split from FEAT-016). A `PALETTE` list already exists in `style.py`; the missing piece is that `CellListWidget` does not yet assign colors from it in sequence — all new cells get the same default blue.
 
 **Implementation notes:**
-- Qt provides `QColorDialog` out of the box; it can be launched from a "Custom…" button inside the popover to let the user pick any RGBA color.
-- Alternatively, embed a compact HSL/RGB slider widget directly in the popover (avoids opening a separate window).
-- Opacity slider: a `QSlider` mapped to the alpha channel of the cell's RGBA color; the viewport material's `opacity` and `is_transparent` flag must be updated on change.
-- Default sequence: define an ordered list of RGBA defaults (matching Desmos's palette or similar) in `style.py`; `CellListWidget` assigns the next unused color when a cell is created.
-- The color dot in the cell row should update live as the picker changes.
+- `CellListWidget` should track a `_next_color_idx: int` counter, incrementing each time a new equation or data cell is added.
+- Pass `palette_color(_next_color_idx)` as the default `style.color` when calling `add_cell()`.
+- Skip sliders, folders, and comments (they don't render in the viewport).
+- On session restore, do not advance the counter (colors come from YAML).
+- Consider wrapping at `len(PALETTE)` (already handled by `palette_color()`).
 
 ---
 
