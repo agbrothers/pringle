@@ -513,7 +513,7 @@ def make_arrow_mesh(
         mat.alpha_mode = "weighted_blend"
     mesh = gfx.InstancedMesh(_ARROW_GEO, mat, len(arrows))
     Ms = _arrow_matrices_batch(tails, heads, size=size)
-    mesh.instance_buffer.data["matrix"][:] = Ms
+    mesh.instance_buffer.data["matrix"][:] = Ms.transpose(0, 2, 1)  # pygfx stores column-major
     mesh.instance_buffer.update_full()
     return mesh
 
@@ -1190,7 +1190,7 @@ class PringleRenderer:
         if cell_id in self._arrow_mesh and self._arrow_count.get(cell_id) == N:
             Ms = _arrow_matrices_batch(tails, heads, size=size)
             ib = self._arrow_mesh[cell_id].instance_buffer
-            ib.data["matrix"][:] = Ms
+            ib.data["matrix"][:] = Ms.transpose(0, 2, 1)  # pygfx stores column-major
             ib.update_full()
             mesh = self._arrow_mesh[cell_id]
             if opacity < 1.0:

@@ -254,7 +254,7 @@ def bench_inplace_update(n_arrows: int, n_frames: int) -> dict[str, list[float]]
     def _inplace_update():
         a = _new_arrows()
         Ms = _arrow_matrices_batch(a[:, :3], a[:, 3:], size=0.1)
-        ib.data["matrix"][:] = Ms
+        ib.data["matrix"][:] = Ms.transpose(0, 2, 1)  # pygfx stores column-major
         ib.update_full()
 
     results: dict[str, list[float]] = {}
