@@ -54,6 +54,7 @@ _PAN_SPEED = 0.007  # fraction of camera-to-target distance per frame at 60 fps
 
 _COAST_DECAY = 1.0    # angular velocity fraction retained per second (1.0 = no decay)
 _COAST_STOP  = 0.005  # stop threshold in rad/s (either component)
+_COAST_EL_SNAP = 0.15 # elevation snap threshold in rad/s — snaps to 0 for clean in-plane spin
 
 
 class PringleViewport(QRenderWidget):
@@ -108,11 +109,14 @@ class PringleViewport(QRenderWidget):
         if abs(vel[0]) < _COAST_STOP and abs(vel[1]) < _COAST_STOP:
             handler._coast_velocity = None
             return
+        # Snap elevation to zero when it's small relative to azimuth, so a
+        # nearly-horizontal flick coasts in a clean horizontal circle.
+        el = 0.0 if abs(vel[1]) < _COAST_EL_SNAP else vel[1]
         handler._coast_velocity = (
             vel[0] * _COAST_DECAY ** dt,
-            vel[1] * _COAST_DECAY ** dt,
+            el    * _COAST_DECAY ** dt,
         )
-        self._pr._controller.rotate((vel[0] * dt, vel[1] * dt), handler._rect())
+        self._pr._controller.rotate((vel[0] * dt, el * dt), handler._rect())
 
     def _timed_render(self) -> None:
         t0 = _time.perf_counter()
