@@ -6,6 +6,17 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-052 — Strip trailing zeros from float display in style and axis settings panels
+**Status:** Closed (implemented 2026-05-23)
+
+**Implementation:**
+- **`pringle/style_popover.py`**: Added module-level `_fmt(value: float) -> str` using the `g` format specifier. Added `_CompactDoubleSpinBox(QDoubleSpinBox)` that overrides `textFromValue` to call `_fmt`. Replaced `QDoubleSpinBox()` with `_CompactDoubleSpinBox()` for the opacity and size spinboxes in `StylePopoverWidget._build_ui`.
+- **`pringle/view_settings.py`**: Imported `_CompactDoubleSpinBox` from `style_popover`. Replaced `QDoubleSpinBox()` with `_CompactDoubleSpinBox()` for the shadow opacity spinbox in `ViewSettingsWidget`.
+
+**Tests:** `tests/test_feat052.py` — 7 cases: `_fmt` unit tests (whole number, half, zero, ten, many decimals); `_CompactDoubleSpinBox.textFromValue` strips trailing zeros; `StylePopoverWidget` opacity field displays compact value.
+
+---
+
 ### FEAT-053 — Arrow-key cross-cell navigation in the expression panel
 **Status:** Closed (implemented 2026-05-23)
 
@@ -51,6 +62,92 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 **Deviation from spec:** None. The per-cell `RandomState` is injected via `shared["random"]` (overriding the module-level alias from `build_equation_namespace()`) rather than a new parameter on `run_cell`. This avoids changing the evaluator signature and achieves the same result since `local_ns.update(shared_namespace)` runs before `exec`.
 
 **Tests:** `tests/test_feat039.py` — 9 tests covering: same seed → identical draws across rebuilds; different seeds → different draws; → press increments seed; seed wraps at 2³²; global `np.random` not mutated by cell eval; `random` not in `_shared_ns` after rebuild; `rng_seed` round-trips through `cell_to_dict`/`restore_cell_list`; old `rng_state` key migrates to seed 0; new `rng_seed` key restores correctly.
+
+---
+
+### FEAT-039 — Compact per-cell RNG seed (replace full MT19937 state in YAML)
+
+**Status:** Closed (implemented 2026-05-23)  
+**Logged:** 2026-05-22
+
+**Description:**  
+The current approach for persisting random-cell reproducibility stores the full MT19937 generator state per cell: 624 `uint32` values plus position, gauss cache, and gauss value. At scale this is extremely verbose — the `memory.yml` example file is 20,921 lines, almost entirely RNG state. The proposed replacement is a per-cell `RandomState` seeded by a compact integer that increments with each manual re-run (→ button press), shrinking the YAML footprint from ~630 values per cell to a single integer.
+
+**Current implementation (touch points):**
+
+| Location | What it does |
+|---|---|
+| `namespace.py` | `random = np.random` — global module alias injected into equation namespaces |
+| `cell_list.py:674–686` | On each `_rebuild_namespace`: restores `np.random.set_state(cell._rng_state)` before exec if pinned; captures `np.random.get_state()` after if no pinned state |
+| `cell_list.py:790` | `_on_run_requested`: clears `_rng_state = None` to allow fresh draws |
+| `session.py:124–129` | `cell_to_dict`: serialises state as `rng_state` (624-element list), `rng_pos`, `rng_has_gauss`, `rng_gauss` |
+| `session.py:296–301` | `restore_cell_list`: reconstructs the MT tuple and assigns to `cell._pending_rng_state` |
+
+**Proposed approach — per-cell `RandomState` with integer seed:**
+
+Each cell stores a single integer seed (`_rng_seed: int`). On evaluation, a fresh `numpy.random.RandomState(_rng_seed)` is created and injected as `random` into the cell's local namespace. After evaluation, the seed is captured (it doesn't change; only `→` increments it). On explicit re-run (→ press), `_rng_seed` is incremented by 1 (modulo `2**32` to stay within MT seed range).
+
+```python
+# Evaluation:
+rng = np.random.RandomState(cell._rng_seed)
+local_ns["random"] = rng
+
+# Re-run (→ press), in _on_run_requested:
+cell._rng_seed = (cell._rng_seed + 1) % (2**32)
+
+# YAML write:
+base["rng_seed"] = cell._rng_seed  # one integer
+
+# YAML read:
+cell._rng_seed = int(data.get("rng_seed", 0))
+```
+
+`numpy.random.RandomState` has the same interface as the `numpy.random` module for all commonly used functions (`random`, `randn`, `randint`, `choice`, etc.), so existing user expressions like `random.random((10, 2))` are unaffected.
+
+**Initial seed value:**  
+Start at `0` on the first evaluation of a new cell. This is predictable and deterministic, which is desirable for session reproducibility. Alternatively, pick a random start seed from `numpy.random.randint(0, 2**32)` on first creation — this gives different-looking defaults across sessions but makes the "first state" less predictable. Recommend starting at `0` (simple and reproducible).
+
+**Tradeoffs vs. current full-state approach:**
+
+| Property | Current (MT full state) | Proposed (seed integer) |
+|---|---|---|
+| YAML size per random cell | ~630 values (~2500 chars) | 1 integer |
+| Reproducibility on reload | Bit-for-bit identical regardless of expression | Same sequence only if expression hasn't changed |
+| Re-run behavior | Next → produces globally fresh draws | Next → produces draws from seed+1 |
+| Interface change | `random = np.random` (module) | `random = RandomState(seed)` (instance) — same API |
+| Backward compat | — | Old sessions with `rng_state` must be migrated |
+
+**Key tradeoff to communicate to users:**  
+With the per-seed approach, loading an old session and *then changing an expression* will not reproduce the visual output that was saved, because the seed only guarantees the same draw sequence for the same number and type of calls. The full-state approach was expression-independent. For exploratory/interactive use this doesn't matter; for archival reproducibility it matters.
+
+**Backward compatibility:**  
+`restore_cell_list` should check for the presence of `rng_state` (old key) and migrate in-memory:
+
+```python
+if "rng_state" in data:
+    # Old format: ignore the full state; start at seed 0 (or log a migration warning)
+    cell._rng_seed = 0
+elif "rng_seed" in data:
+    cell._rng_seed = int(data["rng_seed"])
+else:
+    cell._rng_seed = 0
+```
+
+Old sessions will lose pinned randomness on the first load but will otherwise work correctly. A one-time migration note in the status bar or console is appropriate.
+
+**Implementation steps:**
+1. Add `_rng_seed: int = 0` to `CellWidget` (or manage it entirely in `CellListWidget`)
+2. In `_rebuild_namespace` (cell_list.py), replace the `get_state`/`set_state` block with `local_ns["random"] = np.random.RandomState(cell._rng_seed)`
+3. In `_on_run_requested`, replace `cell._rng_state = None` with `cell._rng_seed = (cell._rng_seed + 1) % 2**32`
+4. In `session.py:cell_to_dict`, replace the 4-field RNG block with `base["rng_seed"] = cell._rng_seed`
+5. In `session.py:restore_cell_list`, add migration from `rng_state` to `_rng_seed = 0`
+6. Remove `_rng_state` and `_pending_rng_state` from `CellWidget`; remove `np.random.set_state`/`get_state` calls from `CellListWidget`
+
+**Tests to add:**
+- A cell with `M = random.random((10, 2))` evaluated twice with the same seed produces identical output; with seed+1 produces different output.
+- Session round-trip: save with `rng_seed`, reload, verify seed is restored.
+- Old session with `rng_state` key loads without error and sets `_rng_seed = 0`.
+- `np.random` global state is NOT mutated by cell evaluation (i.e., other cells without RNG are unaffected).
 
 ---
 

@@ -24,6 +24,7 @@ from PyQt6.QtCore import pyqtSignal
 
 from pringle.grid import GridConfig
 from pringle.slider_widget import _ExprBox
+from pringle.style_popover import _CompactDoubleSpinBox
 
 
 class ViewSettingsWidget(QWidget):
@@ -133,7 +134,7 @@ class ViewSettingsWidget(QWidget):
         shadow_row.addWidget(self._shadow_cb)
 
         shadow_row.addWidget(QLabel("opacity:"))
-        self._shadow_opacity_spin = QDoubleSpinBox()
+        self._shadow_opacity_spin = _CompactDoubleSpinBox()
         self._shadow_opacity_spin.setRange(0.0, 1.0)
         self._shadow_opacity_spin.setSingleStep(0.05)
         self._shadow_opacity_spin.setDecimals(2)

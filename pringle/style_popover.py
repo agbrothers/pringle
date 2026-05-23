@@ -19,6 +19,17 @@ from PyQt6.QtGui import QImage, QPixmap, QIcon
 from pringle.style import CellStyle, COLORMAPS
 
 
+def _fmt(value: float) -> str:
+    """Format a float without trailing zeros: 1.0 → '1', 0.5 → '0.5'."""
+    return f"{value:g}"
+
+
+class _CompactDoubleSpinBox(QDoubleSpinBox):
+    """QDoubleSpinBox that strips trailing zeros from the displayed value."""
+    def textFromValue(self, value: float) -> str:
+        return _fmt(value)
+
+
 def _make_cmap_pixmap(cmap_name: str, width: int = 48, height: int = 28, reverse: bool = False) -> QPixmap:
     """Render a colormap as a horizontal gradient QPixmap."""
     import matplotlib
@@ -110,7 +121,7 @@ class StylePopoverWidget(QFrame):
         # --- Opacity row ---
         op_row = QHBoxLayout()
         op_row.addWidget(QLabel("Opacity:"))
-        self._opacity_spin = QDoubleSpinBox()
+        self._opacity_spin = _CompactDoubleSpinBox()
         self._opacity_spin.setRange(0.05, 1.0)
         self._opacity_spin.setSingleStep(0.05)
         self._opacity_spin.setDecimals(2)
@@ -124,7 +135,7 @@ class StylePopoverWidget(QFrame):
         # --- Size row (controls both line width and scatter dot size) ---
         lw_row = QHBoxLayout()
         lw_row.addWidget(QLabel("Size:"))
-        self._lw_spin = QDoubleSpinBox()
+        self._lw_spin = _CompactDoubleSpinBox()
         self._lw_spin.setRange(0.005, 2.0)
         self._lw_spin.setSingleStep(0.005)
         self._lw_spin.setDecimals(3)
