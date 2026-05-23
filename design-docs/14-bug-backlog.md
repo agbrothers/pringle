@@ -56,6 +56,8 @@ python -m pytest tests/ --ignore=tests/test_rendering.py \
 
 ---
 
+---
+
 ### BUG-038 — Assigning to a reserved spatial variable crashes the app instead of warning the user
 
 **Status:** Open  

@@ -6,6 +6,15 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-039 — Typing in comment cells triggers a full namespace rebuild on every keystroke
+**Status:** Closed (fixed 2026-05-22)
+
+**Fix (Option A):** In `CellListWidget.add_comment_cell` and `_maybe_morph_to_comment`, changed `comment.content_changed.connect(self._on_cell_changed)` to `comment.content_changed.connect(self._on_comment_changed)`. Added `_on_comment_changed` as a no-op — comment edits don't affect the namespace or any render output. Equation cell edits are unaffected.
+
+**Tests:** `tests/test_phase4_5.py::TestCommentCellNoRebuild` — `test_comment_edit_does_not_rebuild`, `test_morphed_comment_does_not_rebuild`, `test_equation_cell_still_rebuilds`.
+
+---
+
 ### BUG-013 — Camera locks and crosshair drifts when panning and rotating simultaneously
 **Status:** Closed (fixed 2026-05-22)
 

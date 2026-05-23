@@ -231,6 +231,80 @@ class TestPringleWindowIntegration:
 
 
 # ---------------------------------------------------------------------------
+# BUG-039: comment cell edits must not trigger namespace rebuild
+# ---------------------------------------------------------------------------
+
+class TestCommentCellNoRebuild:
+    def _make_list(self, qapp, grid):
+        results = []
+        clist = CellListWidget(
+            on_cell_result=lambda cid, r, s: results.append((cid, r, s)),
+            grid=grid,
+        )
+        return clist, results
+
+    def test_comment_edit_does_not_rebuild(self, qapp, grid):
+        from pringle.comment_cell_widget import CommentCellWidget
+        clist, _ = self._make_list(qapp, grid)
+        clist.add_cell("z = sin(x) * cos(y)")
+        comment = clist.add_comment_cell("# hello")
+        assert isinstance(comment, CommentCellWidget)
+
+        rebuild_count = 0
+        original_rebuild = clist._rebuild_namespace
+        def counting_rebuild():
+            nonlocal rebuild_count
+            rebuild_count += 1
+            original_rebuild()
+        clist._rebuild_namespace = counting_rebuild
+
+        rebuild_count = 0
+        comment._edit.setPlainText("# edited text")
+        assert rebuild_count == 0
+
+    def test_morphed_comment_does_not_rebuild(self, qapp, grid):
+        """A cell that morphs to CommentCellWidget via # prefix should also skip rebuild."""
+        from pringle.comment_cell_widget import CommentCellWidget
+        clist, _ = self._make_list(qapp, grid)
+        cell = clist.add_cell()
+        cell.set_source("# start as comment")
+        # Force the morph to happen
+        clist._on_cell_changed(cell.cell_id)
+        idx = clist._index_of(cell.cell_id)
+        comment = clist._cells[idx]
+        assert isinstance(comment, CommentCellWidget)
+
+        rebuild_count = 0
+        original_rebuild = clist._rebuild_namespace
+        def counting_rebuild():
+            nonlocal rebuild_count
+            rebuild_count += 1
+            original_rebuild()
+        clist._rebuild_namespace = counting_rebuild
+
+        rebuild_count = 0
+        comment._edit.setPlainText("edited body")
+        assert rebuild_count == 0
+
+    def test_equation_cell_still_rebuilds(self, qapp, grid):
+        """Non-comment cells must still trigger a rebuild on content change."""
+        clist, _ = self._make_list(qapp, grid)
+        cell = clist.add_cell("z = sin(x)")
+
+        rebuild_count = 0
+        original_rebuild = clist._rebuild_namespace
+        def counting_rebuild():
+            nonlocal rebuild_count
+            rebuild_count += 1
+            original_rebuild()
+        clist._rebuild_namespace = counting_rebuild
+
+        rebuild_count = 0
+        clist._on_cell_changed(cell.cell_id)
+        assert rebuild_count >= 1
+
+
+# ---------------------------------------------------------------------------
 # CellTextEdit editing improvements (FEAT-044)
 # ---------------------------------------------------------------------------
 

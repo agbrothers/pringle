@@ -451,7 +451,7 @@ class CellListWidget(QWidget):
 
         cell = CommentCellWidget(source=source, style=style)
         cell.delete_requested.connect(self._on_delete_requested)
-        cell.content_changed.connect(self._on_cell_changed)
+        cell.content_changed.connect(self._on_comment_changed)
         cell.drag_started.connect(self._on_drag_started)
         cell.drag_moved.connect(self._on_drag_moved)
         cell.drag_ended.connect(self._on_drag_ended)
@@ -836,6 +836,9 @@ class CellListWidget(QWidget):
             else:
                 self._on_cell_result(member.cell_id, CellResult(), member.style)
 
+    def _on_comment_changed(self, cell_id: str) -> None:
+        pass  # comment edits don't affect the namespace or any render output
+
     def _on_cell_changed(self, cell_id: str) -> None:
         self._maybe_morph_to_comment(cell_id)
         self._maybe_morph_to_slider(cell_id)
@@ -861,7 +864,7 @@ class CellListWidget(QWidget):
         style = cell.style
         comment = CommentCellWidget(source=source, style=style, cell_id=cell_id)
         comment.delete_requested.connect(self._on_delete_requested)
-        comment.content_changed.connect(self._on_cell_changed)
+        comment.content_changed.connect(self._on_comment_changed)
         comment.drag_started.connect(self._on_drag_started)
         comment.drag_moved.connect(self._on_drag_moved)
         comment.drag_ended.connect(self._on_drag_ended)
