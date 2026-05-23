@@ -177,7 +177,7 @@ A cell whose first character is `#` is treated as a comment cell — free text, 
 # This is a note about the equations below.
 ```
 
-**Detection and morphing:** in `_on_cell_changed`, if the cell source starts with `#`, the cell morphs to a `CommentCellWidget` in place (same pattern as scalar assignment → `SliderWidget`). If the `#` is removed from the start, it morphs back to a `CellWidget`.
+**Detection and morphing:** on focus-out (`commit_requested`), if the cell source starts with `#`, the cell morphs to a `CommentCellWidget` in place (same pattern as scalar assignment → `SliderWidget`). If the `#` is removed from the start, it morphs back to a `CellWidget`.
 
 **Previous design (superseded):** an earlier version triggered on Python docstrings (`"""..."""`) detected via `ast.Constant`. This is replaced by the `#` trigger only. Single/double-quoted strings are treated as equation cell content (they evaluate as string literals), not as comments.
 
@@ -200,7 +200,7 @@ The `→` button is distinct from a re-run: it is a **resample** — it requests
 
 ## Slider Cells
 
-A scalar assignment: `a = 0.6`. Typing a bare scalar assignment in any equation cell automatically morphs it into a `SliderWidget` in-place (preserving `cell_id` and style).
+A scalar assignment: `a = 0.6`. Typing a bare scalar assignment (including negative literals like `a = -3`) in any equation cell morphs it into a `SliderWidget` in-place on focus-out (preserving `cell_id` and style).
 
 **Layout** (2 rows):
 ```
@@ -210,8 +210,9 @@ Row 2:  [▷]  [min] [──●────────────────]
 
 - Up/down ticker buttons are hidden (`NoButtons`)
 - Integers display without decimal points; trailing zeros stripped
-- Range auto-expands on creation if the initial value exceeds the default max
-- Dragging the slider snaps to exact multiples of the step value
+- Range auto-expands on creation if the initial value falls outside `[0, 10]`
+- Values typed into the value field are stored as-is (no clamping); a red border appears on the `min` or `max` field if the value exceeds it, clearing once the bound is widened
+- Dragging the slider snaps to exact multiples of the step value; the handle pegs to the nearest end when the stored value is outside the range
 - ▷ button animates the slider bouncing between min and max at ~60fps
 
 All slider configuration (min, max, step) is set via the row 2 spinboxes. The current value is preserved in the YAML session file — see `10-session-format.md`.

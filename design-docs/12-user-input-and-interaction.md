@@ -116,9 +116,11 @@ Optional: a numeric input controlling the spacing between grid lines. Defaults t
 Standard text editor behavior in a `QPlainTextEdit`:
 - Arrow keys, Home/End, Ctrl+A select all, etc.
 - Multi-line input is allowed — the cell expands vertically as content grows
-- **Enter / Return**: if the cursor is at the end of the cell content, creates a new empty cell directly below and moves focus there. If the cursor is mid-text (not at end), inserts a newline within the cell.
+- **Enter / Return**: creates a new empty equation cell directly below and moves focus there (from any cursor position).
+- **Shift+Enter**: inserts a literal newline within the current cell (for multi-line expressions or comments).
+- **Ctrl+Enter** (Cmd+Enter on macOS): creates a new folder cell directly below and moves focus there.
 
-This matches Desmos behavior: Enter always advances to the next cell when you're done typing an expression, but allows multi-line blocks within one cell.
+These shortcuts apply to equation cells, comment cells, and all text fields on slider cells (value, min, max, step, name).
 
 ### Cell Deletion
 
@@ -173,7 +175,7 @@ Selecting "Add Constraint" appends a constraint sub-cell below the primary cell,
 | `Ctrl+Shift+S` | Save As (open file dialog) |
 | `Ctrl+O` | Open session (file dialog) |
 | `Ctrl+N` | New empty session |
-| `Ctrl+Enter` | Force re-evaluate focused cell (useful for data cells) |
+| `Ctrl+Enter` / `Cmd+Enter` | Add new folder cell below focused cell (in the expression panel); force re-evaluate focused cell when focus is on the viewport |
 | `F` | Toggle first-person fly mode in viewport |
 | `Ctrl+[` / `Ctrl+]` | Collapse / expand focused folder cell |
 

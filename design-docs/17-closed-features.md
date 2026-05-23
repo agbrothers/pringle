@@ -13,9 +13,10 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 - **`cell_widget.py` `CellTextEdit`**: Added `folder_requested = pyqtSignal()`. Updated `keyPressEvent`: plain Enter (no modifier, any cursor position) → `enter_at_end.emit()`; Ctrl/Cmd+Enter → `folder_requested.emit()`; Shift+Enter falls through to `super()` → inserts newline. Removed the old `atEnd()` guard — new cell fires from anywhere in the cell.
 - **`cell_widget.py` `CellWidget`**: Added `new_folder_requested = pyqtSignal(str)`. Wires `_text_edit.folder_requested` → `new_folder_requested`.
 - **`slider_widget.py`**: Added `new_cell_requested = pyqtSignal()` to `_ExprBox` and `_SpinBox` with `keyPressEvent` overrides (commit value, then emit). Added `_NameLineEdit(QLineEdit)` for the inline name editor with the same pattern. `SliderWidget` gains `enter_pressed = pyqtSignal(str)` and wires all five field signals (`_spinbox`, `_min_box`, `_max_box`, `_step_box`, `_name_edit`) to it. `_on_name_clicked` uses `_NameLineEdit` instead of `QLineEdit`.
-- **`cell_list.py`**: Connected `cell.new_folder_requested` → new `_on_new_folder_requested` (calls `add_folder(after_id=cell_id)` + `folder.focus()`). Connected `slider.enter_pressed` → `_on_enter_pressed` (same handler as equation cells).
+- **`cell_list.py`**: Connected `cell.new_folder_requested` → new `_on_new_folder_requested` (calls `add_folder(after_id=cell_id)` + `folder.focus()`). Connected `slider.enter_pressed` → `_on_enter_pressed` (same handler as equation cells). Added the same connection to `_maybe_morph_to_slider` (the morph path was initially missing it, causing the shortcut to silently no-op on sliders created by typing rather than loading from YAML).
+- **`comment_cell_widget.py`**: Extended `_CommentEdit` with the same `keyPressEvent` override (Enter → `enter_at_end`, Ctrl+Enter → `folder_requested`, Shift+Enter → newline). `CommentCellWidget` gains `enter_pressed` and `new_folder_requested` signals, wired in both `add_comment_cell` and `_maybe_morph_to_comment`.
 
-**Tests:** `tests/test_feat051.py` — 10 cases covering Enter/Shift+Enter/Ctrl+Enter in equation cells and Enter in all four numeric slider fields.
+**Tests:** `tests/test_feat051.py` — 14 cases: Enter/Shift+Enter/Ctrl+Enter in equation cells; Enter in all four numeric slider fields; morph-path slider (regression for the missing connection); Enter/Shift+Enter/Ctrl+Enter in comment cells.
 
 ---
 
