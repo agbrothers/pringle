@@ -1015,9 +1015,12 @@ class CellListWidget(QWidget):
         if idx < 0:
             return
         cell = self._cells[idx]
+        stashed_visible = cell.is_visible_cell()
+        folder_id = self._cell_folder.get(cell_id)
         source = "# " + cell.source().strip()
         style = cell.style
         comment = CommentCellWidget(source=source, style=style, cell_id=cell_id)
+        comment._stashed_visible = stashed_visible  # restored on reverse morph
         comment.delete_requested.connect(self._on_delete_requested)
         comment.content_changed.connect(self._on_comment_changed)
         comment.enter_pressed.connect(self._on_enter_pressed)
@@ -1030,6 +1033,8 @@ class CellListWidget(QWidget):
         self._layout.replaceWidget(cell, comment)
         self._cells[idx] = comment
         cell.deleteLater()
+        # Reapply folder indent and collapsed-visibility to the new widget.
+        self._assign_folder(comment, folder_id)
         comment.focus()
         self._rebuild_namespace()
 
@@ -1041,6 +1046,8 @@ class CellListWidget(QWidget):
         cell = self._cells[idx]
         if not isinstance(cell, CommentCellWidget):
             return
+        stashed_visible = getattr(cell, '_stashed_visible', True)
+        folder_id = self._cell_folder.get(cell_id)
         raw = _HASH_RE.sub("", cell.source()).strip()
         style = cell.style
         new_cell = CellWidget(cell_id=cell_id, style=style)
@@ -1060,10 +1067,17 @@ class CellListWidget(QWidget):
         self._layout.replaceWidget(cell, new_cell)
         self._cells[idx] = new_cell
         cell.deleteLater()
+        # Restore eye-button state (only meaningful if source stays as CellWidget).
+        if not stashed_visible:
+            new_cell._eye_btn.setChecked(False)
+            new_cell._on_visibility_toggled(False)
         new_cell.set_source(raw)
         new_cell.focus()
         # Recovered source may be a slider assignment; run the standard morph check.
         self._maybe_morph_to_slider(cell_id)
+        # Reapply folder indent and collapsed-visibility to whatever is now at this slot.
+        cur = self._cells[self._index_of(cell_id)]
+        self._assign_folder(cur, folder_id)
         self._rebuild_namespace()
 
     def _make_name_validator(self, slider: SliderWidget) -> Callable[[str], bool]:

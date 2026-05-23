@@ -101,6 +101,74 @@ class TestMorphCommentToEquation:
         assert not isinstance(cur, CommentCellWidget)
 
 
+class TestVisibilityStash:
+    def test_visibility_off_is_stashed_and_restored(self, qapp, clist):
+        """Eye-button state is preserved through a comment round-trip."""
+        cell = clist.add_cell(source="w = cos(x)")
+        cell_id = cell.cell_id
+        # Turn the eye off
+        cell._eye_btn.setChecked(False)
+        cell._on_visibility_toggled(False)
+        assert not cell.is_visible_cell()
+
+        # Comment it out — stash should capture is_visible=False
+        clist._morph_equation_to_comment(cell_id)
+        comment = clist._cells[clist._index_of(cell_id)]
+        assert isinstance(comment, CommentCellWidget)
+        assert comment._stashed_visible is False
+
+        # Uncomment — eye should be restored to off
+        clist._morph_comment_to_equation(cell_id)
+        restored = clist._cells[clist._index_of(cell_id)]
+        assert isinstance(restored, CellWidget)
+        assert not restored.is_visible_cell()
+
+    def test_visibility_on_stays_on_after_round_trip(self, qapp, clist):
+        """A visible cell stays visible after comment round-trip."""
+        cell = clist.add_cell(source="v = x + y")
+        cell_id = cell.cell_id
+        assert cell.is_visible_cell()
+
+        clist._morph_equation_to_comment(cell_id)
+        clist._morph_comment_to_equation(cell_id)
+        restored = clist._cells[clist._index_of(cell_id)]
+        assert restored.is_visible_cell()
+
+
+class TestFolderMembership:
+    def test_comment_inherits_folder_indent(self, qapp, clist):
+        """After equation→comment morph, the cell remains indented in its folder."""
+        folder = clist.add_folder(name="TestFolder")
+        folder_id = folder.cell_id
+        cell = clist.add_cell(source="u = 1", after_id=folder_id)
+        cell_id = cell.cell_id
+        # Manually assign to folder so the indent is applied
+        clist._assign_folder(cell, folder_id)
+        assert clist._cell_folder.get(cell_id) == folder_id
+        indent_before = cell.contentsMargins().left()
+
+        clist._morph_equation_to_comment(cell_id)
+        comment = clist._cells[clist._index_of(cell_id)]
+        assert isinstance(comment, CommentCellWidget)
+        assert clist._cell_folder.get(cell_id) == folder_id
+        assert comment.contentsMargins().left() == indent_before
+
+    def test_equation_inherits_folder_indent_after_uncomment(self, qapp, clist):
+        """After comment→equation morph, the cell is still indented in its folder."""
+        folder = clist.add_folder(name="TestFolder2")
+        folder_id = folder.cell_id
+        comment = clist.add_comment_cell(source="# p = 3", after_id=folder_id)
+        cell_id = comment.cell_id
+        clist._assign_folder(comment, folder_id)
+        indent_before = comment.contentsMargins().left()
+
+        clist._morph_comment_to_equation(cell_id)
+        qapp.processEvents()
+        cur = clist._cells[clist._index_of(cell_id)]
+        assert clist._cell_folder.get(cell_id) == folder_id
+        assert cur.contentsMargins().left() == indent_before
+
+
 class TestToggleCommentNoop:
     def test_no_focused_cell_does_nothing(self, qapp, clist):
         """toggle_comment_focused_cell is a no-op when nothing is focused."""
