@@ -1,0 +1,270 @@
+version: 1
+grid:
+  x_min: -5.0
+  x_max: 5.0
+  y_min: -5.0
+  y_max: 5.0
+  z_min: -5.0
+  z_max: 5.0
+  n: 256
+cells:
+- id: 0715779b-3abc-4c4b-805d-67a79612fd8d
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# PARAMETERS'
+- id: 58d390f4-8270-414d-9ec5-fb0f488e4969
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: a = 0.9
+  name: a
+  value: 0.9
+  min_val: 0.0
+  max_val: 1.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: 2e55c290-6be6-4312-943a-7a824a1aabdd
+  style:
+    color:
+    - 0.9
+    - 0.3
+    - 0.65
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: b = 0.6
+  name: b
+  value: 0.6
+  min_val: 0.0
+  max_val: 1.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: b4efc093-7e64-4c5f-bcf1-36ed8814886b
+  style:
+    color:
+    - 0.9
+    - 0.3
+    - 0.65
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: c = 2.0
+  name: c
+  value: 2.0
+  min_val: -5.0
+  max_val: 5.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: 9f71d8a7-fb95-45ce-8f81-88ee31c41b71
+  style:
+    color:
+    - 0.85
+    - 0.55
+    - 0.05
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: d = 0.0
+  name: d
+  value: 0.0
+  min_val: -5.0
+  max_val: 5.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: 5b321671-2eba-43a4-9a17-bc31806cd2ca
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: e = 2.0
+  name: e
+  value: 2.0
+  min_val: -5.0
+  max_val: 5.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: b3ebc508-1408-4471-983b-166d38f27234
+  style:
+    color:
+    - 0.1
+    - 0.65
+    - 0.75
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: f = 1.1
+  name: f
+  value: 1.1
+  min_val: 0.0
+  max_val: 2.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: 6e561616-8afb-4ff4-8c62-bf588132d446
+  style:
+    color:
+    - 0.9
+    - 0.3
+    - 0.65
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: g = 0.6
+  name: g
+  value: 0.6
+  min_val: 0.0
+  max_val: 1.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: a0d2076d-0601-4414-a3ef-fd438b3db159
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: h = 0.5
+  name: h
+  value: 0.5
+  min_val: 0.0
+  max_val: 10.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: 05525706-c51a-420e-8ac2-cc8feb71818b
+  style:
+    color:
+    - 0.2
+    - 0.7
+    - 0.3
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# SADDLE POINT SURFACE (PRINGLE)'
+- id: 7d590926-9b29-45b6-83c1-cd3d2256bcb9
+  style:
+    color:
+    - 0.9215686274509803
+    - 0.796078431372549
+    - 0.34509803921568627
+    - 1.0
+    opacity: 0.5
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: plasma
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: z = h*(-(a*(x-c))**2 + (b*(y+d))**2 + e)
+  visible: true
+  sub_cells:
+  - type: constraint
+    source: f*(x-c)**2+g*(y-d)**2 < 1
+  rng_seed: 0
+view:
+  show_axes: false
+  show_bbox: false
+  show_crosshair: false
+  show_light_bg: false
+  show_shadow: false
+  shadow_opacity: 0.5
+  camera_position:
+  - 5.073585723573497
+  - -1.8144351436615063
+  - 3.6780945280028132
+  orbit_target:
+  - 1.9610950946807861
+  - 0.08295682072639465
+  - 0.4812525808811188
