@@ -6,6 +6,21 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-042 — Editable slider variable name (rename by clicking the name label)
+**Status:** Closed (implemented 2026-05-22)
+
+**Implementation:**
+
+- **`slider_widget.py`**: Added `_ClickableLabel` (a `QLabel` subclass that emits `clicked`). Replaced the static `_name_label` with a `_ClickableLabel` instance that has an `IBeamCursor` and "Click to rename" tooltip. Added `name_changed = pyqtSignal(str, str, str)` (old_name, new_name, cell_id). Clicking the label calls `_on_name_clicked`, which stores a reference to `self._row1` (the row 1 `QHBoxLayout`) and swaps the label for a dynamically created `QLineEdit` via `replaceWidget`. `_on_name_text_changed` shows a red border for invalid input. `_on_name_commit` validates the proposed name (non-empty, `isidentifier()`, not in `MAGIC_NAMES | SPATIAL_NAMES`, passes optional `_validate_name` callback), commits if valid, and always swaps the `QLineEdit` back for the label. A `_committing_name` guard prevents re-entrant double-fires from focus-loss events. Added `set_name_validator(fn)` public method.
+
+- **`cell_list.py`**: Added `_make_name_validator(slider)` which returns a closure over `self._cells` that rejects names used by other sliders (checked by identity `c is not slider`). Added `_on_slider_name_changed` handler that calls `_rebuild_namespace()`. Both `add_cell` and `_maybe_morph_to_slider` now connect `name_changed` and call `set_name_validator`.
+
+**Behaviour:** Downstream cells that referenced the old name receive "undefined variable" warnings after a rename — the user updates references manually, consistent with any variable rename.
+
+**Tests:** `tests/test_phase6.py` — `test_rename_emits_name_changed`, `test_rename_updates_source`, `test_rename_no_change_silent`, `test_rename_invalid_non_identifier`, `test_rename_invalid_empty`, `test_rename_rejects_magic_names`, `test_rename_rejects_duplicate_via_validator`, `test_rename_rebuilds_namespace`, `test_rename_duplicate_blocked_by_cell_list`.
+
+---
+
 ### FEAT-041 — Remove `t` from spatial variables so `t = value` creates a slider
 **Status:** Closed (implemented 2026-05-22)
 

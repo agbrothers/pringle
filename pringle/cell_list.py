@@ -389,6 +389,8 @@ class CellListWidget(QWidget):
                 name=sl_name, value=sl_val, style=style
             )
             cell.value_changed.connect(self._on_slider_value_changed)
+            cell.name_changed.connect(self._on_slider_name_changed)
+            cell.set_name_validator(self._make_name_validator(cell))
             cell.delete_requested.connect(self._on_delete_requested)
         else:
             cell = CellWidget(style=style)
@@ -890,6 +892,8 @@ class CellListWidget(QWidget):
             name=sl_name, value=sl_val, style=style, cell_id=cell_id,
         )
         slider.value_changed.connect(self._on_slider_value_changed)
+        slider.name_changed.connect(self._on_slider_name_changed)
+        slider.set_name_validator(self._make_name_validator(slider))
         slider.delete_requested.connect(self._on_delete_requested)
         slider.drag_started.connect(self._on_drag_started)
         slider.drag_moved.connect(self._on_drag_moved)
@@ -899,6 +903,19 @@ class CellListWidget(QWidget):
         self._layout.replaceWidget(cell, slider)
         self._cells[idx] = slider
         cell.deleteLater()
+
+    def _make_name_validator(self, slider: SliderWidget) -> Callable[[str], bool]:
+        """Return a callback that rejects names already used by other sliders."""
+        def validate(name: str) -> bool:
+            return all(
+                c.name != name
+                for c in self._cells
+                if isinstance(c, SliderWidget) and c is not slider
+            )
+        return validate
+
+    def _on_slider_name_changed(self, old_name: str, new_name: str, cell_id: str) -> None:
+        self._rebuild_namespace()
 
     def _on_slider_value_changed(self, name: str, value: float) -> None:
         """

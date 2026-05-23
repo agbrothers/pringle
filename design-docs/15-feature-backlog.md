@@ -7,6 +7,214 @@ See [17-closed-features.md](17-closed-features.md) for implemented features.
 
 ---
 
+### FEAT-045 — Expression references in slider bounds and axis limits
+
+**Status:** Open  
+**Logged:** 2026-05-22
+
+**Description:**  
+Currently, the min, max, and step fields on constant sliders (`SliderWidget`) and the axis bounds fields in `ViewSettingsWidget` only accept numeric literals — they are `QDoubleSpinBox` or the custom `_SpinBox` subclass. This feature allows the user to type a variable name or simple expression (e.g. `pi`, `a`, `b * 2`) into any of those fields. The value is resolved against the current shared namespace when committed; the resolved float drives behavior at runtime while the expression string is persisted in YAML so it re-resolves on reload.
+
+**Motivation:**  
+- Sweep ranges are naturally described relative to other parameters. `a` ranges from `0` to `b` is more meaningful than `0` to `5.0`.
+- Constants like `pi`, `e`, and `sqrt(2)` (all already in the namespace via `namespace.py`) should be usable without looking up decimals.
+- Axis bounds that track slider parameters — e.g. `x_min = -a`, `x_max = a` — let the viewport stay centered on a moving feature as a slider animates.
+
+**Scope:**  
+1. **Slider min/max/step** (`slider_widget.py`) — primary ask.  
+2. **Axis bounds** (`view_settings.py`, fields `_x_min`, `_x_max`, `_y_min`, `_y_max`, `_z_min`, `_z_max`) — secondary, same mechanism.
+
+---
+
+**New widget: `_ExprBox` (replace `_SpinBox` on sliders)**
+
+Create a `QLineEdit`-based replacement for `_SpinBox` that holds either a plain float or an expression string:
+
+```python
+class _ExprBox(QLineEdit):
+    """A numeric input that also accepts expression strings resolvable to a scalar."""
+    committed = pyqtSignal(float)   # emits the resolved value on commit
+
+    def __init__(self, value: float = 0.0, parent=None):
+        super().__init__(str(value), parent)
+        self._raw_expr: str | None = None   # None → plain float mode
+        self._last_valid: float = value
+        self.editingFinished.connect(self._on_commit)
+
+    def set_resolve(self, fn: Callable[[str], float | None]) -> None:
+        """Inject namespace resolver; None = numeric-only mode."""
+        self._resolve = fn
+
+    def value(self) -> float:
+        return self._last_valid
+
+    def setValue(self, v: float) -> None:
+        self._last_valid = v
+        self._raw_expr = None
+        self.setText(str(v))
+
+    def expr(self) -> str | None:
+        """The stored expression string, or None if plain numeric."""
+        return self._raw_expr
+
+    def _on_commit(self) -> None:
+        text = self.text().strip()
+        try:
+            v = float(text)
+            self._last_valid = v
+            self._raw_expr = None
+            self.committed.emit(v)
+            return
+        except ValueError:
+            pass
+        # Try namespace resolution
+        resolved = self._resolve(text) if hasattr(self, "_resolve") else None
+        if resolved is not None and isinstance(resolved, (int, float)) and np.isfinite(resolved):
+            self._last_valid = float(resolved)
+            self._raw_expr = text
+            self.setText(text)   # keep expression visible
+            self.committed.emit(self._last_valid)
+        else:
+            # Invalid — revert display to last valid value or expression
+            self.setText(self._raw_expr if self._raw_expr else str(self._last_valid))
+            self._indicate_error()   # brief red border flash
+
+    def re_resolve(self, fn: Callable[[str], float | None]) -> None:
+        """Called when the namespace changes; re-evaluate stored expressions."""
+        if self._raw_expr is None:
+            return
+        resolved = fn(self._raw_expr)
+        if resolved is not None and isinstance(resolved, (int, float)) and np.isfinite(resolved):
+            self._last_valid = float(resolved)
+            self.committed.emit(self._last_valid)
+        # If resolution now fails (e.g., referenced slider deleted): keep last value silently.
+```
+
+**Namespace resolver:**  
+The resolver is a simple closure over the shared namespace — evaluate the expression with `eval()` in a restricted scope:
+
+```python
+def _make_resolver(shared_ns: dict) -> Callable[[str], float | None]:
+    safe_ns = {k: v for k, v in shared_ns.items()
+               if isinstance(v, (int, float, np.floating, np.integer))}
+    # Also include numpy constants already in namespace (pi, e, inf, etc.)
+    def resolve(expr: str) -> float | None:
+        try:
+            result = eval(expr, {"__builtins__": {}}, safe_ns)
+            if isinstance(result, (int, float, np.floating, np.integer)):
+                return float(result)
+        except Exception:
+            pass
+        return None
+    return resolve
+```
+
+Note: `safe_ns` is filtered to scalar values only. Arrays, magic variables (`x`, `y`, `z`, `xyz`, etc.), and non-numeric values are excluded. This prevents nonsensical expressions from reaching the bounds fields.
+
+---
+
+**Changes to `SliderWidget` (`slider_widget.py`):**
+
+1. Replace `_min_box`, `_max_box`, `_step_box` (`_SpinBox`) with `_ExprBox` instances.
+2. Connect `_ExprBox.committed` where `_SpinBox.valueChanged` was connected (i.e., `_on_range_changed` and the step box consumer).
+3. Add a method `set_resolver(fn)` that calls `set_resolve(fn)` on all three boxes. Called by `CellListWidget` after construction and after each namespace rebuild.
+4. Add a method `re_resolve(fn)` that calls `re_resolve(fn)` on all three boxes. Called by `CellListWidget` after each `_rebuild_namespace()`.
+5. Expose `min_expr()`, `max_expr()`, `step_expr()` that return each box's `expr()`.
+
+**Changes to `session.py`:**
+
+`cell_to_dict` for slider cells: write both the resolved float and the expression string:
+
+```python
+base["min_val"] = float(cell._min)
+base["max_val"] = float(cell._max)
+base["step"] = float(cell._step_box.value())
+# Expression strings (None → key omitted)
+if cell._min_box.expr():
+    base["min_expr"] = cell._min_box.expr()
+if cell._max_box.expr():
+    base["max_expr"] = cell._max_box.expr()
+if cell._step_box.expr():
+    base["step_expr"] = cell._step_box.expr()
+```
+
+`restore_cell_list` for slider cells: after setting numeric values, restore expression strings:
+
+```python
+if "min_expr" in data:
+    cell._min_box._raw_expr = data["min_expr"]
+    cell._min_box.setText(data["min_expr"])
+if "max_expr" in data:
+    cell._max_box._raw_expr = data["max_expr"]
+    cell._max_box.setText(data["max_expr"])
+if "step_expr" in data:
+    cell._step_box._raw_expr = data["step_expr"]
+    cell._step_box.setText(data["step_expr"])
+```
+
+Expression strings are restored as text immediately; their values are re-resolved on the first `_rebuild_namespace()` pass (after all cells are loaded).
+
+**Changes to `CellListWidget` (`cell_list.py`):**
+
+After each `_rebuild_namespace()` completes and `self._shared_ns` is updated, re-resolve all slider bounds:
+
+```python
+resolver = _make_resolver(self._shared_ns)
+for cell in self._cells:
+    if isinstance(cell, SliderWidget):
+        cell.re_resolve(resolver)
+```
+
+This is also called when a slider is first constructed:
+
+```python
+slider = SliderWidget(...)
+slider.set_resolver(_make_resolver(self._shared_ns))
+```
+
+---
+
+**Axis bounds (`view_settings.py`):**
+
+Apply the same `_ExprBox` replacement to the six `QDoubleSpinBox` fields (`_x_min`, `_x_max`, `_y_min`, `_y_max`, `_z_min`, `_z_max`) in `ViewSettingsWidget`. The resolver is injected from `PringleWindow` via a new `set_resolver(fn)` method on `ViewSettingsWidget`, called after each `_rebuild_namespace()` in the same pass as the slider re-resolution.
+
+`bounds_changed` is only emitted when the user clicks "Apply" — so axis bound expressions are not re-applied automatically when the namespace changes. Only on next Apply or explicit re-resolve. This avoids the viewport jumping during animation.
+
+Session persistence for axis bounds (`session.py`, view block): add `x_min_expr`, `x_max_expr`, etc. alongside the existing float values, mirroring the slider pattern.
+
+---
+
+**Error indication (`_indicate_error` on `_ExprBox`):**
+
+A brief (500 ms) red border on the field is sufficient — consistent with how validation errors are typically shown in Qt forms. No popup or status bar message needed:
+
+```python
+def _indicate_error(self) -> None:
+    self.setStyleSheet("border: 1px solid #c0392b;")
+    QTimer.singleShot(500, lambda: self.setStyleSheet(""))
+```
+
+---
+
+**Edge cases:**
+
+- **Self-reference:** `a`'s min set to `a` — the resolver filters to scalar values from the shared namespace; `a`'s value is the slider's current value at resolution time. No circular dependency issue since min/max don't feed back into the namespace. The value will just be whatever `a` currently evaluates to.
+- **Deleted reference:** `min_expr = "b"` and slider `b` is deleted → `re_resolve` silently keeps `_last_valid`. The stale expression string remains displayed, visually indicating to the user that it needs updating.
+- **Animation:** During slider animation, `_rebuild_namespace()` is called at 60 fps. The `re_resolve` call in the rebuild loop must be fast. Since `safe_ns` construction and `eval` are both O(n) in namespace size and called N_sliders times per frame, this should be sub-millisecond for typical session sizes. If profiling reveals a cost, cache the resolver and only rebuild it when the namespace structure changes (not on every value update).
+
+---
+
+**Tests to add:**
+
+- Typing `pi` into a slider min field resolves to `3.14159...` and emits the correct value.
+- Typing `a` into a slider max field (where `a` is another slider with value 5.0) resolves to `5.0` and updates when `a` changes (via `re_resolve`).
+- Invalid expression (e.g. `not_a_var`) causes a brief red border and reverts to the previous value.
+- Array-valued expression (e.g. `x`) is rejected (not a scalar).
+- Session round-trip: save slider with `max_expr = "pi"`, reload, verify `_max_box.expr() == "pi"` and `_last_valid ≈ 3.14159`.
+- Old sessions without `*_expr` fields load cleanly with `_raw_expr = None`.
+
+---
+
 ### FEAT-044 — Text editing improvements: tab width, scroll pass-through, bracket wrapping
 
 **Status:** Open  
@@ -86,58 +294,6 @@ if key in _WRAP_PAIRS and self.textCursor().hasSelection():
 - Wheel event on a `CellTextEdit` calls `event.ignore()` (propagates to parent).
 - Selecting `abc` and pressing `(` produces `(abc)` with the full wrapped text selected or cursor placed after `)`.
 - Pressing `(` with no selection falls through to default behavior (inserts `(`).
-
----
-
-### FEAT-042 — Editable slider variable name (rename by clicking the name label)
-
-**Status:** Open  
-**Logged:** 2026-05-22
-
-**Description:**  
-Once a constant slider is created (e.g., `a = 1`), the variable name `a` is fixed. The only way to rename it is to delete the slider and retype a new cell with the desired name. The feature request is to make the name label in row 1 of `SliderWidget` clickable/editable so the user can rename the variable in place.
-
-**UX:**  
-Single-click on the bold name label (`a`) in row 1 switches it to an inline `QLineEdit`. The user edits the name and presses Enter (or clicks away) to confirm. Invalid input (non-identifier, empty, or name already used by another slider) is indicated by a red border on the field and the name reverts on blur. On success, the slider takes the new name and the session reflects the change.
-
-**Implementation:**
-
-**Step 1 — Replace `_name_label` with an editable widget (`slider_widget.py`).**  
-Swap the static `QLabel` for a custom widget that toggles between display and edit modes. The simplest approach: keep a `QLabel` as the display state and replace it with a `QLineEdit` (same size, same position) on click:
-
-```python
-def _on_name_clicked(self):
-    edit = QLineEdit(self.name, self)
-    edit.setFixedWidth(self._name_label.width())
-    edit.setFont(self._name_label.font())
-    edit.selectAll()
-    edit.editingFinished.connect(lambda: self._on_name_commit(edit))
-    # swap label → edit in layout
-    row1.replaceWidget(self._name_label, edit)
-    self._name_label.hide()
-    edit.setFocus()
-    self._name_edit = edit
-```
-
-**Step 2 — Validate and commit the new name.**  
-On `editingFinished` (Enter or focus lost):
-- Strip whitespace; if empty, revert.
-- Check `str.isidentifier()` and that the name is not in `MAGIC_NAMES | SPATIAL_NAMES`.
-- Check no other `SliderWidget` in the session already uses the name (requires access to sibling cells; pass a validation callback at construction time, or use a signal to the parent).
-- If valid: set `self.name = new_name`, update `_name_label` text, emit `name_changed(old_name, new_name, cell_id)`, swap edit → label.
-- If invalid: flash red border, revert to old name, swap edit → label.
-
-**Step 3 — Add `name_changed` signal and handler in `CellListWidget`.**  
-`SliderWidget` emits `name_changed = pyqtSignal(str, str, str)` (old_name, new_name, cell_id). `CellListWidget` connects this and calls `_rebuild_namespace()`. The old name is dropped from the shared namespace on the next rebuild (it won't be emitted since the slider's `source()` returns the new name). Downstream cells that referenced the old name will receive "undefined variable" warnings — this is acceptable; the user updates references manually, as with any variable rename.
-
-**Note on `value_changed` signal:** The existing signal carries `(name, value)`. After rename, subsequent value changes will emit with the new name automatically since `self.name` is updated on the widget. No change to that signal's signature.
-
-**Tests to add:**
-- Clicking the name label opens an inline edit field pre-filled with the current name.
-- Valid rename: `a → b` updates `slider.name == "b"`, `name_changed` signal fires with `("a", "b", cell_id)`, namespace rebuild uses `b`.
-- Invalid rename (non-identifier, e.g. `1x`): field reverts to `a`, no signal emitted.
-- Duplicate rename (name already used by another slider): reverts, no signal.
-- Reserved name (e.g. `z`, `x`): reverts, no signal.
 
 ---
 

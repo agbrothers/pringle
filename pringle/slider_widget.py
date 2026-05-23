@@ -16,14 +16,25 @@ step size set in the step box. ~60fps via QTimer.
 from __future__ import annotations
 
 import uuid
+from typing import Callable
 from PyQt6.QtWidgets import (
-    QAbstractSpinBox, QWidget, QHBoxLayout, QLabel, QSlider, QDoubleSpinBox,
+    QAbstractSpinBox, QWidget, QHBoxLayout, QLabel, QLineEdit, QSlider, QDoubleSpinBox,
     QPushButton, QFrame, QVBoxLayout, QSizePolicy,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
 from pringle.style import CellStyle, palette_color
 from pringle.cell_widget import DragHandle
+from pringle.preprocess import MAGIC_NAMES, SPATIAL_NAMES
+
+
+class _ClickableLabel(QLabel):
+    """QLabel that emits a clicked signal on mouse press."""
+    clicked = pyqtSignal()
+
+    def mousePressEvent(self, event):
+        self.clicked.emit()
+        super().mousePressEvent(event)
 
 
 class _SpinBox(QDoubleSpinBox):
@@ -47,6 +58,7 @@ class SliderWidget(QWidget):
     """Slider cell for a named scalar parameter."""
 
     value_changed = pyqtSignal(str, float)     # (name, value)
+    name_changed = pyqtSignal(str, str, str)   # (old_name, new_name, cell_id)
     delete_requested = pyqtSignal(str)          # cell_id
     drag_started = pyqtSignal(str)              # cell_id
     drag_moved = pyqtSignal(str, int)           # cell_id, global_y
@@ -63,12 +75,16 @@ class SliderWidget(QWidget):
         step: float | None = None,
         cell_id: str | None = None,
         style: CellStyle | None = None,
+        validate_name: Callable[[str], bool] | None = None,
         parent=None,
     ):
         super().__init__(parent)
         self.cell_id: str = cell_id or str(uuid.uuid4())
         self.name: str = name
         self.style: CellStyle = style or CellStyle()
+        self._validate_name: Callable[[str], bool] | None = validate_name
+        self._name_edit: QLineEdit | None = None
+        self._committing_name: bool = False
 
         # Expand the default range to accommodate the initial value so it
         # is never silently clipped on creation (e.g. typing `k = 15`).
@@ -118,6 +134,7 @@ class SliderWidget(QWidget):
         row1 = QHBoxLayout()
         row1.setContentsMargins(4, 0, 6, 0)
         row1.setSpacing(6)
+        self._row1 = row1
 
         self._color_dot = QPushButton()
         self._color_dot.setFixedSize(18, 18)
@@ -125,8 +142,11 @@ class SliderWidget(QWidget):
         self._update_color_dot()
         row1.addWidget(self._color_dot)
 
-        self._name_label = QLabel(f"<b>{self.name}</b>")
+        self._name_label = _ClickableLabel(f"<b>{self.name}</b>")
         self._name_label.setFixedWidth(50)
+        self._name_label.setCursor(Qt.CursorShape.IBeamCursor)
+        self._name_label.setToolTip("Click to rename")
+        self._name_label.clicked.connect(self._on_name_clicked)
         row1.addWidget(self._name_label)
 
         self._spinbox = _SpinBox()
@@ -241,6 +261,61 @@ class SliderWidget(QWidget):
         self._slider.blockSignals(False)
         if emit:
             self.value_changed.emit(self.name, v)
+
+    def set_name_validator(self, fn: Callable[[str], bool] | None) -> None:
+        """Set a callback used to reject names already claimed by sibling sliders."""
+        self._validate_name = fn
+
+    # ------------------------------------------------------------------
+    # Name editing
+    # ------------------------------------------------------------------
+
+    def _is_valid_rename(self, name: str) -> bool:
+        return (
+            bool(name)
+            and name.isidentifier()
+            and name not in MAGIC_NAMES
+            and name not in SPATIAL_NAMES
+            and (self._validate_name is None or self._validate_name(name))
+        )
+
+    def _on_name_clicked(self) -> None:
+        if self._name_edit is not None:
+            return
+        self._name_edit = QLineEdit(self.name)
+        self._name_edit.setFixedWidth(self._name_label.width())
+        self._name_edit.selectAll()
+        self._row1.replaceWidget(self._name_label, self._name_edit)
+        self._name_label.hide()
+        self._name_edit.textChanged.connect(self._on_name_text_changed)
+        self._name_edit.editingFinished.connect(self._on_name_commit)
+        self._name_edit.setFocus()
+
+    def _on_name_text_changed(self, text: str) -> None:
+        if self._name_edit is None:
+            return
+        valid = self._is_valid_rename(text.strip())
+        self._name_edit.setStyleSheet("" if valid else "border: 1px solid #e05252;")
+
+    def _on_name_commit(self) -> None:
+        if self._committing_name or self._name_edit is None:
+            return
+        self._committing_name = True
+        edit = self._name_edit
+        self._name_edit = None
+        edit.editingFinished.disconnect()
+
+        new_name = edit.text().strip()
+        self._row1.replaceWidget(edit, self._name_label)
+        self._name_label.show()
+        edit.deleteLater()
+        self._committing_name = False
+
+        if new_name != self.name and self._is_valid_rename(new_name):
+            old_name = self.name
+            self.name = new_name
+            self._name_label.setText(f"<b>{new_name}</b>")
+            self.name_changed.emit(old_name, new_name, self.cell_id)
 
     # ------------------------------------------------------------------
     # Internal

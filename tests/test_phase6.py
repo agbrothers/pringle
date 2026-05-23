@@ -126,6 +126,76 @@ class TestSliderWidget:
         s = SliderWidget(name="a", value=1.0, cell_id="my-id")
         assert s.cell_id == "my-id"
 
+    # --- rename tests (FEAT-042) ---
+
+    def test_rename_emits_name_changed(self, qapp):
+        s = SliderWidget(name="a", value=1.0)
+        events = []
+        s.name_changed.connect(lambda old, new, cid: events.append((old, new, cid)))
+        s._on_name_clicked()
+        s._name_edit.setText("b")
+        s._on_name_commit()
+        assert events == [("a", "b", s.cell_id)]
+        assert s.name == "b"
+
+    def test_rename_updates_source(self, qapp):
+        s = SliderWidget(name="a", value=3.0)
+        s._on_name_clicked()
+        s._name_edit.setText("k")
+        s._on_name_commit()
+        assert s.source() == "k = 3.0"
+
+    def test_rename_no_change_silent(self, qapp):
+        s = SliderWidget(name="a", value=1.0)
+        events = []
+        s.name_changed.connect(lambda *a: events.append(a))
+        s._on_name_clicked()
+        s._name_edit.setText("a")   # same name
+        s._on_name_commit()
+        assert events == []
+
+    def test_rename_invalid_non_identifier(self, qapp):
+        s = SliderWidget(name="a", value=1.0)
+        events = []
+        s.name_changed.connect(lambda *a: events.append(a))
+        s._on_name_clicked()
+        s._name_edit.setText("123bad")
+        s._on_name_commit()
+        assert events == []
+        assert s.name == "a"
+
+    def test_rename_invalid_empty(self, qapp):
+        s = SliderWidget(name="a", value=1.0)
+        events = []
+        s.name_changed.connect(lambda *a: events.append(a))
+        s._on_name_clicked()
+        s._name_edit.setText("")
+        s._on_name_commit()
+        assert events == []
+        assert s.name == "a"
+
+    def test_rename_rejects_magic_names(self, qapp):
+        s = SliderWidget(name="a", value=1.0)
+        events = []
+        s.name_changed.connect(lambda *a: events.append(a))
+        for reserved in ("z", "xyz", "points"):
+            s._on_name_clicked()
+            s._name_edit.setText(reserved)
+            s._on_name_commit()
+        assert events == []
+        assert s.name == "a"
+
+    def test_rename_rejects_duplicate_via_validator(self, qapp):
+        s = SliderWidget(name="a", value=1.0)
+        s.set_name_validator(lambda name: name != "b")  # "b" is taken
+        events = []
+        s.name_changed.connect(lambda *a: events.append(a))
+        s._on_name_clicked()
+        s._name_edit.setText("b")
+        s._on_name_commit()
+        assert events == []
+        assert s.name == "a"
+
 
 # ---------------------------------------------------------------------------
 # CellListWidget slider integration
@@ -270,3 +340,35 @@ class TestCellListSlider:
 
         assert len(surface_data) > 0
         assert np.max(np.abs(surface_data[-1])) == pytest.approx(6.0, abs=0.5)
+
+    def test_rename_rebuilds_namespace(self, qapp, grid):
+        """Renaming a slider updates the shared namespace on the next rebuild."""
+        clist, _ = self._make_list(qapp, grid)
+        slider = clist.add_cell("a = 5.0")
+        assert isinstance(slider, SliderWidget)
+        assert clist._shared_ns.get("a") == pytest.approx(5.0)
+
+        slider._on_name_clicked()
+        slider._name_edit.setText("k")
+        slider._on_name_commit()
+
+        assert slider.name == "k"
+        assert "k" in clist._shared_ns
+        assert "a" not in clist._shared_ns
+
+    def test_rename_duplicate_blocked_by_cell_list(self, qapp, grid):
+        """Cannot rename slider to a name already used by another slider."""
+        clist, _ = self._make_list(qapp, grid)
+        s1 = clist.add_cell("a = 1.0")
+        s2 = clist.add_cell("b = 2.0")
+        assert isinstance(s1, SliderWidget)
+        assert isinstance(s2, SliderWidget)
+
+        events = []
+        s2.name_changed.connect(lambda *a: events.append(a))
+        s2._on_name_clicked()
+        s2._name_edit.setText("a")   # "a" is already taken by s1
+        s2._on_name_commit()
+
+        assert events == []
+        assert s2.name == "b"
