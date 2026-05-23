@@ -64,6 +64,60 @@ class TestDetectShape:
         rt, _ = _detect_shape(val)
         assert rt == "vectors"
 
+    # FEAT-049: grid-shaped vector fields
+    def test_grid_n_n_4_channels_last(self):
+        val = np.ones((10, 10, 4), dtype=np.float32)
+        rt, flat = _detect_shape(val)
+        assert rt == "vectors_2d"
+        assert flat.shape == (100, 4)
+
+    def test_grid_n_n_6_channels_last(self):
+        val = np.ones((10, 10, 6), dtype=np.float32)
+        rt, flat = _detect_shape(val)
+        assert rt == "vectors"
+        assert flat.shape == (100, 6)
+
+    def test_grid_4_n_n_channels_first(self):
+        val = np.ones((4, 10, 10), dtype=np.float32)
+        rt, flat = _detect_shape(val)
+        assert rt == "vectors_2d"
+        assert flat.shape == (100, 4)
+
+    def test_grid_6_n_n_channels_first(self):
+        val = np.ones((6, 10, 10), dtype=np.float32)
+        rt, flat = _detect_shape(val)
+        assert rt == "vectors"
+        assert flat.shape == (100, 6)
+
+    def test_channels_last_and_first_produce_same_data(self):
+        # Build a (4, n, n) array and its channels-last equivalent, verify same flat result.
+        rng = np.random.default_rng(0)
+        components = rng.random((4, 5, 7)).astype(np.float32)
+        channels_first = components                              # (4, 5, 7)
+        channels_last = np.moveaxis(components, 0, -1)          # (5, 7, 4)
+        _, flat_cf = _detect_shape(channels_first)
+        _, flat_cl = _detect_shape(channels_last)
+        assert np.allclose(flat_cf, flat_cl)
+
+    def test_existing_n4_unchanged(self):
+        val = np.ones((20, 4), dtype=np.float32)
+        rt, data = _detect_shape(val)
+        assert rt == "vectors_2d"
+        assert data is val
+
+    def test_existing_n6_unchanged(self):
+        val = np.ones((20, 6), dtype=np.float32)
+        rt, data = _detect_shape(val)
+        assert rt == "vectors"
+        assert data is val
+
+    def test_channels_last_priority_over_channels_first(self):
+        # (4, n, 4): both first and last dim are 4; channels-last takes priority.
+        val = np.ones((4, 8, 4), dtype=np.float32)
+        rt, flat = _detect_shape(val)
+        assert rt == "vectors_2d"
+        assert flat.shape == (32, 4)
+
 
 # ---------------------------------------------------------------------------
 # run_cell: vectors render type end-to-end

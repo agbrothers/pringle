@@ -146,8 +146,8 @@ class TestRecurrenceShapeDetection:
         assert r.data.shape == (50, 3)
 
     def test_unrenderable_shape_exports_only(self, cell_list):
-        """Recurrence on (5, 100, 6) (3D) → render_type None, exported to namespace."""
-        cell = cell_list.add_cell(source="D = zeros((5, 100, 6))")
+        """Recurrence on (5, 100, 5) (3D, not a vector field shape) → render_type None, exported to namespace."""
+        cell = cell_list.add_cell(source="D = zeros((5, 100, 5))")
         rec = cell.add_sub_cell("recursion")
         rec._edit.setPlainText("D[n] = D[n-1]")
 
@@ -158,7 +158,7 @@ class TestRecurrenceShapeDetection:
         assert r.render_type is None
         assert r.data is None
         assert "D" in r.exports
-        assert r.exports["D"].shape == (5, 100, 6)
+        assert r.exports["D"].shape == (5, 100, 5)
 
     def test_vector_recurrence_does_not_disable_data_mode(self, cell_list):
         """After eval of a vector recurrence cell, data mode must remain True."""

@@ -6,6 +6,33 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-049 — Grid-shaped vector field input: `(n, n, 4/6)` and `(4/6, n, n)`
+**Status:** Closed (implemented 2026-05-23)
+
+**Implementation:**
+- **`evaluator.py` (`_detect_shape`)**: Added four new branches after the existing 2D checks. Channels-last `(n, n, 4)` → `val.reshape(-1, 4)` as `vectors_2d`; `(n, n, 6)` → `val.reshape(-1, 6)` as `vectors`. Channels-first `(4, n, n)` → `val.reshape(4, -1).T` as `vectors_2d`; `(6, n, n)` → `val.reshape(6, -1).T` as `vectors`. Channels-last is checked first so `(4, n, 4)` edge case resolves as channels-last.
+- No changes to `renderer.py`, `app.py`, or `cell_list.py` — flattening is done inside `_detect_shape` before the render type is returned.
+- **`tests/test_vectors.py`**: Added 8 new tests in `TestDetectShape` covering all four new branches, channels-last/first producing identical data, existing `(N, 4)` / `(N, 6)` unchanged, and channels-last priority for the `(4, n, 4)` edge case.
+- **`tests/test_feat038.py`** (`test_unrenderable_shape_exports_only`): Updated from `(5, 100, 6)` to `(5, 100, 5)` — the former shape is now renderable as a vector grid, so a non-vector 3D shape is required to test the "unrenderable exports only" path.
+
+---
+
+### FEAT-045 — Expression references in slider bounds and axis limits
+**Status:** Closed (implemented 2026-05-23)
+
+**Implementation:**
+- **`slider_widget.py`**: Added module-level `_fmt(v)` helper for clean float display. Added `_ExprBox(QLineEdit)` widget with `committed = pyqtSignal(float)`, `set_resolve(fn)`, `value()`, `setValue(v)`, `expr()`, `_on_commit()`, `re_resolve(fn)`, and `_indicate_error()` (500 ms red border flash). Replaced `_min_box`, `_max_box`, `_step_box` (`_SpinBox`) with `_ExprBox` instances; connected `committed` to `_on_range_changed` for min/max. Added `set_resolver(fn)`, `re_resolve(fn)`, `min_expr()`, `max_expr()`, `step_expr()` methods to `SliderWidget`.
+- **`view_settings.py`**: Imported `_ExprBox` from `slider_widget`. Replaced the six `QDoubleSpinBox` axis bound fields (`_x_min` … `_z_max`) with `_ExprBox`. Added `set_resolver(fn)` and `re_resolve(fn)` methods. `set_bounds` now calls `_ExprBox.setValue` (clears stored expression). `_on_apply` and `current_config()` use `.value()` unchanged.
+- **`cell_list.py`**: Added module-level `_make_resolver(shared_ns)` — merges equation-namespace scalar constants (`pi`, `e`, `inf`, `nan`) with scalar values from `shared_ns`, then returns an `eval`-based resolver with `__builtins__={}`. Added `namespace_rebuilt = pyqtSignal()` to `CellListWidget`. At end of `_rebuild_namespace()`: calls `re_resolve(_make_resolver(...))` on all `SliderWidget` cells, then emits `namespace_rebuilt`. When a new slider is constructed in `add_cell`, calls `set_resolver(_make_resolver(self._shared_ns))`.
+- **`session.py`**: `cell_to_dict` for sliders: writes `min_expr`, `max_expr`, `step_expr` keys when non-None. `restore_cell_list` for sliders: calls `cell._on_range_changed()` after setting box values (replaces the broken `setRange` pattern that relied on `valueChanged`), then restores expression strings directly on `_raw_expr`/`setText`.
+- **`app.py`**: Connects `cell_list.namespace_rebuilt` to `_on_namespace_rebuilt`, which calls `view_settings.set_resolver(_make_resolver(...))`. `_write_session` serializes axis bound expressions as `x_min_expr` … `z_max_expr` in the view block. `_on_open` restores them after `set_bounds`.
+
+**Deviation from spec:** `_make_resolver` merges equation-namespace scalar constants (`pi`, `e`, `inf`, `nan`) into `safe_ns` alongside shared-namespace scalars. The spec comment "Also include numpy constants already in namespace" was implemented explicitly rather than relying on them being in `shared_ns` (they are not — they live in the equation namespace, not the exported shared namespace).
+
+**Tests:** `tests/test_feat045.py` — 25 tests covering `_ExprBox` unit behavior, `_make_resolver` (scalar filtering, expression evaluation, security), `SliderWidget` resolver integration, and session round-trips.
+
+---
+
 ### FEAT-015 — Application icon
 **Status:** Closed (implemented 2026-05-22)
 

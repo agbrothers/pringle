@@ -123,6 +123,16 @@ def _detect_shape(val: Any) -> tuple[str | None, Any]:
         return "scatter", val.reshape(1, 3)
     if val.shape == (2,):
         return "scatter_2d", val.reshape(1, 2)
+    # Grid-shaped vector fields: (n, n, 4/6) channels-last
+    if val.ndim == 3 and val.shape[2] == 6:
+        return "vectors", val.reshape(-1, 6)
+    if val.ndim == 3 and val.shape[2] == 4:
+        return "vectors_2d", val.reshape(-1, 4)
+    # Grid-shaped vector fields: (4/6, n, n) channels-first
+    if val.ndim == 3 and val.shape[0] == 6:
+        return "vectors", val.reshape(6, -1).T
+    if val.ndim == 3 and val.shape[0] == 4:
+        return "vectors_2d", val.reshape(4, -1).T
     return None, None
 
 
