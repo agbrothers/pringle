@@ -173,10 +173,7 @@ def _make_resolver(shared_ns: dict):
     Merges equation-namespace scalar constants (pi, e, inf, nan) with slider
     values from shared_ns; shared_ns takes precedence on name collisions.
     """
-    from pringle.namespace import build_equation_namespace
-    eq_scalars = {k: v for k, v in build_equation_namespace().items()
-                  if isinstance(v, (int, float, np.floating, np.integer))}
-    safe_ns = {**eq_scalars, **{k: v for k, v in shared_ns.items()
+    safe_ns = {**_EQ_SCALARS, **{k: v for k, v in shared_ns.items()
                if isinstance(v, (int, float, np.floating, np.integer))}}
     def resolve(expr: str):
         try:
@@ -187,6 +184,15 @@ def _make_resolver(shared_ns: dict):
             pass
         return None
     return resolve
+
+
+def _build_eq_scalars() -> dict:
+    from pringle.namespace import build_equation_namespace
+    return {k: v for k, v in build_equation_namespace().items()
+            if isinstance(v, (int, float, np.floating, np.integer))}
+
+
+_EQ_SCALARS: dict = _build_eq_scalars()
 
 
 class CellListWidget(QWidget):
@@ -726,7 +732,8 @@ class CellListWidget(QWidget):
         _resolver = _make_resolver(self._shared_ns)
         for cell in self._cells:
             if isinstance(cell, SliderWidget):
-                cell.re_resolve(_resolver)
+                cell.set_resolver(_resolver)   # keep resolver current for future user edits
+                cell.re_resolve(_resolver)     # re-evaluate any stored expressions
         self.namespace_rebuilt.emit()
 
     def _eval_cell(self, cell: CellWidget, shared: dict) -> CellResult:
@@ -924,6 +931,7 @@ class CellListWidget(QWidget):
         slider.drag_started.connect(self._on_drag_started)
         slider.drag_moved.connect(self._on_drag_moved)
         slider.drag_ended.connect(self._on_drag_ended)
+        slider.set_resolver(_make_resolver(self._shared_ns))
 
         # Swap in the layout and the cells list
         self._layout.replaceWidget(cell, slider)
@@ -1051,6 +1059,10 @@ class CellListWidget(QWidget):
 
         if generation == self._eval_generation:
             self._shared_ns = new_shared
+            _resolver = _make_resolver(self._shared_ns)
+            for cell in self._cells:
+                if isinstance(cell, SliderWidget):
+                    cell.re_resolve(_resolver)
             for wr in worker_results:
                 idx = self._index_of(wr.cell_id)
                 if idx >= 0:
