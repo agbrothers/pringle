@@ -318,8 +318,9 @@ class TestUpdateArrows:
         pr.update_arrows("c1", arrows2, color=(1., 1., 1., 1.), opacity=1.0)
 
         ib = pr._arrow_mesh["c1"].instance_buffer
-        tail_col = ib.data["matrix"][0, :3, 3]
-        assert np.allclose(tail_col, [5., 6., 7.], atol=1e-4)
+        # Buffer stores M.T (pygfx column-major); translation row is buf[0, 3, :3]
+        tail_row = ib.data["matrix"][0, 3, :3]
+        assert np.allclose(tail_row, [5., 6., 7.], atol=1e-4)
 
 
 # ---------------------------------------------------------------------------
