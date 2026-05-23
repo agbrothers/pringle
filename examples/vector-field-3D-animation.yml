@@ -1,0 +1,489 @@
+version: 1
+grid:
+  x_min: -5.0
+  x_max: 5.0
+  y_min: -5.0
+  y_max: 5.0
+  z_min: -5.0
+  z_max: 5.0
+  n: 64
+cells:
+- id: 96b27eb8-2e79-4ba0-8c99-111b46ffe581
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# SURFACE HEATMAP'
+- id: 213cedb9-5b89-4fa5-b882-d291c312e792
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 0.6
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: inferno
+    colormap_reversed: true
+    normalize_arrows: false
+  type: equation
+  source: f(x,y) = sin(x) * cos(y)
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: ea9b6e2f-8d01-41db-8bc8-7626590371a5
+  style:
+    color:
+    - 0.55
+    - 0.55
+    - 0.55
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: folder
+  name: DERIVATIVES
+  collapsed: false
+  visible: true
+  sub_cells: []
+- id: d92dbdd4-87f7-48ee-ac4b-2a4ec040bf02
+  style:
+    color:
+    - 0.85
+    - 0.55
+    - 0.05
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: ea9b6e2f-8d01-41db-8bc8-7626590371a5
+  type: equation
+  source: grad(pos) = array([dx(pos), dy(pos)])
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 075bff04-74b9-48f4-962c-ee10c6b478df
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: ea9b6e2f-8d01-41db-8bc8-7626590371a5
+  type: equation
+  source: dx(pos) = cos(pos[0]) * cos(pos[1])
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: ba33421c-99c2-4cfa-b709-b2c2b2f6ca06
+  style:
+    color:
+    - 0.2
+    - 0.7
+    - 0.3
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: ea9b6e2f-8d01-41db-8bc8-7626590371a5
+  type: equation
+  source: dy(pos) = -sin(pos[0]) * sin(pos[1])
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 188a84f9-8c52-4d22-a5d5-a7f1a16a130e
+  style:
+    color:
+    - 0.55
+    - 0.55
+    - 0.55
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: folder
+  name: TIME
+  collapsed: false
+  visible: true
+  sub_cells: []
+- id: d55666a3-41fa-4bca-b930-24fe08f0f28f
+  style:
+    color:
+    - 0.85
+    - 0.55
+    - 0.05
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 188a84f9-8c52-4d22-a5d5-a7f1a16a130e
+  type: slider
+  source: k = 300.0
+  name: k
+  value: 300.0
+  min_val: 1.0
+  max_val: 300.0
+  step: 1.0
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: 6b576f0b-4fef-4bf4-adf6-5e0e39aba24c
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 188a84f9-8c52-4d22-a5d5-a7f1a16a130e
+  type: slider
+  source: dt = 0.01
+  name: dt
+  value: 0.01
+  min_val: 0.0
+  max_val: 1.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: 4bb48a99-1ab1-447a-8f34-cd7c48ab8ed6
+  style:
+    color:
+    - 0.1
+    - 0.65
+    - 0.75
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 188a84f9-8c52-4d22-a5d5-a7f1a16a130e
+  type: slider
+  source: T = 81.0
+  name: T
+  value: 81.0
+  min_val: 1.0
+  max_val: 289.0
+  step: 1.0
+  max_expr: k-v_len-1
+  is_playing: true
+  anim_mode: loop
+  sub_cells: []
+- id: cd8464fa-b57b-4a30-b7a3-606bd14d7ca6
+  style:
+    color:
+    - 0.55
+    - 0.55
+    - 0.55
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: folder
+  name: UTILS FIELD
+  collapsed: false
+  visible: true
+  sub_cells: []
+- id: 1001e421-7c31-4d69-9d47-4c50c677eff1
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# FLATTEN THE GRID: (2, n, n) -> (2, n*n)'
+- id: c1c200f5-2503-4f75-87d3-a11b904a6988
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: grid = array([x, y]).reshape(2, n*n).T
+  visible: false
+  sub_cells: []
+  rng_seed: 1
+- id: 92f337b0-0eb0-4a1d-82f9-063fb721cebd
+  style:
+    color:
+    - 0.2
+    - 0.7
+    - 0.3
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: n = x.shape[0]
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 166ccdbe-07b8-46a9-8930-e926ed78518e
+  style:
+    color:
+    - 0.85
+    - 0.55
+    - 0.05
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: v_len = 10.0
+  name: v_len
+  value: 10.0
+  min_val: 0.0
+  max_val: 10.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: 3640b23f-5b55-4450-aab6-2e58c913f6c6
+  style:
+    color:
+    - 0.55
+    - 0.55
+    - 0.55
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: folder
+  name: ANIMATION FRAMES
+  collapsed: false
+  visible: true
+  sub_cells: []
+- id: 49c58996-b2fb-4e53-846b-3818704776f0
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# BUILD RECURSION TABLE WITH k TIMESTEPS INITIALIZED AT THE XY GRID POINTS'
+  folder_id: 3640b23f-5b55-4450-aab6-2e58c913f6c6
+- id: d7572e34-ebd5-4734-b682-89f4f4e39cc8
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 3640b23f-5b55-4450-aab6-2e58c913f6c6
+  type: equation
+  source: paths_xy = zeros((k, n*n, 2))
+  visible: false
+  sub_cells:
+  - type: initial_condition
+    source: paths_xy[0] = grid
+  - type: recursion
+    source: paths_xy[n] = paths_xy[n-1] - dt * grad(paths_xy[n-1].T).T
+  rng_seed: 5
+- id: 0c6e29bb-f0c2-4059-8490-2010550f6f06
+  style:
+    color:
+    - 0.2
+    - 0.7
+    - 0.3
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# COMPUTE THE HEIGHT AT EACH GRID POINT ACROSS TIME STEPS'
+  folder_id: 3640b23f-5b55-4450-aab6-2e58c913f6c6
+- id: 406a0ef8-e1f1-47f7-941a-f6ce086ee2ce
+  style:
+    color:
+    - 0.2
+    - 0.7
+    - 0.3
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 3640b23f-5b55-4450-aab6-2e58c913f6c6
+  type: equation
+  source: "paths_z = f(\n    *(paths_xy.T.reshape(2, k*n*n))\n).reshape(n*n, k, 1).transpose(1,\
+    \ 0, 2)"
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: c84f5b43-a9d7-45aa-bfdc-3c0eada4113a
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 3640b23f-5b55-4450-aab6-2e58c913f6c6
+  type: equation
+  source: paths = concatenate((paths_xy, paths_z), axis=2)
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 11483fe8-e2dd-4883-92d3-2646e1ae37b5
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 3640b23f-5b55-4450-aab6-2e58c913f6c6
+  type: equation
+  source: frames = concatenate((paths[:-v_len], paths[v_len:]), axis=2)
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 5e52f1e1-18b8-4b6f-9c8f-095668f22b60
+  style:
+    color:
+    - 0.8666666666666667
+    - 0.8666666666666667
+    - 0.8666666666666667
+    - 1.0
+    opacity: 0.4
+    line_width: 0.03
+    point_size: 0.03
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 3640b23f-5b55-4450-aab6-2e58c913f6c6
+  type: equation
+  source: anim = frames[T]
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+view:
+  show_axes: false
+  show_bbox: false
+  show_crosshair: true
+  show_light_bg: false
+  show_shadow: false
+  shadow_opacity: 0.5
+  camera_position:
+  - 9.867695061707307
+  - 5.868352880474308
+  - 7.396451901919065
+  orbit_target:
+  - 0.0
+  - 0.0
+  - 0.0

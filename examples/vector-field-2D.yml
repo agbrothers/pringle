@@ -1,0 +1,211 @@
+version: 1
+grid:
+  x_min: -5.0
+  x_max: 5.0
+  y_min: -5.0
+  y_max: 5.0
+  z_min: -5.0
+  z_max: 5.0
+  n: 64
+cells:
+- id: 90818abb-7d16-49c3-afce-b3cba7e5d655
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '#  HELPERS'
+- id: 64bf0ce3-dd1f-42c6-a1f3-d94ecb30d068
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: dt = 0.01
+  name: dt
+  value: 0.01
+  min_val: 0.0
+  max_val: 0.1
+  step: 0.01
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: 086362f2-8841-459f-94e7-72d68a145853
+  style:
+    color:
+    - 0.9
+    - 0.3
+    - 0.65
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: n = x.shape[0]
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: fc8f45e8-2a27-4c64-8652-af247429a81a
+  style:
+    color:
+    - 0.2
+    - 0.7
+    - 0.3
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# DERIVATIVES'
+- id: 7537a05d-a6cf-47d5-83a7-dc47d0744b23
+  style:
+    color:
+    - 0.1
+    - 0.65
+    - 0.75
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: dx = x * (1-x) - x*y
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 8c1c3fff-8583-473c-877d-f1b2c668ad21
+  style:
+    color:
+    - 0.9
+    - 0.3
+    - 0.65
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: dy = 2*y * (1-y/2) - 3*x*y
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 67c64289-80f4-4f92-b138-3f2628de7ed2
+  style:
+    color:
+    - 0.2
+    - 0.7
+    - 0.3
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: grid = stack((x, y))
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 5eaae2af-e5e9-497d-8fc5-5ef5147b53be
+  style:
+    color:
+    - 0.5
+    - 0.35
+    - 0.2
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: grad = stack((dx, dy))
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: cd03ddb2-d96d-4a19-be3c-afe15e58816a
+  style:
+    color:
+    - 0.1
+    - 0.65
+    - 0.75
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# ARRAYS OF SHAPE (4, n, n) ARE AUTOMATICALLY PLOTTED AS 2D VECTOR FIELDS'
+- id: 0ce3a8cb-0fe8-4329-ba29-e584e00ca675
+  style:
+    color:
+    - 0.5333333333333333
+    - 0.5333333333333333
+    - 0.5333333333333333
+    - 1.0
+    opacity: 0.8
+    line_width: 0.03
+    point_size: 0.03
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: true
+  type: equation
+  source: field = vstack((grid, grid - dt*grad))
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+view:
+  show_axes: false
+  show_bbox: false
+  show_crosshair: true
+  show_light_bg: false
+  show_shadow: false
+  shadow_opacity: 0.5
+  camera_position:
+  - 1.5616928397364371
+  - -0.0234271496487044
+  - 12.108391167658045
+  orbit_target:
+  - 0.2557224929332733
+  - -0.0038361253682523966
+  - 0.0

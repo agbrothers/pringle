@@ -1,0 +1,266 @@
+version: 1
+grid:
+  x_min: -5.0
+  x_max: 5.0
+  y_min: -5.0
+  y_max: 5.0
+  z_min: -5.0
+  z_max: 5.0
+  n: 64
+cells:
+- id: 96b27eb8-2e79-4ba0-8c99-111b46ffe581
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# SURFACE HEATMAP'
+- id: 213cedb9-5b89-4fa5-b882-d291c312e792
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 0.6
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: hot
+    colormap_reversed: true
+    normalize_arrows: false
+  type: equation
+  source: f(x,y) = sin(x) * cos(y)
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 8d3eac68-3c5d-48ed-832b-0471e8c904b9
+  style:
+    color:
+    - 0.1
+    - 0.65
+    - 0.75
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# DERIVATIVES'
+- id: 075bff04-74b9-48f4-962c-ee10c6b478df
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: dx = cos(x) * cos(y)
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: ba33421c-99c2-4cfa-b709-b2c2b2f6ca06
+  style:
+    color:
+    - 0.2
+    - 0.7
+    - 0.3
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: dy = -sin(x) * sin(y)
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: d92dbdd4-87f7-48ee-ac4b-2a4ec040bf02
+  style:
+    color:
+    - 0.85
+    - 0.55
+    - 0.05
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: grad = stack((dx, dy))
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 521f79d0-a1ed-486a-ae9c-0b93c12148ba
+  style:
+    color:
+    - 0.2
+    - 0.7
+    - 0.3
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: grid = stack((x, y))
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 7668dcf5-6350-4f74-a2ca-d5234ed02089
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '#  GET THE Z VALUES OF THE VECTOR ENDPOINTS'
+- id: 5233991d-6bc4-4c9c-b085-8c266cfda663
+  style:
+    color:
+    - 0.85
+    - 0.55
+    - 0.05
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: z_tail = f(x, y)[None, ...]
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 796e5d50-f087-4d1d-9ef6-7e51eef6b967
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: z_head = f(*(grid - dt*grad))[None, ...]
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 7101bc24-f44d-47b5-8a8d-7df9dd13d373
+  style:
+    color:
+    - 0.5
+    - 0.35
+    - 0.2
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# 3D VECTOR FIELD EXAMPLE'
+- id: 4f2b9119-dd77-4b4f-ac85-688752a0683b
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: dt = 0.2
+  name: dt
+  value: 0.2
+  min_val: 0.0
+  max_val: 2.0
+  step: 0.01
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: d08905dd-1d4d-481b-a5fa-b0848f81d47b
+  style:
+    color:
+    - 0.8666666666666667
+    - 0.8666666666666667
+    - 0.8666666666666667
+    - 1.0
+    opacity: 0.4
+    line_width: 0.03
+    point_size: 0.03
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: "field = vstack((\n    grid, \n    z_tail,\n    grid - dt*grad,\n    z_head,\n\
+    ))"
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+view:
+  show_axes: false
+  show_bbox: false
+  show_crosshair: true
+  show_light_bg: false
+  show_shadow: false
+  shadow_opacity: 0.5
+  camera_position:
+  - 9.653068384166357
+  - 8.876113249352752
+  - 9.643185159050546
+  orbit_target:
+  - 0.0
+  - 0.0
+  - 0.0
