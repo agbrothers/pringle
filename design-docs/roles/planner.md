@@ -7,7 +7,7 @@ gh issue create --title "..." --body "..." --label "bug|feature|performance"
 ```
 
 To view existing open issues: `gh issue list` or `gh issue view <N>`.  
-To view closed issues (historical reference): `gh issue list --state closed` or the frozen markdown archives in `design-docs/16-closed-bugs.md`, `17-closed-features.md`, `19-closed-performance.md`.
+To view closed issues (historical reference): `gh issue list --state closed`.
 
 To supplement your work, please analyze existing code implementations and provide suggested changes directly in the issues where relevant. Feel free to run tests or other code as needed to support these activities. 
 

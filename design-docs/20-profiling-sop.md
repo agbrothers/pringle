@@ -4,8 +4,8 @@ This document defines the repeatable process for profiling the Pringle applicati
 
 **Performance target:** ≥ 30 fps at n=128 (≤ 33 ms total per animation frame).
 
-See [18-performance-backlog.md](18-performance-backlog.md) for open issues.  
-See [19-closed-performance.md](19-closed-performance.md) for resolved issues.
+See `gh issue list --label performance` for open issues.  
+See `gh issue list --label performance --state closed` for resolved issues.
 
 ---
 
@@ -224,10 +224,8 @@ GPU render time can be measured via wgpu timestamp queries (`GPUQuerySet`), but 
 
 **Steps:**
 
-1. File new bottlenecks discovered during profiling as `PERF-NNN` entries in [18-performance-backlog.md](18-performance-backlog.md).
-2. When a fix is merged, move the `PERF-NNN` entry to [19-closed-performance.md](19-closed-performance.md) with:
-   - The fix description (what changed and where)
-   - Before/after benchmark numbers from Phase 4
+1. File new bottlenecks discovered during profiling as GitHub Issues: `gh issue create --label performance --title "..." --body "..."`.
+2. When a fix is merged, close the issue with a commit link: `gh issue close <N> --comment "Fixed in ..."`. Post before/after benchmark numbers from Phase 4 as a comment or edit the issue body.
 3. Update the baseline numbers in `baseline_n128.txt` after each major fix.
 
 ---

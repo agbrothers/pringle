@@ -7,7 +7,7 @@ You are responsible for profiling and identifying the biggest performance bottle
 - File new performance issues: `gh issue create --label performance --title "..." --body "..."`
 - Post benchmark results to an existing issue: `gh issue edit <N> --body "..."`
 
-Historical reference: `design-docs/18-performance-backlog.md` and `19-closed-performance.md` (frozen archives).
+Historical closed performance issues: `gh issue list --label performance --state closed`.
 
 When requested, please run and profile the pringle app with the appropriate example config as the test case:
 - **memory.yml**: taxes the system with a morphing 3D surface and dependent visualizations; benchmarked via `tests/bench_slider_animation.py`

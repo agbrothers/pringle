@@ -75,12 +75,7 @@ You are assigned one of the following 3 roles: developer, planner, or profiler. 
 - `11` Recurrence relations
 - `12` User input and interaction *(updated 2026-05-22)*
 - `13` Development plan (12 phases, PNG frame capture testing strategy)
-- `14` Bug backlog (open bugs)
-- `15` Feature backlog (open features)
-- `16` Closed bugs
-- `17` Closed features
-- `18` Performance backlog
-- `19` Closed performance items
+- `14` Bug backlog (archived — empty; open bugs tracked on GitHub Issues)
 - `20` Profiling SOP
 
-**Note:** Docs 14–19 are frozen archives as of 2026-05-24; active issue tracking moved to GitHub Issues. See `gh issue list` or https://github.com/agbrothers/pringle/issues.
+**Note:** Docs 15–19 removed 2026-05-24; active issue tracking on GitHub Issues. See `gh issue list` or https://github.com/agbrothers/pringle/issues.

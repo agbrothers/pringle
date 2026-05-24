@@ -6,8 +6,8 @@
 
 Bugs are logged here as they are identified. Each entry includes a description, reproduction steps, root cause analysis, and suggested fixes where known.
 
-See [15-feature-backlog.md](15-feature-backlog.md) for the feature backlog.  
-See [16-closed-bugs.md](16-closed-bugs.md) for resolved bugs.
+See `gh issue list --label feature` for open features.  
+See `gh issue list --label bug --state closed` for resolved bugs.
 
 ---
 
