@@ -166,6 +166,8 @@ class CellTextEdit(QPlainTextEdit):
     folder_requested = pyqtSignal()
     navigate_down_requested = pyqtSignal()
     navigate_up_requested = pyqtSignal()
+    indent_at = pyqtSignal()
+    outdent_at = pyqtSignal()
 
     def __init__(self, parent=None, allow_newline: bool = False):
         super().__init__(parent)
@@ -226,6 +228,14 @@ class CellTextEdit(QPlainTextEdit):
             self.insertPlainText("    ")
             return
 
+        ctrl = Qt.KeyboardModifier.ControlModifier
+        if key == Qt.Key.Key_BracketRight and mod == ctrl:
+            self.indent_at.emit()
+            return
+        if key == Qt.Key.Key_BracketLeft and mod == ctrl:
+            self.outdent_at.emit()
+            return
+
         if key in _WRAP_PAIRS and self.textCursor().hasSelection():
             open_, close = _WRAP_PAIRS[key]
             cursor = self.textCursor()
@@ -281,6 +291,8 @@ class CellWidget(QWidget):
     style_updated = pyqtSignal(str)        # cell_id — color/opacity/size changed, no re-eval needed
     navigate_down_requested = pyqtSignal(str)  # cell_id or subcell_id
     navigate_up_requested = pyqtSignal(str)    # cell_id or subcell_id
+    indent_requested = pyqtSignal(str)         # cell_id — Cmd+] move into folder above
+    outdent_requested = pyqtSignal(str)        # cell_id — Cmd+[ move out of folder
 
     _DEBOUNCE_MS = 300
 
@@ -346,6 +358,8 @@ class CellWidget(QWidget):
         self._text_edit.backspace_on_empty.connect(lambda: self.delete_requested.emit(self.cell_id))
         self._text_edit.navigate_down_requested.connect(lambda: self.navigate_down_requested.emit(self.cell_id))
         self._text_edit.navigate_up_requested.connect(lambda: self.navigate_up_requested.emit(self.cell_id))
+        self._text_edit.indent_at.connect(lambda: self.indent_requested.emit(self.cell_id))
+        self._text_edit.outdent_at.connect(lambda: self.outdent_requested.emit(self.cell_id))
         row.addWidget(self._text_edit, 1)
 
         self._eye_btn = QPushButton("👁")

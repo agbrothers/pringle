@@ -86,12 +86,21 @@ class _CommentEdit(QPlainTextEdit):
     folder_requested = pyqtSignal()  # Ctrl+Enter → new folder cell below
     navigate_down_requested = pyqtSignal()
     navigate_up_requested = pyqtSignal()
+    indent_at = pyqtSignal()
+    outdent_at = pyqtSignal()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         key = event.key()
         mod = event.modifiers()
+        ctrl = Qt.KeyboardModifier.ControlModifier
+        if key == Qt.Key.Key_BracketRight and mod == ctrl:
+            self.indent_at.emit()
+            return
+        if key == Qt.Key.Key_BracketLeft and mod == ctrl:
+            self.outdent_at.emit()
+            return
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            if mod == Qt.KeyboardModifier.ControlModifier:
+            if mod == ctrl:
                 self.folder_requested.emit()
                 return
             if mod == Qt.KeyboardModifier.NoModifier:
@@ -121,6 +130,8 @@ class CommentCellWidget(QWidget):
     drag_ended = pyqtSignal(str)             # cell_id
     navigate_down_requested = pyqtSignal(str)  # cell_id
     navigate_up_requested = pyqtSignal(str)    # cell_id
+    indent_requested = pyqtSignal(str)         # cell_id
+    outdent_requested = pyqtSignal(str)        # cell_id
 
     def __init__(
         self,
@@ -137,6 +148,8 @@ class CommentCellWidget(QWidget):
         self._edit.folder_requested.connect(lambda: self.new_folder_requested.emit(self.cell_id))
         self._edit.navigate_down_requested.connect(lambda: self.navigate_down_requested.emit(self.cell_id))
         self._edit.navigate_up_requested.connect(lambda: self.navigate_up_requested.emit(self.cell_id))
+        self._edit.indent_at.connect(lambda: self.indent_requested.emit(self.cell_id))
+        self._edit.outdent_at.connect(lambda: self.outdent_requested.emit(self.cell_id))
         if source:
             self.set_source(source)
 

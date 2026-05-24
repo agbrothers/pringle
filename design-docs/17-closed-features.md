@@ -6,6 +6,18 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-065 — Cmd+[ / Cmd+] to move cells in and out of folders
+**Status:** Closed (implemented 2026-05-24)
+
+**Implementation:**
+- **`pringle/cell_list.py`**: Added `_sync_layout()` helper (extracted from `_move_cell` to avoid duplication). Added `indent_cell(cell_id)` and `outdent_cell(cell_id)` public methods. Both call `_push_undo()`, mutate `self._cells`, call `_assign_folder`, `_sync_layout`, and `_rebuild_namespace`. Connected `cell.indent_requested` / `cell.outdent_requested` in `add_cell` (both equation and slider paths), `add_comment_cell`, `_maybe_morph_to_comment`, `_maybe_morph_to_slider`, `_morph_equation_to_comment`, and `_morph_comment_to_equation`.
+- **`pringle/cell_widget.py`**: `CellTextEdit` gains `indent_at` and `outdent_at` signals; `keyPressEvent` handles `ControlModifier+Key_BracketRight/Left`. `CellWidget` gains `indent_requested` and `outdent_requested` signals wired from `_text_edit`.
+- **`pringle/comment_cell_widget.py`**: `_CommentEdit` gains `indent_at`/`outdent_at` signals and key handling. `CommentCellWidget` gains `indent_requested`/`outdent_requested` signals wired from `_edit`.
+- **`pringle/slider_widget.py`**: `_SpinBox` and `_ExprBox` gain `indent_at`/`outdent_at` signals and key handling. `SliderWidget` gains `indent_requested`/`outdent_requested` signals; all four fields (`_spinbox`, `_min_box`, `_max_box`, `_step_box`) connect to them.
+- **`tests/test_feat065.py`**: 17 tests covering all no-op cases, indent/outdent into folder header, folder member, collapsed folder, undo, and signal wiring.
+
+---
+
 ### FEAT-063 — Syntax highlighting in expression cells
 **Status:** Closed (implemented 2026-05-24)
 

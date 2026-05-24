@@ -46,6 +46,8 @@ class _SpinBox(QDoubleSpinBox):
     new_cell_requested = pyqtSignal()
     navigate_up = pyqtSignal()
     navigate_down = pyqtSignal()
+    indent_at = pyqtSignal()
+    outdent_at = pyqtSignal()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -58,13 +60,22 @@ class _SpinBox(QDoubleSpinBox):
         return f"{v:g}"
 
     def keyPressEvent(self, event) -> None:
-        if event.key() == Qt.Key.Key_Up:
+        key = event.key()
+        mod = event.modifiers()
+        ctrl = Qt.KeyboardModifier.ControlModifier
+        if key == Qt.Key.Key_BracketRight and mod == ctrl:
+            self.indent_at.emit()
+            return
+        if key == Qt.Key.Key_BracketLeft and mod == ctrl:
+            self.outdent_at.emit()
+            return
+        if key == Qt.Key.Key_Up:
             self.navigate_up.emit()
             return
-        if event.key() == Qt.Key.Key_Down:
+        if key == Qt.Key.Key_Down:
             self.navigate_down.emit()
             return
-        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             super().keyPressEvent(event)  # commits value via editingFinished
             self.new_cell_requested.emit()
             return
@@ -85,6 +96,8 @@ class _ExprBox(QLineEdit):
     navigate_down = pyqtSignal()
     navigate_left = pyqtSignal()   # emitted when Left is pressed at position 0
     navigate_right = pyqtSignal()  # emitted when Right is pressed at end of text
+    indent_at = pyqtSignal()
+    outdent_at = pyqtSignal()
 
     def __init__(self, value: float = 0.0, parent=None):
         super().__init__(_fmt(value), parent)
@@ -136,6 +149,14 @@ class _ExprBox(QLineEdit):
 
     def keyPressEvent(self, event) -> None:
         key = event.key()
+        mod = event.modifiers()
+        ctrl = Qt.KeyboardModifier.ControlModifier
+        if key == Qt.Key.Key_BracketRight and mod == ctrl:
+            self.indent_at.emit()
+            return
+        if key == Qt.Key.Key_BracketLeft and mod == ctrl:
+            self.outdent_at.emit()
+            return
         if key == Qt.Key.Key_Up:
             self.navigate_up.emit()
             return
@@ -182,6 +203,8 @@ class SliderWidget(QWidget):
     drag_ended = pyqtSignal(str)                # cell_id
     navigate_up_requested = pyqtSignal(str)     # cell_id — exit slider upward
     navigate_down_requested = pyqtSignal(str)   # cell_id — exit slider downward
+    indent_requested = pyqtSignal(str)          # cell_id — Cmd+]
+    outdent_requested = pyqtSignal(str)         # cell_id — Cmd+[
 
     _ANIM_INTERVAL_MS = 16   # ~60fps animation step
 
@@ -354,6 +377,11 @@ class SliderWidget(QWidget):
                      self._max_box.setCursorPosition(len(self._max_box.text())))
         )
         # min navigate_left and step navigate_right are deliberately unconnected (no-op)
+
+        # Indent/outdent (Cmd+] / Cmd+[) from any focused field
+        for _field in (self._spinbox, self._min_box, self._max_box, self._step_box):
+            _field.indent_at.connect(lambda: self.indent_requested.emit(self.cell_id))
+            _field.outdent_at.connect(lambda: self.outdent_requested.emit(self.cell_id))
 
         # Separator
         line = QFrame()

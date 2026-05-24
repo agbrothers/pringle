@@ -421,6 +421,8 @@ class CellListWidget(QWidget):
             cell.set_resolver(_make_resolver(self._shared_ns))
             cell.navigate_up_requested.connect(self._on_navigate_up)
             cell.navigate_down_requested.connect(self._on_navigate_down)
+            cell.indent_requested.connect(self.indent_cell)
+            cell.outdent_requested.connect(self.outdent_cell)
         else:
             cell = CellWidget(style=style)
             cell.content_changed.connect(self._on_cell_changed)
@@ -433,6 +435,8 @@ class CellListWidget(QWidget):
             cell.run_requested.connect(self._on_run_requested)
             cell.navigate_up_requested.connect(self._on_navigate_up)
             cell.navigate_down_requested.connect(self._on_navigate_down)
+            cell.indent_requested.connect(self.indent_cell)
+            cell.outdent_requested.connect(self.outdent_cell)
 
         cell.drag_started.connect(self._on_drag_started)
         cell.drag_moved.connect(self._on_drag_moved)
@@ -494,6 +498,8 @@ class CellListWidget(QWidget):
         cell.drag_ended.connect(self._on_drag_ended)
         cell.navigate_up_requested.connect(self._on_navigate_up)
         cell.navigate_down_requested.connect(self._on_navigate_down)
+        cell.indent_requested.connect(self.indent_cell)
+        cell.outdent_requested.connect(self.outdent_cell)
 
         if after_id is not None:
             idx = self._index_of(after_id)
@@ -1015,6 +1021,8 @@ class CellListWidget(QWidget):
         comment.drag_ended.connect(self._on_drag_ended)
         comment.navigate_up_requested.connect(self._on_navigate_up)
         comment.navigate_down_requested.connect(self._on_navigate_down)
+        comment.indent_requested.connect(self.indent_cell)
+        comment.outdent_requested.connect(self.outdent_cell)
 
         self._layout.replaceWidget(cell, comment)
         self._cells[idx] = comment
@@ -1053,6 +1061,8 @@ class CellListWidget(QWidget):
         slider.set_resolver(_make_resolver(self._shared_ns))
         slider.navigate_up_requested.connect(self._on_navigate_up)
         slider.navigate_down_requested.connect(self._on_navigate_down)
+        slider.indent_requested.connect(self.indent_cell)
+        slider.outdent_requested.connect(self.outdent_cell)
 
         # Swap in the layout and the cells list
         self._layout.replaceWidget(cell, slider)
@@ -1099,6 +1109,8 @@ class CellListWidget(QWidget):
         comment.drag_ended.connect(self._on_drag_ended)
         comment.navigate_up_requested.connect(self._on_navigate_up)
         comment.navigate_down_requested.connect(self._on_navigate_down)
+        comment.indent_requested.connect(self.indent_cell)
+        comment.outdent_requested.connect(self.outdent_cell)
         self._layout.replaceWidget(cell, comment)
         self._cells[idx] = comment
         cell.deleteLater()
@@ -1134,6 +1146,8 @@ class CellListWidget(QWidget):
         new_cell.drag_ended.connect(self._on_drag_ended)
         new_cell.navigate_up_requested.connect(self._on_navigate_up)
         new_cell.navigate_down_requested.connect(self._on_navigate_down)
+        new_cell.indent_requested.connect(self.indent_cell)
+        new_cell.outdent_requested.connect(self.outdent_cell)
         self._layout.replaceWidget(cell, new_cell)
         self._cells[idx] = new_cell
         cell.deleteLater()
@@ -1390,6 +1404,15 @@ class CellListWidget(QWidget):
         self._drop_indicator.setGeometry(8, y - 1, w - 16, 2)
         self._drop_indicator.raise_()
 
+    def _sync_layout(self) -> None:
+        """Rebuild widget order in the layout to match self._cells."""
+        self._container.setUpdatesEnabled(False)
+        for c in self._cells:
+            self._layout.removeWidget(c)
+        for i, c in enumerate(self._cells):
+            self._layout.insertWidget(i + 1, c)  # +1 skips placeholder at index 0
+        self._container.setUpdatesEnabled(True)
+
     def _move_cell(self, from_idx: int, to_idx: int) -> None:
         from pringle.folder_cell_widget import FolderCellWidget
         cell = self._cells[from_idx]
@@ -1425,13 +1448,70 @@ class CellListWidget(QWidget):
             if new_folder != self._cell_folder.get(cell.cell_id):
                 self._assign_folder(cell, new_folder)
 
-        # Rebuild layout order without flickering
-        self._container.setUpdatesEnabled(False)
-        for c in self._cells:
-            self._layout.removeWidget(c)
-        for i, c in enumerate(self._cells):
-            self._layout.insertWidget(i + 1, c)  # +1 skips placeholder at index 0
-        self._container.setUpdatesEnabled(True)
+        self._sync_layout()
+        self._rebuild_namespace()
+
+    def indent_cell(self, cell_id: str) -> None:
+        """Cmd+]: move cell into the folder directly above it."""
+        from pringle.folder_cell_widget import FolderCellWidget
+        idx = self._index_of(cell_id)
+        if idx <= 0:
+            return
+        cell = self._cells[idx]
+        if isinstance(cell, FolderCellWidget):
+            return
+        above = self._cells[idx - 1]
+        if isinstance(above, FolderCellWidget):
+            target_folder_id = above.cell_id
+        else:
+            target_folder_id = self._cell_folder.get(above.cell_id)
+        if not target_folder_id:
+            return
+
+        self._push_undo()
+        members = self._folder_members(target_folder_id)
+        if members and self._index_of(members[-1].cell_id) != idx - 1:
+            # Cell is not adjacent to folder's last member — reposition
+            last_idx = self._index_of(members[-1].cell_id)
+            self._cells.pop(idx)
+            insert_at = last_idx if idx < last_idx else last_idx + 1
+            self._cells.insert(insert_at, cell)
+        self._assign_folder(cell, target_folder_id)
+        self._sync_layout()
+        self._rebuild_namespace()
+
+    def outdent_cell(self, cell_id: str) -> None:
+        """Cmd+[: move cell out of its current folder."""
+        from pringle.folder_cell_widget import FolderCellWidget
+        idx = self._index_of(cell_id)
+        cell = self._cells[idx]
+        if isinstance(cell, FolderCellWidget):
+            return
+        folder_id = self._cell_folder.get(cell_id)
+        if not folder_id:
+            return
+
+        self._push_undo()
+        # Find last member of this folder excluding the focused cell itself
+        last_member = next(
+            (c for c in reversed(self._cells)
+             if self._cell_folder.get(c.cell_id) == folder_id and c.cell_id != cell_id),
+            None,
+        )
+        if last_member is not None:
+            last_idx = self._index_of(last_member.cell_id)
+        else:
+            # Focused cell is the only member — place after the folder header
+            last_idx = next(
+                i for i, c in enumerate(self._cells)
+                if isinstance(c, FolderCellWidget) and c.cell_id == folder_id
+            )
+        # Reposition: pop and insert after last_idx
+        self._cells.pop(idx)
+        insert_at = last_idx if idx < last_idx else last_idx + 1
+        self._cells.insert(insert_at, cell)
+        self._assign_folder(cell, None)  # removes indent, restores visibility
+        self._sync_layout()
         self._rebuild_namespace()
 
     # ------------------------------------------------------------------
