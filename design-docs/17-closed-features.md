@@ -6,6 +6,16 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-058 — Cmd+D / Ctrl+D: duplicate focused cell in-place
+**Status:** Closed (implemented 2026-05-23)
+
+**Implementation:**
+- **`pringle/cell_list.py`**: Added `import copy`. Added `duplicate_focused_cell()` in the copy/paste section. Guards on `isinstance(fw, QPlainTextEdit)` to avoid stealing `Ctrl+D` from text editing. Walks up the widget tree to identify the focused cell type, then delegates to `add_cell` / `add_comment_cell` / `add_folder` with `after_id=cell.cell_id` and `style=copy.copy(cell.style)`. Slider duplicates have `_min`, `_max`, and `_step` restored via `_min_box`/`_max_box`/`_step_box` (including expression strings if present) followed by `_on_range_changed()`. Equation cell sub-cells are copied via `add_sub_cell` + `_edit.setPlainText`. Clipboard is never touched.
+- **`pringle/app.py`**: Added `(QKeySequence("Ctrl+D"), self._cell_list.duplicate_focused_cell)` to `_setup_shortcuts()`. On macOS, Qt maps `Ctrl+D` to `Cmd+D`.
+- **`tests/test_feat058.py`**: 10 tests covering source/style preservation, insertion position, slider range/step, sub-cell duplication, clipboard isolation, undo, and the `QPlainTextEdit` guard.
+
+---
+
 ### FEAT-016 — Color picker in style popover
 **Status:** Closed (implemented 2026-05-23; default-color sequence split to FEAT-056)
 

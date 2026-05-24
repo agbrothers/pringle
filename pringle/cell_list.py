@@ -17,6 +17,7 @@ Slider changes trigger incremental re-evaluation of only their downstream cells.
 
 from __future__ import annotations
 
+import copy
 import time
 import warnings
 from collections import deque
@@ -297,12 +298,12 @@ class CellListWidget(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet("QScrollArea { background: #171717; border: none; }")
-        outer.addWidget(scroll)
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._scroll.setStyleSheet("QScrollArea { background: #171717; border: none; }")
+        outer.addWidget(self._scroll)
 
         self._container = QWidget()
         self._container.setStyleSheet("background-color: #171717;")
@@ -318,7 +319,7 @@ class CellListWidget(QWidget):
         )
         self._layout.addWidget(self._placeholder)
         self._layout.addStretch(1)  # push cells to top
-        scroll.setWidget(self._container)
+        self._scroll.setWidget(self._container)
 
         # Drop indicator: absolutely positioned 2-px accent line (not in layout)
         from PyQt6.QtWidgets import QFrame as _QFrame
@@ -454,6 +455,7 @@ class CellListWidget(QWidget):
                     cell.set_source(source)
                 if not self._skip_rebuild:
                     cell.focus()
+                    self._scroll.ensureWidgetVisible(cell)
                 if source and not self._skip_rebuild:
                     self._rebuild_namespace()
                 self._update_placeholder()
@@ -470,6 +472,7 @@ class CellListWidget(QWidget):
             cell.set_source(source)
         if not self._skip_rebuild:
             cell.focus()
+            self._scroll.ensureWidgetVisible(cell)
         if source and not self._skip_rebuild:
             self._rebuild_namespace()
         self._update_placeholder()
@@ -507,6 +510,7 @@ class CellListWidget(QWidget):
                     self._assign_folder(cell, self._infer_folder(idx + 1))
                 if not self._skip_rebuild:
                     cell.focus()
+                    self._scroll.ensureWidgetVisible(cell)
                 self._update_placeholder()
                 return cell
 
@@ -517,6 +521,7 @@ class CellListWidget(QWidget):
             self._assign_folder(cell, self._infer_folder(len(self._cells) - 1))
         if not self._skip_rebuild:
             cell.focus()
+            self._scroll.ensureWidgetVisible(cell)
         self._update_placeholder()
         return cell
 
@@ -579,6 +584,7 @@ class CellListWidget(QWidget):
         if self._cells:
             target_idx = max(0, idx - 1)
             self._cells[target_idx].focus()
+            self._scroll.ensureWidgetVisible(self._cells[target_idx])
         # Remove from viewport and forget the cell so the next render for
         # that id (if a new cell is later added) correctly re-fits the camera
         self._on_cell_result(cell_id, CellResult(), cell.style)
@@ -666,6 +672,66 @@ class CellListWidget(QWidget):
         if text:
             self.add_cell(text)
 
+    def duplicate_focused_cell(self) -> bool:
+        """Duplicate the focused cell, inserting the copy immediately below it.
+
+        Does not touch the system clipboard. Returns True if a cell was duplicated.
+        """
+        from pringle.folder_cell_widget import FolderCellWidget
+        from pringle.comment_cell_widget import CommentCellWidget
+
+        # Walk up the widget tree to find the containing cell
+        w = QApplication.focusWidget()
+        cell = None
+        while w is not None:
+            if isinstance(w, (CellWidget, SliderWidget, CommentCellWidget, FolderCellWidget)):
+                cell = w
+                break
+            w = w.parent() if hasattr(w, "parent") else None
+        if cell is None:
+            return False
+
+        after_id = cell.cell_id
+
+        if isinstance(cell, FolderCellWidget):
+            new_cell = self.add_folder(
+                cell._name, after_id=after_id, style=copy.copy(cell.style)
+            )
+        elif isinstance(cell, CommentCellWidget):
+            new_cell = self.add_comment_cell(
+                cell.source(), after_id=after_id, style=copy.copy(cell.style)
+            )
+        elif isinstance(cell, SliderWidget):
+            new_cell = self.add_cell(
+                cell.source(), after_id=after_id, style=copy.copy(cell.style)
+            )
+            assert isinstance(new_cell, SliderWidget)
+            # Restore range and step; add_cell only parses name and current value
+            new_cell._min_box.setValue(cell._min)
+            new_cell._max_box.setValue(cell._max)
+            new_cell._step_box.setValue(cell._step_box.value())
+            for src_box, dst_box in [
+                (cell._min_box, new_cell._min_box),
+                (cell._max_box, new_cell._max_box),
+                (cell._step_box, new_cell._step_box),
+            ]:
+                if src_box.expr():
+                    dst_box._raw_expr = src_box.expr()
+                    dst_box.setText(src_box.expr())
+            new_cell._on_range_changed()
+        else:
+            # Equation cell — copy source and duplicate sub-cells
+            new_cell = self.add_cell(
+                cell.source(), after_id=after_id, style=copy.copy(cell.style)
+            )
+            for sub in cell.sub_cells():
+                new_sub = new_cell.add_sub_cell(sub.sub_type())
+                new_sub._edit.setPlainText(sub.source())
+
+        new_cell.focus()
+        self._scroll.ensureWidgetVisible(new_cell)
+        return True
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
@@ -700,13 +766,17 @@ class CellListWidget(QWidget):
         targets = self._focus_targets()
         idx = next((i for i, (cid, _) in enumerate(targets) if cid == cell_id), None)
         if idx is not None and idx + 1 < len(targets):
-            targets[idx + 1][1].setFocus()
+            widget = targets[idx + 1][1]
+            widget.setFocus()
+            self._scroll.ensureWidgetVisible(widget)
 
     def _on_navigate_up(self, cell_id: str) -> None:
         targets = self._focus_targets()
         idx = next((i for i, (cid, _) in enumerate(targets) if cid == cell_id), None)
         if idx is not None and idx > 0:
-            targets[idx - 1][1].setFocus()
+            widget = targets[idx - 1][1]
+            widget.setFocus()
+            self._scroll.ensureWidgetVisible(widget)
 
     # ------------------------------------------------------------------
     # Evaluation
@@ -952,6 +1022,7 @@ class CellListWidget(QWidget):
         self._cells[idx] = comment
         cell.deleteLater()
         comment.focus()
+        self._scroll.ensureWidgetVisible(comment)
 
     def _maybe_morph_to_slider(self, cell_id: str) -> None:
         """
@@ -1036,6 +1107,7 @@ class CellListWidget(QWidget):
         # Reapply folder indent and collapsed-visibility to the new widget.
         self._assign_folder(comment, folder_id)
         comment.focus()
+        self._scroll.ensureWidgetVisible(comment)
         self._rebuild_namespace()
 
     def _morph_comment_to_equation(self, cell_id: str) -> None:
@@ -1073,6 +1145,7 @@ class CellListWidget(QWidget):
             new_cell._on_visibility_toggled(False)
         new_cell.set_source(raw)
         new_cell.focus()
+        self._scroll.ensureWidgetVisible(new_cell)
         # Recovered source may be a slider assignment; run the standard morph check.
         self._maybe_morph_to_slider(cell_id)
         # Reapply folder indent and collapsed-visibility to whatever is now at this slot.

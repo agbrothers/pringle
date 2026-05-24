@@ -431,6 +431,7 @@ class PringleWindow(QMainWindow):
             (QKeySequence.StandardKey.Copy,   self._on_copy),
             (QKeySequence.StandardKey.Paste,  self._on_paste),
             (QKeySequence("Ctrl+/"),          self._cell_list.toggle_comment_focused_cell),
+            (QKeySequence("Ctrl+D"),          self._cell_list.duplicate_focused_cell),
         ]:
             sc = QShortcut(keys, self)
             sc.activated.connect(slot)
@@ -677,6 +678,9 @@ class PringleWindow(QMainWindow):
             vp.add_object(cell_id, line)
 
         elif result.render_type == "curve_x":
+            if len(result.data) != len(self._grid.y1d):
+                vp.remove_object(cell_id)
+                return
             pts = np.column_stack([
                 result.data,
                 self._grid.y1d,

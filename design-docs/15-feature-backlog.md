@@ -7,6 +7,107 @@ See [17-closed-features.md](17-closed-features.md) for implemented features.
 
 ---
 
+### FEAT-057 — Axis bound variables in the expression namespace
+**Status:** Open  
+**Logged:** 2026-05-23
+
+**Description:**  
+Expose the six axis bounds — `x_min`, `x_max`, `y_min`, `y_max`, `z_min`, `z_max` — as named variables in the expression namespace. This works bidirectionally:
+
+- **Read (bounds → namespace):** Any cell can reference `x_min`, `x_max`, etc. to parametrize its expression by the current viewport bounds (e.g. `z = sin(x_max * x)`).
+- **Write (cell → bounds):** A cell can assign to these names (e.g. `x_max = t`, where `t` is a slider) to drive the axis bounds programmatically — enabling animated pan/zoom.
+
+**Motivation:**  
+Users frequently want to adapt expressions to the visible range (e.g., scale a wave frequency to fill the viewport) or animate the visible window as part of a recording. Both require reading and writing the axis bounds from cells, which is currently impossible — bounds live only in the `ViewSettingsWidget` and have no presence in the evaluation namespace.
+
+---
+
+**Read direction — injection before evaluation:**
+
+In `_rebuild_namespace` (`cell_list.py`), inject the current bound values into `shared` before the cell evaluation loop. `CellListWidget` already owns `self._grid` (a `Grid` object built from `GridConfig`), so the bound values are directly accessible:
+
+```python
+# Inject axis bounds as readable namespace variables
+cfg = self._grid.config
+shared["x_min"] = float(cfg.x_min)
+shared["x_max"] = float(cfg.x_max)
+shared["y_min"] = float(cfg.y_min)
+shared["y_max"] = float(cfg.y_max)
+shared["z_min"] = float(cfg.z_min)
+shared["z_max"] = float(cfg.z_max)
+```
+
+These are injected before the topological evaluation loop, so any cell in any order can read them. The DAG's undefined-name check (`undefined_names`) must treat these six names as provided system names, analogous to how slider names are known before evaluation — otherwise cells referencing `x_min` without defining it will emit spurious "Undefined" warnings.
+
+**Write direction — bound override after evaluation:**
+
+After the cell evaluation loop completes and `_shared_ns` is populated, check whether any cell exported values for these names and, if so, notify the app to update the viewport:
+
+```python
+_BOUND_NAMES = ("x_min", "x_max", "y_min", "y_max", "z_min", "z_max")
+
+# After the eval loop, check for bound overrides
+overrides = {k: shared[k] for k in _BOUND_NAMES if k in shared}
+current = {
+    "x_min": cfg.x_min, "x_max": cfg.x_max,
+    "y_min": cfg.y_min, "y_max": cfg.y_max,
+    "z_min": cfg.z_min, "z_max": cfg.z_max,
+}
+if any(overrides.get(k) != current[k] for k in _BOUND_NAMES):
+    self.bounds_override.emit(
+        float(overrides.get("x_min", cfg.x_min)),
+        float(overrides.get("x_max", cfg.x_max)),
+        float(overrides.get("y_min", cfg.y_min)),
+        float(overrides.get("y_max", cfg.y_max)),
+        float(overrides.get("z_min", cfg.z_min)),
+        float(overrides.get("z_max", cfg.z_max)),
+    )
+```
+
+`CellListWidget` gains a new signal:
+```python
+bounds_override = pyqtSignal(float, float, float, float, float, float)
+```
+
+In `app.py`, connect it at startup:
+```python
+self._cell_list.bounds_override.connect(self._on_bounds_override)
+```
+
+`_on_bounds_override` calls `_view_settings.set_bounds(...)`, which both updates the spinboxes and emits `bounds_changed`, which in turn calls `_on_bounds_changed` to rebuild the grid and re-render. One important guard: `set_bounds` triggers `bounds_changed` which calls `update_grid` which calls `_rebuild_namespace` — a potential loop. The loop is broken by not re-emitting `bounds_override` when `_rebuild_namespace` is entered because of a grid update (i.e., the injected values and the grid config will now agree, so the override comparison finds no change).
+
+**Priority of bound values:**  
+The last cell in topological order that assigns to `x_min` (or any bound name) wins. This is consistent with how any other name in the shared namespace is resolved — later cells in topo order overwrite earlier ones.
+
+**No validation on override values:**  
+The write path does not clamp or validate the values emitted — that is `ViewSettingsWidget`'s responsibility, same as when the user types a value manually. If a cell produces a non-finite float, the existing guard in `ViewSettingsWidget` should handle it.
+
+**DAG dependency tracking:**  
+A cell that reads `x_min` without assigning to it should have a DAG edge from the "bounds" provider (similar to a slider). The cleanest implementation is to make the six bound names appear in the DAG's provided-names set, so they are treated as roots with no dependencies. Cells that write `x_max = ...` will correctly appear in topological order — the override is processed after all cells have been evaluated, so a cell writing `x_max` does not affect the grid used for other cells in the same eval pass. The new bounds take effect on the next `_rebuild_namespace` call triggered by `_on_bounds_changed`.
+
+**Animation behavior:**  
+When a slider drives `x_max = a * t`, slider animation fires `_rebuild_namespace` repeatedly. Each pass: evaluates cells → detects `x_max` changed → emits `bounds_override` → `_on_bounds_override` → `set_bounds` → `bounds_changed` → `update_grid` → `_rebuild_namespace` again. This double-rebuild per animation tick is unavoidable if bounds must change the grid (and they must, since the evaluation grid `x, y` arrays depend on the bounds). The second rebuild uses the new bounds and produces the correctly-windowed surface. Performance impact: two full evals per animation tick instead of one; acceptable for simple expressions, potentially significant for heavier sessions. A future optimization could short-circuit the second rebuild when the only namespace change was the bound values themselves.
+
+---
+
+**Open questions:**
+
+1. **Name collision:** `x_min`, `x_max`, etc. are generic names a user might want for their own local variables unrelated to axis bounds. Should there be a prefix (e.g. `view_x_min`) or should the design accept this collision as intentional (the feature is specifically about coupling these names to the bounds)?
+2. **Write-back to spinboxes:** When a cell drives `x_max`, the spinbox in `ViewSettingsWidget` updates to reflect the override. Is this desirable? It means the spinbox value "jumps" during animation. An alternative is to show a visual indicator (e.g., a small lock icon or tinted spinbox) that bounds are currently overridden by a cell.
+3. **Restore behavior:** On session load, cell values are restored first, then `_rebuild_namespace` runs. If a cell drives `x_max`, the bounds will be overridden before the saved YAML bounds can take effect. This may be correct, but it means the `x_max_expr` in the session's `view` block is irrelevant whenever a cell also writes `x_max`. Should the session format mark bound names as "cell-driven" vs. "UI-driven" to avoid confusion?
+
+---
+
+**Tests to add:**
+
+- Cell `x_max = 5` causes `x_max` to read back as `5.0` in the namespace; subsequent cells can reference it.
+- Surface cell referencing `x_max` in its expression evaluates without an "Undefined" warning.
+- Slider `a` connected via `x_max = a` fires `bounds_override` on slider change.
+- If no cell writes to bound names, `bounds_override` is not emitted.
+- Read-only use: `z = sin(x_max * x)` evaluates correctly and uses the current spinbox value.
+
+---
+
 ### FEAT-048 — Cross-cell find and replace
 
 **Status:** Open  
