@@ -32,6 +32,7 @@ def _always_defined() -> set[str]:
             set(build_equation_namespace().keys())
             | SPATIAL_NAMES
             | {"True", "False", "None"}
+            | {"cfg"}  # axis bounds config object injected by CellListWidget (FEAT-057)
         )
     return _ALWAYS_DEFINED
 

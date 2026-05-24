@@ -81,6 +81,25 @@ def get_store_names(source: str) -> set[str]:
     return stores
 
 
+def get_cfg_writes(source: str) -> set[str]:
+    """Return cfg attribute names that source assigns to (e.g. 'cfg.x_max = t' → {'x_max'})."""
+    try:
+        tree = ast.parse(source, mode="exec")
+    except SyntaxError:
+        return set()
+    writes: set[str] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Attribute)
+            and isinstance(node.targets[0].value, ast.Name)
+            and node.targets[0].value.id == "cfg"
+        ):
+            writes.add(node.targets[0].attr)
+    return writes
+
+
 def get_free_names(source: str) -> set[str]:
     """
     Return the set of unbound names referenced in source.

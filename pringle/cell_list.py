@@ -23,6 +23,14 @@ import warnings
 from collections import deque
 from dataclasses import dataclass
 from typing import Callable
+
+
+@dataclass
+class AxisConfig:
+    """Axis bounds object injected as `cfg` into the expression namespace (FEAT-057)."""
+    x_min: float; x_max: float
+    y_min: float; y_max: float
+    z_min: float; z_max: float
 import numpy as np
 
 from PyQt6.QtWidgets import (
@@ -211,6 +219,8 @@ class CellListWidget(QWidget):
     eval_requested = pyqtSignal(object)
     # Emitted after _rebuild_namespace completes and slider bounds are re-resolved.
     namespace_rebuilt = pyqtSignal()
+    # Emitted when a cell writes to cfg (e.g. cfg.x_max = t); carries new bounds (FEAT-057).
+    bounds_override = pyqtSignal(float, float, float, float, float, float)
     # Toolbar file-management signals forwarded to app.py
     new_file_requested  = pyqtSignal()
     open_file_requested = pyqtSignal()
@@ -844,6 +854,17 @@ class CellListWidget(QWidget):
         undef = undefined_names(evaluable)
 
         shared: dict = {}
+
+        # Inject cfg from current grid bounds; cells may read or write it (FEAT-057).
+        grid_cfg = self._grid.config
+        cfg = AxisConfig(
+            x_min=float(grid_cfg.x_min), x_max=float(grid_cfg.x_max),
+            y_min=float(grid_cfg.y_min), y_max=float(grid_cfg.y_max),
+            z_min=float(grid_cfg.z_min), z_max=float(grid_cfg.z_max),
+        )
+        shared["cfg"] = cfg
+        _cfg_before = (cfg.x_min, cfg.x_max, cfg.y_min, cfg.y_max, cfg.z_min, cfg.z_max)
+
         for cell in ordered_cells:
             if isinstance(cell, SliderWidget):
                 shared[cell.name] = _ns_value(cell.value)
@@ -878,6 +899,11 @@ class CellListWidget(QWidget):
         shared.pop("random", None)
         self._shared_ns = shared
         self.last_eval_ms = (time.monotonic() - t0) * 1000
+
+        # Emit bounds_override if any cell wrote to cfg during this eval pass (FEAT-057).
+        _cfg_after = (cfg.x_min, cfg.x_max, cfg.y_min, cfg.y_max, cfg.z_min, cfg.z_max)
+        if _cfg_before != _cfg_after:
+            self.bounds_override.emit(*_cfg_after)
 
         _resolver = _make_resolver(self._shared_ns)
         for cell in self._cells:
@@ -1293,6 +1319,14 @@ class CellListWidget(QWidget):
             if isinstance(cell, SliderWidget):
                 shared[cell.name] = _ns_value(cell.value)
 
+        # Give this eval pass a fresh cfg so mutations don't alias self._shared_ns["cfg"] (FEAT-057).
+        grid_cfg = self._grid.config
+        shared["cfg"] = AxisConfig(
+            x_min=float(grid_cfg.x_min), x_max=float(grid_cfg.x_max),
+            y_min=float(grid_cfg.y_min), y_max=float(grid_cfg.y_max),
+            z_min=float(grid_cfg.z_min), z_max=float(grid_cfg.z_max),
+        )
+
         # Snapshot all cell state on the main thread (Qt widget reads are not thread-safe).
         specs: list[_CellSpec] = []
         for cell in descendants:
@@ -1351,6 +1385,16 @@ class CellListWidget(QWidget):
                     self._on_cell_result(wr.cell_id, wr.result, wr.style)
                 else:
                     self._on_cell_result(wr.cell_id, CellResult(), wr.style)
+
+            # Emit bounds_override if a cell wrote to cfg during this eval pass (FEAT-057).
+            cfg = new_shared.get("cfg")
+            if cfg is not None:
+                gc = self._grid.config
+                _before = (float(gc.x_min), float(gc.x_max), float(gc.y_min),
+                           float(gc.y_max), float(gc.z_min), float(gc.z_max))
+                _after = (cfg.x_min, cfg.x_max, cfg.y_min, cfg.y_max, cfg.z_min, cfg.z_max)
+                if _before != _after:
+                    self.bounds_override.emit(*_after)
 
         # Process any tick that arrived while the worker was busy.
         if self._pending_eval is not None:

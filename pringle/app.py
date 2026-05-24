@@ -386,6 +386,7 @@ class PringleWindow(QMainWindow):
             eval_threaded=True,
         )
         self._cell_list.namespace_rebuilt.connect(self._on_namespace_rebuilt)
+        self._cell_list.bounds_override.connect(self._on_bounds_override)
         self._cell_list.new_file_requested.connect(self._on_new)
         self._cell_list.open_file_requested.connect(self._on_open)
         self._cell_list.save_requested.connect(self._on_save)
@@ -440,11 +441,14 @@ class PringleWindow(QMainWindow):
         # background thread can call results_ready.emit() after _EvalWorker's
         # C++ object is deleted, producing a "wrapped C/C++ object deleted" crash.
         self._cell_list.shutdown()
-        # Drain any pending GPU async callbacks (map_async completions). The
-        # wgpu-native poller thread fires these on the Qt main thread via
-        # CallerHelper. We loop a few times to let in-flight callbacks arrive
-        # and be processed before CallerHelper is deleted by super().closeEvent().
-        for _ in range(5):
+        # Drain pending GPU async callbacks (map_async completions) for up to
+        # 50 ms. The wgpu-native poller fires these on the Qt main thread via
+        # CallerHelper; if CallerHelper is deleted first by super().closeEvent()
+        # it raises RuntimeError. A fixed iteration count misses late arrivals
+        # under load, so use a time-bounded spin instead (BUG-047).
+        import time as _time
+        _deadline = _time.monotonic() + 0.05
+        while _time.monotonic() < _deadline:
             QApplication.processEvents()
         super().closeEvent(event)
 
@@ -739,6 +743,16 @@ class PringleWindow(QMainWindow):
     # ------------------------------------------------------------------
     # View settings handlers
     # ------------------------------------------------------------------
+
+    def _on_bounds_override(
+        self,
+        x_min: float, x_max: float,
+        y_min: float, y_max: float,
+        z_min: float, z_max: float,
+    ) -> None:
+        """Cell wrote to cfg — update spinboxes and rebuild the grid (FEAT-057)."""
+        self._view_settings.set_bounds(x_min, x_max, y_min, y_max, z_min, z_max)
+        self._on_bounds_changed(x_min, x_max, y_min, y_max, z_min, z_max)
 
     def _on_bounds_changed(
         self,

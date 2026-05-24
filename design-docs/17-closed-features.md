@@ -6,6 +6,18 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-057 — Axis bounds accessible via `cfg` object in the expression namespace
+**Status:** Closed (implemented 2026-05-24)
+
+**Implementation:**
+- **`pringle/cell_list.py`**: Added `AxisConfig` dataclass (flat, 6 float fields, no `__slots__`) at module level. Added `bounds_override = pyqtSignal(float, float, float, float, float, float)` to `CellListWidget`. In `_rebuild_namespace`, injected `shared["cfg"]` initialized from `self._grid.config` before the eval loop; snapshot the 6-tuple before and compare after — if any cell wrote to `cfg`, emits `bounds_override`. In `_dispatch_pending_eval`, replaced `dict(self._shared_ns)["cfg"]` with a fresh `AxisConfig` copy initialized from the current grid config so mutations by the eval worker don't alias `self._shared_ns["cfg"]`. In `_on_eval_results`, after updating `_shared_ns`, compares the returned `cfg` values against `self._grid.config` and emits `bounds_override` if changed (covers the incremental slider animation path).
+- **`pringle/safety.py`**: Added `get_cfg_writes(source) -> set[str]` which walks the AST for `ast.Assign` nodes whose target is `cfg.<attr>` and returns the set of attribute names written. No changes to `SafetyChecker` — `visit_Attribute` already blocks dunder access (`cfg.__class__` raises `SecurityError`); plain `cfg.x_min` passes.
+- **`pringle/dag.py`**: Added `"cfg"` to the `_ALWAYS_DEFINED` set so cells referencing `cfg.x_min` etc. do not produce spurious "Undefined" warnings.
+- **`pringle/app.py`**: Added `_on_bounds_override` method which calls `_view_settings.set_bounds(...)` (updates spinboxes) then `_on_bounds_changed(...)` (rebuilds grid and re-renders). Connected `_cell_list.bounds_override` to `_on_bounds_override` at startup.
+- **`tests/test_feat057.py`**: 15 tests — `get_cfg_writes` unit tests, dunder access blocked, plain attribute passes, cfg reads back grid config values, no "Undefined" warning for read-only use, `cfg.x_max = 5` emits correct `bounds_override`, no emission when cfg not written, slider-driven cfg write, all 6 bounds written in one cell.
+
+---
+
 ### FEAT-025 — Expression panel toolbar (New / Open / Save + cell-add buttons)
 **Status:** Closed (implemented 2026-05-24)
 
