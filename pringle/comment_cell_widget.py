@@ -103,13 +103,7 @@ class _CommentEdit(QPlainTextEdit):
             if key == Qt.Key.Key_BracketLeft:
                 self.outdent_at.emit()
                 return
-        if mod == alt:
-            if key == Qt.Key.Key_Right:
-                self.indent_at.emit()
-                return
-            if key == Qt.Key.Key_Left:
-                self.outdent_at.emit()
-                return
+        if mod & alt:
             if key == Qt.Key.Key_Up:
                 self.move_up_at.emit()
                 return

@@ -1,8 +1,8 @@
 """
-FEAT-065 — Cmd+[ / Cmd+] and Option+Arrow keys to move cells in/out of folders.
+FEAT-065 — Cmd+[ / Cmd+] and Option+Up/Down to move cells in/out of folders and reorder.
 
-indent_cell(cell_id)    — Cmd+] / Opt+Right: move cell into folder directly above it.
-outdent_cell(cell_id)   — Cmd+[ / Opt+Left:  move cell out of its current folder.
+indent_cell(cell_id)    — Cmd+]: move cell into folder directly above it.
+outdent_cell(cell_id)   — Cmd+[: move cell out of its current folder.
 move_cell_up(cell_id)   — Opt+Up:   move cell one position up in panel order.
 move_cell_down(cell_id) — Opt+Down: move cell one position down in panel order.
 """
@@ -450,29 +450,3 @@ def test_cell_text_edit_emits_move_down_signal(qapp):
     assert received == [cell.cell_id]
 
 
-def test_opt_right_emits_indent_signal(qapp):
-    """Option+Right is an alias for Cmd+] (indent)."""
-    from PyQt6.QtCore import Qt, QEvent
-    from PyQt6.QtGui import QKeyEvent
-
-    cell = CellWidget()
-    received = []
-    cell.indent_requested.connect(lambda cid: received.append(cid))
-
-    event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Right, Qt.KeyboardModifier.AltModifier)
-    cell._text_edit.keyPressEvent(event)
-    assert received == [cell.cell_id]
-
-
-def test_opt_left_emits_outdent_signal(qapp):
-    """Option+Left is an alias for Cmd+[ (outdent)."""
-    from PyQt6.QtCore import Qt, QEvent
-    from PyQt6.QtGui import QKeyEvent
-
-    cell = CellWidget()
-    received = []
-    cell.outdent_requested.connect(lambda cid: received.append(cid))
-
-    event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Left, Qt.KeyboardModifier.AltModifier)
-    cell._text_edit.keyPressEvent(event)
-    assert received == [cell.cell_id]
