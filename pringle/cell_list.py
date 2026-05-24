@@ -27,7 +27,7 @@ import numpy as np
 
 from PyQt6.QtWidgets import (
     QWidget, QScrollArea, QVBoxLayout, QHBoxLayout, QPushButton,
-    QFrame, QSizePolicy, QLabel, QApplication,
+    QFrame, QSizePolicy, QLabel, QApplication, QToolButton,
 )
 from PyQt6.QtCore import Qt, QObject, QThread, QTimer, pyqtSignal, pyqtSlot
 
@@ -211,6 +211,10 @@ class CellListWidget(QWidget):
     eval_requested = pyqtSignal(object)
     # Emitted after _rebuild_namespace completes and slider bounds are re-resolved.
     namespace_rebuilt = pyqtSignal()
+    # Toolbar file-management signals forwarded to app.py
+    new_file_requested  = pyqtSignal()
+    open_file_requested = pyqtSignal()
+    save_requested      = pyqtSignal()
 
     def __init__(
         self,
@@ -298,6 +302,8 @@ class CellListWidget(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
+        outer.addWidget(self._build_toolbar())  # toolbar pinned to top
+
         self._scroll = QScrollArea()
         self._scroll.setObjectName("cell_scroll")
         self._scroll.setWidgetResizable(True)
@@ -326,26 +332,48 @@ class CellListWidget(QWidget):
         self._drop_indicator.setFixedHeight(2)
         self._drop_indicator.hide()
 
-        # Add buttons: equation cell (left) and folder (right)
-        add_row = QHBoxLayout()
-        add_row.setContentsMargins(0, 0, 0, 0)
-        add_row.setSpacing(0)
+    def _build_toolbar(self) -> QWidget:
+        bar = QWidget()
+        bar.setObjectName("cell_toolbar")
+        row = QHBoxLayout(bar)
+        row.setContentsMargins(4, 2, 4, 2)
+        row.setSpacing(0)
 
-        self._add_eq_btn = QPushButton("+ Equation")
-        self._add_eq_btn.setObjectName("add_btn")
-        self._add_eq_btn.setFlat(True)
-        self._add_eq_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._new_btn  = QToolButton(); self._new_btn.setText("New")
+        self._open_btn = QToolButton(); self._open_btn.setText("Open")
+        self._save_btn = QToolButton(); self._save_btn.setText("Save")
+        for btn in (self._new_btn, self._open_btn, self._save_btn):
+            btn.setObjectName("toolbar_file_btn")
+            btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            row.addWidget(btn)
+
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.VLine)
+        sep.setObjectName("toolbar_sep")
+        row.addWidget(sep)
+
+        self._add_eq_btn     = QToolButton(); self._add_eq_btn.setText("+ Equation")
+        self._add_folder_btn = QToolButton(); self._add_folder_btn.setText("+ Folder")
+        for btn in (self._add_eq_btn, self._add_folder_btn):
+            btn.setObjectName("toolbar_add_btn")
+            btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            row.addWidget(btn)
+
+        row.addStretch(1)
+
+        self._new_btn.clicked.connect(self.new_file_requested)
+        self._open_btn.clicked.connect(self.open_file_requested)
+        self._save_btn.clicked.connect(self.save_requested)
         self._add_eq_btn.clicked.connect(lambda: self.add_cell(after_id=self._focused_cell_id()))
-        add_row.addWidget(self._add_eq_btn)
-
-        self._add_folder_btn = QPushButton("+ Folder")
-        self._add_folder_btn.setObjectName("add_btn")
-        self._add_folder_btn.setFlat(True)
-        self._add_folder_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._add_folder_btn.clicked.connect(lambda: self.add_folder(after_id=self._focused_cell_id()))
-        add_row.addWidget(self._add_folder_btn)
 
-        outer.addLayout(add_row)
+        return bar
+
+    def set_modified(self, modified: bool) -> None:
+        """Update the Save button appearance to reflect unsaved-changes state."""
+        self._save_btn.setProperty("modified", modified)
+        self._save_btn.style().unpolish(self._save_btn)
+        self._save_btn.style().polish(self._save_btn)
 
     # ------------------------------------------------------------------
     # Folder helpers

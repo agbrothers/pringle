@@ -6,6 +6,16 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-025 — Expression panel toolbar (New / Open / Save + cell-add buttons)
+**Status:** Closed (implemented 2026-05-24)
+
+**Implementation:**
+- **`pringle/cell_list.py`**: Added `QToolButton` import. Added `new_file_requested`, `open_file_requested`, and `save_requested` pyqtSignals. Rewrote `_build_ui` to call `_build_toolbar()` at the top of the outer layout and removed the bottom add-button row. Added `_build_toolbar()` which constructs the `QWidget#cell_toolbar` bar with New/Open/Save `QToolButton`s, a `QFrame` VLine separator, and `+ Equation`/`+ Folder` `QToolButton`s. Added `set_modified(modified: bool)` which sets the `modified` dynamic property on `_save_btn` and calls `unpolish`/`polish` to force QSS re-evaluation.
+- **`pringle/app.py`**: Connected `new_file_requested → _on_new`, `open_file_requested → _on_open`, `save_requested → _on_save` after creating `_cell_list`. Updated `_update_title()` to use Qt's native `[*]` placeholder with `setWindowTitle(f"pringle — {name}[*]")`, `setWindowModified(self._modified)` (native close-button dot on macOS), and `self._cell_list.set_modified(self._modified)`.
+- **`pringle/theme.qss`**: Added `QWidget#cell_toolbar` (dark background + bottom border), `QToolButton#toolbar_file_btn` (text style + `[modified="true"]` bright-white save indicator), `QToolButton#toolbar_add_btn`, and `QFrame#toolbar_sep` styles. Removed the old `QPushButton#add_btn` rule (button type changed to `QToolButton`, moved to toolbar).
+
+---
+
 ### FEAT-065 — Cmd+[ / Cmd+] and Cmd+Arrow keys to move cells in/out of folders and reorder them
 **Status:** Closed (implemented 2026-05-24)
 

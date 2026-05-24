@@ -386,6 +386,9 @@ class PringleWindow(QMainWindow):
             eval_threaded=True,
         )
         self._cell_list.namespace_rebuilt.connect(self._on_namespace_rebuilt)
+        self._cell_list.new_file_requested.connect(self._on_new)
+        self._cell_list.open_file_requested.connect(self._on_open)
+        self._cell_list.save_requested.connect(self._on_save)
         left_layout.addWidget(self._cell_list, 1)
 
         splitter.insertWidget(0, left)
@@ -446,12 +449,10 @@ class PringleWindow(QMainWindow):
         super().closeEvent(event)
 
     def _update_title(self) -> None:
-        name = (
-            self._session_path.rsplit("/", 1)[-1]
-            if self._session_path else "untitled"
-        )
-        prefix = "* " if self._modified else ""
-        self.setWindowTitle(f"{prefix}pringle — {name}")
+        name = Path(self._session_path).name if self._session_path else "untitled"
+        self.setWindowTitle(f"pringle — {name}[*]")  # [*] is Qt's modified placeholder
+        self.setWindowModified(self._modified)         # native dot on macOS close button
+        self._cell_list.set_modified(self._modified)
 
     def _confirm_discard(self) -> bool:
         """Return True if it's safe to discard the current session."""

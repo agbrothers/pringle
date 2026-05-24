@@ -509,7 +509,7 @@ In the typical use case (gradient arrays derived from the same slider parameters
 
 
 ### FEAT-025 — Expression panel toolbar (New / Open / Save + cell-add buttons)
-**Status:** Open  
+**Status:** Closed (implemented 2026-05-24)  
 **Logged:** 2026-05-18  
 **Updated:** 2026-05-24
 
