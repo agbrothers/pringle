@@ -1,8 +1,10 @@
 """
-FEAT-065 — Cmd+[ / Cmd+] to move cells in and out of folders.
+FEAT-065 — Cmd+[ / Cmd+] and Option+Arrow keys to move cells in/out of folders.
 
-indent_cell(cell_id)  — Cmd+]: move focused cell into folder directly above it.
-outdent_cell(cell_id) — Cmd+[: move focused cell out of its current folder.
+indent_cell(cell_id)    — Cmd+] / Opt+Right: move cell into folder directly above it.
+outdent_cell(cell_id)   — Cmd+[ / Opt+Left:  move cell out of its current folder.
+move_cell_up(cell_id)   — Opt+Up:   move cell one position up in panel order.
+move_cell_down(cell_id) — Opt+Down: move cell one position down in panel order.
 """
 
 import sys
@@ -430,7 +432,7 @@ def test_cell_text_edit_emits_move_up_signal(qapp):
     received = []
     cell.move_up_requested.connect(lambda cid: received.append(cid))
 
-    event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Up, Qt.KeyboardModifier.ControlModifier)
+    event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Up, Qt.KeyboardModifier.AltModifier)
     cell._text_edit.keyPressEvent(event)
     assert received == [cell.cell_id]
 
@@ -443,13 +445,13 @@ def test_cell_text_edit_emits_move_down_signal(qapp):
     received = []
     cell.move_down_requested.connect(lambda cid: received.append(cid))
 
-    event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Down, Qt.KeyboardModifier.ControlModifier)
+    event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Down, Qt.KeyboardModifier.AltModifier)
     cell._text_edit.keyPressEvent(event)
     assert received == [cell.cell_id]
 
 
-def test_cmd_right_emits_indent_signal(qapp):
-    """Cmd+Right is an alias for Cmd+] (indent)."""
+def test_opt_right_emits_indent_signal(qapp):
+    """Option+Right is an alias for Cmd+] (indent)."""
     from PyQt6.QtCore import Qt, QEvent
     from PyQt6.QtGui import QKeyEvent
 
@@ -457,13 +459,13 @@ def test_cmd_right_emits_indent_signal(qapp):
     received = []
     cell.indent_requested.connect(lambda cid: received.append(cid))
 
-    event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Right, Qt.KeyboardModifier.ControlModifier)
+    event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Right, Qt.KeyboardModifier.AltModifier)
     cell._text_edit.keyPressEvent(event)
     assert received == [cell.cell_id]
 
 
-def test_cmd_left_emits_outdent_signal(qapp):
-    """Cmd+Left is an alias for Cmd+[ (outdent)."""
+def test_opt_left_emits_outdent_signal(qapp):
+    """Option+Left is an alias for Cmd+[ (outdent)."""
     from PyQt6.QtCore import Qt, QEvent
     from PyQt6.QtGui import QKeyEvent
 
@@ -471,6 +473,6 @@ def test_cmd_left_emits_outdent_signal(qapp):
     received = []
     cell.outdent_requested.connect(lambda cid: received.append(cid))
 
-    event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Left, Qt.KeyboardModifier.ControlModifier)
+    event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Left, Qt.KeyboardModifier.AltModifier)
     cell._text_edit.keyPressEvent(event)
     assert received == [cell.cell_id]

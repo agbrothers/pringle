@@ -95,11 +95,19 @@ class _CommentEdit(QPlainTextEdit):
         key = event.key()
         mod = event.modifiers()
         ctrl = Qt.KeyboardModifier.ControlModifier
+        alt = Qt.KeyboardModifier.AltModifier
         if mod == ctrl:
-            if key == Qt.Key.Key_BracketRight or key == Qt.Key.Key_Right:
+            if key == Qt.Key.Key_BracketRight:
                 self.indent_at.emit()
                 return
-            if key == Qt.Key.Key_BracketLeft or key == Qt.Key.Key_Left:
+            if key == Qt.Key.Key_BracketLeft:
+                self.outdent_at.emit()
+                return
+        if mod == alt:
+            if key == Qt.Key.Key_Right:
+                self.indent_at.emit()
+                return
+            if key == Qt.Key.Key_Left:
                 self.outdent_at.emit()
                 return
             if key == Qt.Key.Key_Up:
