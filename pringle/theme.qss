@@ -92,7 +92,7 @@ QLabel#hash_lbl {
 }
 QPlainTextEdit#comment_edit {
     background: transparent;
-    color: #7a9e7a;
+    color: #79838E;
     font-size: 12px;
     font-family: 'Menlo', 'Consolas', 'Courier New';
     border: none;

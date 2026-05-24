@@ -6,6 +6,18 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-063 — Syntax highlighting in expression cells
+**Status:** Closed (implemented 2026-05-24)
+
+**Implementation:**
+- **`pringle/syntax_theme.py`** (new): Named color constants — `MAGIC_COLOR`, `FUNCTION_COLOR`, `NUMBER_COLOR`, `OPERATOR_COLOR`, `COMMENT_COLOR`, `RAINBOW_BRACKETS`. GitHub Dark palette defaults.
+- **`pringle/syntax_highlighter.py`** (new): `PringleHighlighter(QSyntaxHighlighter)` — token sets compiled once at module load from `MAGIC_NAMES | SPATIAL_NAMES | {"n","cfg"}` (magic) and `build_equation_namespace().keys()` minus magic (functions). Regex patterns sorted longest-first. `highlightBlock` applies static token rules then rainbow bracket coloring with depth tracking via `setCurrentBlockState`/`previousBlockState`. `set_colors(overrides)` rebuilds formats and calls `rehighlight()`. `comment_color` attribute stores the comment color for FEAT-064 (not applied by the highlighter — `CommentCellWidget` uses `theme.qss`).
+- **`pringle/cell_widget.py`**: `CellTextEdit.__init__` instantiates `PringleHighlighter(self.document())`. One line; covers all equation cells and sub-cells automatically.
+- **`pringle/theme.qss`**: Updated `#comment_edit` text color from `#7a9e7a` to `#79838E` to match `COMMENT_COLOR`.
+- **`tests/test_feat063.py`**: 17 tests using `_CapturingHighlighter` subclass that intercepts `setFormat`/`setCurrentBlockState` calls for headless color verification.
+
+---
+
 ### FEAT-061 — Auto-scroll expression panel to reveal newly added cell
 **Status:** Closed (implemented 2026-05-24)
 

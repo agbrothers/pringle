@@ -185,6 +185,8 @@ class CellTextEdit(QPlainTextEdit):
         self.document().documentLayout().documentSizeChanged.connect(
             self._on_document_size_changed
         )
+        from pringle.syntax_highlighter import PringleHighlighter
+        self._highlighter = PringleHighlighter(self.document())
         self._adjust_height()
 
     def _on_document_size_changed(self, new_size) -> None:

@@ -7,400 +7,307 @@ See [17-closed-features.md](17-closed-features.md) for implemented features.
 
 ---
 
-### FEAT-062 — Revert: Enter in slider min/max/step fields should not create a new cell
-**Status:** Closed (implemented 2026-05-24)  
+### FEAT-064 — Syntax color settings panel
+**Status:** Open  
 **Logged:** 2026-05-24  
-**Reverts:** FEAT-051 (partial)
+**Depends on:** FEAT-063
 
 **Description:**  
-FEAT-051 wired all five slider fields — value spinbox, min, max, step, and name — so that pressing Enter creates a new cell below the slider. After UX testing, this behavior is undesirable for the min/max/step fields: users press Enter to commit a numeric value and are surprised when a new empty cell appears. The revert applies only to `_ExprBox` (used by min, max, and step); the value spinbox (`_SpinBox`) and name field (`_NameLineEdit`) retain their Enter-to-new-cell behavior.
+A settings panel that lets the user view and edit the syntax highlight colors defined in `syntax_theme.py`, with changes persisted to YAML. The specific UI layout and interaction model will be specified in a second pass once the broader UI is more settled; this entry tracks the intent and open questions.
 
 **Motivation:**  
-Min, max, and step are auxiliary configuration fields. Users tab or click through them while adjusting slider bounds and do not expect focus to jump to a brand-new cell after editing a range limit. The value spinbox and name field are primary interaction points where the progression to the next cell is more natural.
+The syntax highlight colors in FEAT-063 are hardcoded defaults (GitHub Dark palette). Users with different display preferences or accessibility needs should be able to override any token color. Persisting them to the session YAML means the preference travels with the session file.
 
 ---
 
-**Changes required:**
+**Known scope (to be refined):**
 
-**`slider_widget.py` — `_ExprBox.keyPressEvent` (lines ~152–155):**
+- A panel (location TBD) exposing one color swatch per token category: magic variables, functions, numbers/brackets/parens, operators, base text, and the six rainbow bracket levels.
+- Clicking a swatch opens a color picker (Qt's `QColorDialog`, already available).
+- A "Reset to defaults" action restores `syntax_theme.py` values.
+- Changes apply live (rehighlight all cells immediately via `QSyntaxHighlighter.rehighlight()`).
 
-Remove the `new_cell_requested` emission from the Enter key branch. The Enter handler should only commit the value:
-
-```python
-if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-    self.editingFinished.emit()   # commit value; do NOT emit new_cell_requested
-    return
+**Persistence:**  
+Colors are written to a `syntax` block in the session YAML:
+```yaml
+syntax:
+  magic: "#E9A15F"
+  functions: "#D7BEF6"
+  numbers: "#7DB4F9"
+  operators: "#EC7C6F"
+  rainbow: ["#7DB4F9", "#81C276", "#D3AB53", "#F0998E", "#ED92C4", "#D7BEF6"]
 ```
+On session load, if a `syntax` block is present it overrides the defaults from `syntax_theme.py`; if absent, defaults are used. This keeps the YAML clean for sessions where the user never touched the syntax colors.
 
-**`slider_widget.py` — `SliderWidget._build_ui` (lines ~329–330):**
-
-Remove the connections that forward `new_cell_requested` from the three range boxes to `enter_pressed`:
-
-```python
-# Delete this entire block:
-for box in (self._min_box, self._max_box, self._step_box):
-    box.new_cell_requested.connect(lambda: self.enter_pressed.emit(self.cell_id))
-```
-
-**`slider_widget.py` — `_ExprBox` class:**
-
-With no remaining callers, `new_cell_requested = pyqtSignal()` on `_ExprBox` can be removed entirely to keep the class clean.
-
-**No changes needed elsewhere.** `CellListWidget._on_enter_pressed`, `SliderWidget.enter_pressed`, and the connections for `_spinbox` and `_name_edit` are all unaffected.
+**Open questions (second pass TBD):**
+- Where does the panel live? Inline in the axis settings popup, a separate popover, or part of a future general preferences dialog?
+- Should colors be per-session (in YAML) or global (in a user config file)?
+- Should the base text color be editable here, or is it tied to the Qt theme?
 
 ---
 
-**Tests to add / update:**
-
-- `tests/test_feat051.py` — update the four cases that assert Enter in `_min_box`, `_max_box`, `_step_box`, and any combined range-field test. These should now assert that Enter does **not** emit `enter_pressed` from the slider. The value-spinbox and name-field cases are unchanged.
-- Add a new test: Enter in `_min_box` while the panel has a focused slider commits the value (`_min_box.committed` fires) but does not call `add_cell` and does not change the cell count.
-
----
-
-### FEAT-061 — Auto-scroll expression panel to reveal newly added cell
+### FEAT-063 — Syntax highlighting in expression cells
 **Status:** Closed (implemented 2026-05-24)  
 **Logged:** 2026-05-24
 
 **Description:**  
-When a new cell is added below the currently visible portion of the expression panel — via the add button, Enter, or any other means — the panel should scroll down so the new cell is visible. Currently, `add_cell` calls `self._scroll.ensureWidgetVisible(cell)` (added in FEAT-046), but this call fires before Qt has processed the layout change, so the cell has no geometry yet and the scroll position does not update.
+Apply token-based syntax highlighting to all `CellTextEdit` instances (equation cells and their sub-cells). Six token categories are colored; brackets and parentheses additionally cycle through a rainbow palette by nesting depth. Colors ship as named constants in a new `pringle/syntax_theme.py` file so they can be overridden without touching the highlighter logic (see FEAT-064).
 
-**Root cause:**  
-Qt layout changes (`insertWidget`, `addWidget`) are not applied synchronously. When `ensureWidgetVisible(cell)` is called immediately after inserting a widget into the layout, the cell's geometry is still `QRect(0, 0, 0, 0)` (or the default). Qt cannot compute the correct scroll offset for a widget it has not positioned yet, so the call is effectively a no-op for widgets that would require scrolling.
+**Default palette (GitHub Dark provenance):**
 
-**Fix:**  
-Defer the `ensureWidgetVisible` call via `QTimer.singleShot(0, ...)` so it runs after the current event loop iteration — by which point Qt has processed the layout event and the cell has a valid geometry.
+| Token category | Default color |
+|---|---|
+| Magic variables (`z`, `y`, `xyz`, `points`, `vectors`, `x`, `u`, `v`, `n`, `cfg`) | `#E9A15F` |
+| Whitelisted functions (`sin`, `cos`, `sqrt`, `linspace`, …) | `#D7BEF6` |
+| Numeric literals, brackets `[]`, parentheses `()` | `#7DB4F9` (depth 0) |
+| Operators `+ - * / ** % = < > ! & \| ~` | `#EC7C6F` |
+| Remaining punctuation, variable names, whitespace | default text color (unchanged) |
+
+**Rainbow bracket depth cycle** (applied to `[]` and `()` in order of opening depth):  
+`["#7DB4F9", "#81C276", "#D3AB53", "#F0998E", "#ED92C4", "#D7BEF6"]`
+
+Depth is tracked per-line using Qt's `setCurrentBlockState` / `previousBlockState` mechanism so rainbow coloring is consistent across multi-line cells.
 
 ---
 
-**Implementation (`cell_list.py`):**
-
-Replace the two `ensureWidgetVisible` calls inside `add_cell` that fire after a user-initiated insert (i.e., when `not self._skip_rebuild`):
+**New file — `pringle/syntax_theme.py`:**
 
 ```python
-# Before (lines ~452 and ~469):
-self._scroll.ensureWidgetVisible(cell)
+# Default syntax highlight colors — GitHub Dark palette.
+# Import SYNTAX_COLORS in PringleHighlighter; override via FEAT-064 settings.
 
-# After:
-QTimer.singleShot(0, lambda: self._scroll.ensureWidgetVisible(cell))
+MAGIC_COLOR     = "#E9A15F"   # magic output variables and grid inputs
+FUNCTION_COLOR  = "#D7BEF6"   # whitelisted numpy/scipy function names
+NUMBER_COLOR    = "#7DB4F9"   # numeric literals
+OPERATOR_COLOR  = "#EC7C6F"   # arithmetic and comparison operators
+
+RAINBOW_BRACKETS = [
+    "#7DB4F9", "#81C276", "#D3AB53",
+    "#F0998E", "#ED92C4", "#D7BEF6",
+]
 ```
 
-`QTimer` is already imported in `cell_list.py` (used by other callers). The lambda captures `cell` by closure — safe because the cell is a local in `add_cell` and the timer fires within the same Qt event loop iteration.
+**New file — `pringle/syntax_highlighter.py`:**
 
-Apply the same deferral to the equivalent calls in `add_comment_cell` and `add_folder` if they exhibit the same issue (the same root cause applies wherever `ensureWidgetVisible` is called synchronously after a layout insertion).
+Token sets are compiled once at module level from `preprocess.py` and `namespace.py`:
 
-**Scope note:** Do not defer the `ensureWidgetVisible` calls that occur during session restore (inside `_skip_rebuild` blocks or the YAML restore loop) — those already defer scroll via `_skip_rebuild` and scroll explicitly to the focused cell at the end of restore. Only the user-triggered insertion paths need the timer.
+```python
+from pringle.preprocess import MAGIC_NAMES, SPATIAL_NAMES
+from pringle.namespace import build_equation_namespace
+
+_MAGIC_NAMES = MAGIC_NAMES | SPATIAL_NAMES | {"n", "cfg"}
+_FUNC_NAMES  = frozenset(build_equation_namespace().keys()) - _MAGIC_NAMES - {"__builtins__"}
+```
+
+Regex patterns are also compiled once:
+
+```python
+import re
+_RE_MAGIC   = re.compile(r'\b(' + '|'.join(sorted(_MAGIC_NAMES, key=len, reverse=True)) + r')\b')
+_RE_FUNC    = re.compile(r'\b(' + '|'.join(sorted(_FUNC_NAMES,  key=len, reverse=True)) + r')\b')
+_RE_NUMBER  = re.compile(r'\b\d+\.?\d*(?:[eE][+-]?\d+)?\b')
+_RE_OPERATOR = re.compile(r'[+\-*/%=<>!&|~^]+')
+_RE_BRACKET  = re.compile(r'[\[\]()\{\}]')
+```
+
+Patterns are sorted longest-first to avoid partial matches (e.g. `arctan2` before `arctan`).
+
+**`PringleHighlighter(QSyntaxHighlighter)` — `highlightBlock` sketch:**
+
+```python
+def highlightBlock(self, text: str) -> None:
+    # Bracket depth carried from previous block
+    depth = max(0, self.previousBlockState())
+
+    # Apply fixed-token rules first (non-overlapping passes)
+    for pattern, fmt in self._static_rules:
+        for m in pattern.finditer(text):
+            self.setFormat(m.start(), m.end() - m.start(), fmt)
+
+    # Rainbow brackets — scan character by character for bracket positions
+    for m in _RE_BRACKET.finditer(text):
+        ch = m.group()
+        if ch in "([":
+            self.setFormat(m.start(), 1, self._rainbow_fmt(depth))
+            depth += 1
+        elif ch in ")]":
+            depth = max(0, depth - 1)
+            self.setFormat(m.start(), 1, self._rainbow_fmt(depth))
+
+    self.setCurrentBlockState(depth)
+```
+
+`_static_rules` is a list of `(compiled_re, QTextCharFormat)` pairs built in `__init__` from `syntax_theme.py` colors. `_rainbow_fmt(depth)` returns the `QTextCharFormat` for `RAINBOW_BRACKETS[depth % len(RAINBOW_BRACKETS)]`.
+
+**Integration — `CellTextEdit.__init__` (`cell_widget.py`):**
+
+```python
+from pringle.syntax_highlighter import PringleHighlighter
+self._highlighter = PringleHighlighter(self.document())
+```
+
+One line. Because both `CellWidget._text_edit` and `SubCell._edit` are `CellTextEdit` instances, all cells and sub-cells get highlighting automatically. `_CommentEdit` is a separate class and does not inherit `CellTextEdit`, so comments are not highlighted (intentional — comments are freeform text).
+
+**Updating colors at runtime (for FEAT-064):**
+
+```python
+def set_colors(self, colors: dict) -> None:
+    """Rebuild formats from a dict of color overrides and rehighlight."""
+    self._build_formats(colors)
+    self.rehighlight()
+```
+
+`rehighlight()` is a built-in `QSyntaxHighlighter` method that queues a full document rehighlight — it is deferred and batched by Qt, so calling it on every open cell after a color change is safe.
+
+---
+
+**Scope notes:**
+
+- Strings (quoted literals like `"path/to/file.npy"` in data cells) are not highlighted in v1 — no string token category is defined.
+- `random.randn(...)` — `random` is a magic/namespace name and will be highlighted as a function. The `.randn` attribute is plain text (not highlighted). This is acceptable.
+- The highlighter operates on raw source text, not the evaluated result — so a user-defined variable that shadows a function name (e.g. `sin = 5`) will still highlight `sin` as a function. This is a known limitation of token-based highlighting without full parse context.
 
 ---
 
 **Tests to add:**
 
-- After calling `add_cell(after_id=last_cell_id)` with the panel at maximum scroll, process events (`app.processEvents()`), then assert `_scroll.verticalScrollBar().value() == _scroll.verticalScrollBar().maximum()` (or that the new cell is within the visible viewport rect).
-- Same test for the add-button path (click the `+` button while scrolled to top with a full panel).
-- Regression: session restore does not scroll to the bottom (the last-focused cell remains in view, not the final cell in the list).
+- `PringleHighlighter` can be constructed with a `QTextDocument` without raising.
+- After setting text `"z = sin(x**2)"`, the format at the `z` position matches `MAGIC_COLOR`, the format at `sin` matches `FUNCTION_COLOR`, and the format at `(` matches `RAINBOW_BRACKETS[0]`.
+- Nested brackets `"((x))"`: outer `(` depth 0, inner `(` depth 1, inner `)` depth 1→0, outer `)` depth 0.
+- Block state is set correctly: after a line with two unmatched opens, `currentBlockState() == 2`.
+- `set_colors({...})` triggers `rehighlight()` without raising.
 
 ---
 
-### FEAT-060 — Consolidate Qt styles into a central `theme.qss` stylesheet
-**Status:** Closed (implemented 2026-05-24)
-**Logged:** 2026-05-24
+### FEAT-057 — Axis bounds accessible via `cfg` object in the expression namespace
+**Status:** Open  
+**Logged:** 2026-05-23  
+**Updated:** 2026-05-24
 
 **Description:**  
-Migrate the ~40 scattered inline `setStyleSheet()` calls across the UI files into a single `pringle/theme.qss` file loaded once at `QApplication` startup. Static and structural styles (backgrounds, borders, fonts, spacing, hover states) move to QSS. A small number of genuinely data-driven `setStyleSheet()` calls (color dots, error/stale state indicators) remain in Python but are minimized.
+Expose the six axis bounds — `x_min`, `x_max`, `y_min`, `y_max`, `z_min`, `z_max` — through a single `cfg` config object injected into the expression namespace. Cells read bounds via `cfg.x_min` and write them via `cfg.x_max = t`. The `cfg` approach was chosen over flat names to avoid reserving six common variable names in the shared namespace.
+
+- **Read:** Any cell can reference `cfg.x_min`, `cfg.x_max`, etc. to parametrize its expression by the current viewport bounds (e.g. `z = sin(cfg.x_max * x)`).
+- **Write:** A cell can assign to a `cfg` attribute (e.g. `cfg.x_max = t`, where `t` is a slider) to drive the axis bounds programmatically — enabling animated pan/zoom.
 
 **Motivation:**  
-All visual appearance is currently defined inline across seven files, making a UI overhaul require hunting across the codebase. A central stylesheet enables rapid iteration — changing a font size or color scheme is a one-line edit rather than a grep-and-replace session. It also eliminates a class of Python boilerplate: `enterEvent`/`leaveEvent` overrides that toggle style strings manually can be replaced by QSS `:hover` pseudo-states.
+Users frequently want to adapt expressions to the visible range (e.g., scale a wave frequency to fill the viewport) or animate the visible window as part of a recording. Both require reading and writing the axis bounds from cells, which is currently impossible — bounds live only in the `ViewSettingsWidget` and have no presence in the evaluation namespace. The `cfg` wrapper avoids the flat-name approach's namespace collision risk (`x_min`, `x_max`, etc. are common variable names) while providing an identical feature surface.
 
-**Files with inline styles today (all in scope):**  
-`cell_widget.py`, `cell_list.py`, `slider_widget.py`, `folder_cell_widget.py`, `comment_cell_widget.py`, `style_popover.py`, `app.py`
-
----
-
-**What moves to `theme.qss`:**
-
-- All static background colors, borders, padding, font sizes, and colors.
-- Hover states — the `_IDLE`/`_HOVER`/`_ACTIVE` string constants on `_DeleteButton` in `cell_widget.py` (lines 45–82) become a single `:hover` rule; the `enterEvent`/`leaveEvent` overrides are removed.
-- Shared button styles currently copy-pasted as local variables (`_btn_style` in `cell_list.py`, `_rb_style` and `_BTN_STYLE` in `style_popover.py`) — defined once under a shared selector.
-- Separator line colors, label colors, scroll area backgrounds.
-
-**What stays in Python `setStyleSheet()`:**
-
-| Call site | Why it stays |
-|---|---|
-| `cell_widget.py:671` — color dot background | Per-instance color from `CellStyle.color_qss()`; inherently dynamic |
-| `cell_widget.py:484` — `_DATA_DOT` state (idle/stale/running/done) | State-driven color change per data cell |
-| `cell_widget.py:618` — status dot reset | Same `_DATA_DOT` state machine |
-| `slider_widget.py:159` — flash red border on conflict | Transient animation (500ms timer), not a stable state |
-| `slider_widget.py:465` — invalid name border | Validation state, toggled on/off |
-| `slider_widget.py:534–535` — min/max out-of-range red | Same |
-| `style_popover.py:224,241` — reverse/swatch buttons | Per-instance color from `CellStyle` |
-
-All other `setStyleSheet()` calls are static strings that belong in the QSS file.
+**Security:**  
+The existing `SafetyChecker` in `safety.py` requires no changes. `visit_Attribute` already blocks dunder access (`cfg.__class__` raises `SecurityError`); plain `cfg.x_min` uses a non-dunder attribute and passes. No new AST rules are needed.
 
 ---
 
 **Implementation:**
 
-**1. Create `pringle/theme.qss`**
-
-Organize by component section with comments:
-
-```css
-/* ── Cell list ──────────────────────────────────────── */
-QScrollArea#cell_scroll { background: #171717; border: none; }
-QWidget#cell_container  { background-color: #171717; }
-...
-
-/* ── Cell widget ─────────────────────────────────────── */
-QPlainTextEdit#cell_edit { border: none; background: transparent; }
-QLabel#delete_btn        { color: transparent; font-size: 14px; padding: 0; }
-QLabel#delete_btn:hover  { color: #aaa; }
-...
-```
-
-Object names (`setObjectName`) are already present on many widgets; add them to any that are missing so QSS selectors can target them precisely.
-
-**2. Load in `app.py` at startup**
+**`cfg` object — new `AxisConfig` dataclass (`cell_list.py` or a small new module):**
 
 ```python
-from importlib.resources import files
+from dataclasses import dataclass
 
-def _load_theme(app: QApplication) -> None:
-    qss = files("pringle").joinpath("theme.qss").read_text()
-    app.setStyleSheet(qss)
+@dataclass
+class AxisConfig:
+    x_min: float; x_max: float
+    y_min: float; y_max: float
+    z_min: float; z_max: float
 ```
 
-Called once before `MainWindow` is constructed. `importlib.resources` keeps the path portable when the package is installed.
+A plain dataclass with no `__slots__` so attribute assignment in user expressions (`cfg.x_max = 5`) works without any special machinery.
 
-**3. Remove redundant Python code**
-
-- Delete `_DeleteButton._IDLE`, `_HOVER`, `_ACTIVE` class attributes and the `enterEvent`/`leaveEvent` overrides in `cell_widget.py`.
-- Delete the `_btn_style`, `_rb_style`, `_BTN_STYLE` local variables in `cell_list.py` and `style_popover.py`.
-- Remove the `setStyleSheet()` calls that are now covered by `theme.qss`.
-
-**Naming note:**  
-The existing `style.py` is named for `CellStyle` — it covers 3D rendering metadata (color, opacity, line width) and has nothing to do with Qt appearance. The new Qt theme file should be `theme.qss` (and a thin loader in `app.py`) to avoid conflating the two concerns.
-
-**v1 scope:**  
-Dark theme only — move the current appearance into `theme.qss` unchanged. Light mode / theme switching (FEAT-017) is a natural follow-on once a single stylesheet exists, but is out of scope here.
-
----
-
-**Tests to add:**
-
-- `theme.qss` loads without error and `QApplication.styleSheet()` is non-empty after startup.
-- `_DeleteButton` no longer defines `enterEvent`/`leaveEvent` (assert via `hasattr`).
-- Dynamic style calls still function: color dot reflects `CellStyle.color`, error borders appear on invalid slider name, data-dot cycles through idle/stale/running states.
-
----
-
-### FEAT-059 — Parametric surface rendering from `xyz = (3, N, M)` assignment
-**Status:** Closed (implemented 2026-05-24)
-**Logged:** 2026-05-24
-
-**Description:**  
-When a cell assigns `xyz` to a `(3, N, M)` array, render it as a smooth parametric surface mesh. Currently the `parametric` render type in `app.py` only handles the `(N, 3)` curve case; `(3, N, M)` hits `else: vp.remove_object(cell_id)` and produces nothing. This feature wires up the full surface path.
-
-**Motivation:**  
-This unlocks a class of shapes that cannot be expressed as height fields (`z = f(x, y)`): spheres, tori, Möbius strips, Klein bottles, and any other surface parametrized over a 2D `(u, v)` domain. The `u` and `v` grids are already injected into the evaluation namespace and span `[0, 2π]` each by default, making these the natural choice for closed surfaces.
-
-**Are there good reasons not to support this?**  
-No architectural blockers. The triangle index builder (`_grid_indices`) is already grid-shape agnostic and reusable unchanged. The main addition is a new normal computation function (cross product of tangent vectors rather than the height-field shortcut), a new `make_parametric_surface_mesh` builder, and a one-line routing change in `app.py`. Constraint sub-cells and in-place re-render are not supported for v1 — see below.
-
----
-
-**New helper — `_parametric_normals` (`renderer.py`):**
-
-The height-field normal shortcut `n = (-dz/dx, -dz/dy, 1)` doesn't apply here. Normals must be the cross product of the two surface tangent vectors:
+**Read direction — injection before evaluation (`cell_list.py`, `_rebuild_namespace`):**
 
 ```python
-def _parametric_normals(xyz: np.ndarray) -> np.ndarray:
-    """Per-vertex normals for a parametric surface (3, N, M) via tangent cross product.
-    Returns (N*M, 3) float32."""
-    dPdu = np.gradient(xyz, axis=2)   # (3, N, M) tangent along u
-    dPdv = np.gradient(xyz, axis=1)   # (3, N, M) tangent along v
-    nx = dPdu[1] * dPdv[2] - dPdu[2] * dPdv[1]
-    ny = dPdu[2] * dPdv[0] - dPdu[0] * dPdv[2]
-    nz = dPdu[0] * dPdv[1] - dPdu[1] * dPdv[0]
-    length = np.sqrt(nx**2 + ny**2 + nz**2)
-    length = np.where(length < 1e-10, 1.0, length)   # guard against poles / degenerate pts
-    nx /= length; ny /= length; nz /= length
-    return np.stack([nx.ravel(), ny.ravel(), nz.ravel()], axis=1).astype(np.float32)
+grid_cfg = self._grid.config
+cfg = AxisConfig(
+    x_min=float(grid_cfg.x_min), x_max=float(grid_cfg.x_max),
+    y_min=float(grid_cfg.y_min), y_max=float(grid_cfg.y_max),
+    z_min=float(grid_cfg.z_min), z_max=float(grid_cfg.z_max),
+)
+shared["cfg"] = cfg
 ```
 
-`np.gradient` along `axis=2` gives ∂P/∂u (varying column, fixed row); along `axis=1` gives ∂P/∂v. The cross product is then the surface normal pointing outward (direction depends on parametrization orientation — consistent within a session, may need negation for inside-out surfaces, which can always be corrected by swapping u/v in the expression).
+Injected before the topological evaluation loop. The DAG's `undefined_names` check must treat `"cfg"` as a provided system name (analogous to slider names) so that cells referencing `cfg` without defining it do not emit spurious "Undefined" warnings.
 
-**New mesh builder — `make_parametric_surface_mesh` (`renderer.py`):**
+**Write direction — snapshot before, compare after:**
 
 ```python
-def make_parametric_surface_mesh(
-    xyz: np.ndarray,
-    color: tuple = (0.2, 0.4, 0.9, 1.0),
-    opacity: float = 1.0,
-    colormap: str | None = None,
-    colormap_reversed: bool = False,
-) -> gfx.Mesh:
-    """Build a pygfx Mesh from a (3, N, M) parametric surface array."""
-    _, rows, cols = xyz.shape
-    positions = xyz.reshape(3, -1).T.astype(np.float32)
-    indices   = _grid_indices(rows, cols)
-    normals   = _parametric_normals(xyz)
-    if colormap is not None:
-        colors = _apply_colormap(positions[:, 2], colormap, colormap_reversed)
-        geo = gfx.Geometry(positions=positions, indices=indices, normals=normals, colors=colors)
-        mat = gfx.MeshBasicMaterial(color_mode="vertex", side="both")
-    else:
-        geo = gfx.Geometry(positions=positions, indices=indices, normals=normals)
-        mat = gfx.MeshPhongMaterial(color=color, side="both")
-    if opacity < 1.0:
-        mat.opacity = opacity
-        mat.alpha_mode = "weighted_blend"
-    return gfx.Mesh(geo, mat)
+# Snapshot before the eval loop
+before = (cfg.x_min, cfg.x_max, cfg.y_min, cfg.y_max, cfg.z_min, cfg.z_max)
+
+# ... eval loop runs; cells may mutate cfg in-place via cfg.x_max = t ...
+
+# After the loop, check for changes
+after = (cfg.x_min, cfg.x_max, cfg.y_min, cfg.y_max, cfg.z_min, cfg.z_max)
+if before != after:
+    self.bounds_override.emit(*after)
 ```
 
-`_grid_indices` is unchanged — it generates the same quad tessellation regardless of whether the positions come from a height field or a parametric map.
-
-**Routing change — `app.py` (`_on_cell_result`):**
-
-Replace the existing parametric branch (lines 693–702):
-
-```python
-elif result.render_type == "parametric":
-    pts = np.asarray(result.data, dtype=np.float32)
-    if pts.ndim == 3 and pts.shape[0] == 3:
-        mesh = make_parametric_surface_mesh(
-            pts, color=style.color, opacity=style.opacity,
-            colormap=cmap, colormap_reversed=cmap_rev,
-        )
-        vp.add_object(cell_id, mesh)
-    elif pts.ndim == 2 and pts.shape[1] in (2, 3):
-        # Parametric curve: (N, 3) — existing scatter path
-        scatter = make_scatter_mesh(pts, color=style.color, opacity=style.opacity,
-                                    size=style.point_size,
-                                    as_spheres=(style.scatter_render_mode == "spheres"),
-                                    colormap=cmap, colormap_reversed=cmap_rev)
-        vp.add_object(cell_id, scatter)
-    else:
-        vp.remove_object(cell_id)
-```
-
-**v1 limitations:**
-
-- **No constraint sub-cells.** Constraints currently mask against `z` (the height). For parametric surfaces, no single scalar is appropriate. Constraint sub-cells attached to a parametric cell are silently ignored for v1.
-- **No in-place re-render.** The fast in-place update path (`_try_inplace_render`) assumes a height field and updates z-column of `positions` only. Parametric surfaces fall through to the full `make_parametric_surface_mesh` + `add_object` rebuild on every slider tick. This is acceptable for v1; the in-place path can be extended later.
-- **Polar degeneracy.** At parameter-space poles (e.g., top/bottom of a sphere where all u values map to the same world point), tangent vectors collapse to zero and normals become arbitrary. The `1e-10` guard prevents NaN normals, but triangles at poles will look slightly wrong (pinched). This is a standard limitation of quad-grid tessellation at poles, independent of Pringle's design. A UV-sphere with slightly offset pole rows (`v ∈ [ε, π − ε]`) is the standard workaround.
-- **Colormap default is world-space z.** For height-field surfaces this is the natural default. For parametric surfaces it is less natural (e.g., for a vertical torus, z-coloring produces horizontal bands rather than contours along the surface). A future improvement is to default to the `v` parameter value instead. For now, the user can always override with FEAT-035 (`colormap_expr`).
-
-**`u_max` and `v_max` in the UI:**  
-The `u` and `v` grids are currently hardcoded at `[0, 2π]` each in `GridConfig` and not exposed in `ViewSettingsWidget`. For a sphere, `v` needs to span `[0, π]`, requiring a `v/2` remapping in the expression (e.g. `sin(v/2)` instead of `sin(v)`). Exposing `u_min`, `u_max`, `v_min`, `v_max` as editable bounds in the axis settings panel is a natural companion feature but is out of scope here.
-
-**Tests to add:**
-
-- `xyz = array([cos(u), sin(u), v])` (helix-like cylinder) produces a `parametric` result with shape `(3, n, n)` and renders as a `gfx.Mesh`.
-- `xyz = array([(2 + cos(v)) * cos(u), (2 + cos(v)) * sin(u), sin(v)])` (torus) renders without error.
-- Normals are unit-length at non-degenerate points.
-- Opacity < 1.0 enables WBOIT alpha mode.
-- `(N, 3)` curve data still routes to `make_scatter_mesh` (regression test for the existing curve path).
-
----
-
-### FEAT-057 — Axis bound variables in the expression namespace
-**Status:** Open  
-**Logged:** 2026-05-23
-
-**Description:**  
-Expose the six axis bounds — `x_min`, `x_max`, `y_min`, `y_max`, `z_min`, `z_max` — as named variables in the expression namespace. This works bidirectionally:
-
-- **Read (bounds → namespace):** Any cell can reference `x_min`, `x_max`, etc. to parametrize its expression by the current viewport bounds (e.g. `z = sin(x_max * x)`).
-- **Write (cell → bounds):** A cell can assign to these names (e.g. `x_max = t`, where `t` is a slider) to drive the axis bounds programmatically — enabling animated pan/zoom.
-
-**Motivation:**  
-Users frequently want to adapt expressions to the visible range (e.g., scale a wave frequency to fill the viewport) or animate the visible window as part of a recording. Both require reading and writing the axis bounds from cells, which is currently impossible — bounds live only in the `ViewSettingsWidget` and have no presence in the evaluation namespace.
-
----
-
-**Read direction — injection before evaluation:**
-
-In `_rebuild_namespace` (`cell_list.py`), inject the current bound values into `shared` before the cell evaluation loop. `CellListWidget` already owns `self._grid` (a `Grid` object built from `GridConfig`), so the bound values are directly accessible:
-
-```python
-# Inject axis bounds as readable namespace variables
-cfg = self._grid.config
-shared["x_min"] = float(cfg.x_min)
-shared["x_max"] = float(cfg.x_max)
-shared["y_min"] = float(cfg.y_min)
-shared["y_max"] = float(cfg.y_max)
-shared["z_min"] = float(cfg.z_min)
-shared["z_max"] = float(cfg.z_max)
-```
-
-These are injected before the topological evaluation loop, so any cell in any order can read them. The DAG's undefined-name check (`undefined_names`) must treat these six names as provided system names, analogous to how slider names are known before evaluation — otherwise cells referencing `x_min` without defining it will emit spurious "Undefined" warnings.
-
-**Write direction — bound override after evaluation:**
-
-After the cell evaluation loop completes and `_shared_ns` is populated, check whether any cell exported values for these names and, if so, notify the app to update the viewport:
-
-```python
-_BOUND_NAMES = ("x_min", "x_max", "y_min", "y_max", "z_min", "z_max")
-
-# After the eval loop, check for bound overrides
-overrides = {k: shared[k] for k in _BOUND_NAMES if k in shared}
-current = {
-    "x_min": cfg.x_min, "x_max": cfg.x_max,
-    "y_min": cfg.y_min, "y_max": cfg.y_max,
-    "z_min": cfg.z_min, "z_max": cfg.z_max,
-}
-if any(overrides.get(k) != current[k] for k in _BOUND_NAMES):
-    self.bounds_override.emit(
-        float(overrides.get("x_min", cfg.x_min)),
-        float(overrides.get("x_max", cfg.x_max)),
-        float(overrides.get("y_min", cfg.y_min)),
-        float(overrides.get("y_max", cfg.y_max)),
-        float(overrides.get("z_min", cfg.z_min)),
-        float(overrides.get("z_max", cfg.z_max)),
-    )
-```
+Because `cfg` is mutated in-place during `exec()`, writes are visible to subsequent cells within the same eval pass — a cell writing `cfg.x_max = t` is seen by any later cell that reads `cfg.x_max`. The snapshot comparison is 6 float reads before the loop and a tuple equality check after; cost is negligible.
 
 `CellListWidget` gains a new signal:
 ```python
 bounds_override = pyqtSignal(float, float, float, float, float, float)
 ```
 
-In `app.py`, connect it at startup:
+In `app.py`, connect at startup:
 ```python
 self._cell_list.bounds_override.connect(self._on_bounds_override)
 ```
 
-`_on_bounds_override` calls `_view_settings.set_bounds(...)`, which both updates the spinboxes and emits `bounds_changed`, which in turn calls `_on_bounds_changed` to rebuild the grid and re-render. One important guard: `set_bounds` triggers `bounds_changed` which calls `update_grid` which calls `_rebuild_namespace` — a potential loop. The loop is broken by not re-emitting `bounds_override` when `_rebuild_namespace` is entered because of a grid update (i.e., the injected values and the grid config will now agree, so the override comparison finds no change).
-
-**Priority of bound values:**  
-The last cell in topological order that assigns to `x_min` (or any bound name) wins. This is consistent with how any other name in the shared namespace is resolved — later cells in topo order overwrite earlier ones.
+`_on_bounds_override` calls `_view_settings.set_bounds(...)`, which updates the spinboxes and emits `bounds_changed`, triggering `_on_bounds_changed` to rebuild the grid and re-render. Loop guard: on the subsequent `_rebuild_namespace` call, `cfg` is re-initialized from the (now-updated) `GridConfig`, so `before == after` and `bounds_override` is not re-emitted.
 
 **No validation on override values:**  
-The write path does not clamp or validate the values emitted — that is `ViewSettingsWidget`'s responsibility, same as when the user types a value manually. If a cell produces a non-finite float, the existing guard in `ViewSettingsWidget` should handle it.
+The write path emits values directly — `ViewSettingsWidget` is responsible for clamping and validation, identical to when the user types a value manually.
 
-**DAG dependency tracking:**  
-A cell that reads `x_min` without assigning to it should have a DAG edge from the "bounds" provider (similar to a slider). The cleanest implementation is to make the six bound names appear in the DAG's provided-names set, so they are treated as roots with no dependencies. Cells that write `x_max = ...` will correctly appear in topological order — the override is processed after all cells have been evaluated, so a cell writing `x_max` does not affect the grid used for other cells in the same eval pass. The new bounds take effect on the next `_rebuild_namespace` call triggered by `_on_bounds_changed`.
+**DAG dependency tracking:**
+
+*Read direction:* `get_free_names` in `safety.py` already detects `cfg` as a Load on a `Name` node. `"cfg"` must appear in the DAG's provided-names set (alongside slider names) so it is treated as a root with no dependencies. No other changes needed for the read path.
+
+*Write direction:* `get_store_names` only walks `ast.Name` Store nodes and misses `cfg.x_max = t` (an `ast.Attribute` target). Add a small companion function:
+
+```python
+def get_cfg_writes(source: str) -> set[str]:
+    """Return the set of cfg attribute names that source assigns to (e.g. 'x_max')."""
+    try:
+        tree = ast.parse(source, mode="exec")
+    except SyntaxError:
+        return set()
+    writes: set[str] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Attribute)
+            and isinstance(node.targets[0].value, ast.Name)
+            and node.targets[0].value.id == "cfg"
+        ):
+            writes.add(node.targets[0].attr)
+    return writes
+```
+
+This lets the DAG correctly order a cell writing `cfg.x_max = t` before any cell that reads `cfg.x_max`.
 
 **Animation behavior:**  
-When a slider drives `x_max = a * t`, slider animation fires `_rebuild_namespace` repeatedly. Each pass: evaluates cells → detects `x_max` changed → emits `bounds_override` → `_on_bounds_override` → `set_bounds` → `bounds_changed` → `update_grid` → `_rebuild_namespace` again. This double-rebuild per animation tick is unavoidable if bounds must change the grid (and they must, since the evaluation grid `x, y` arrays depend on the bounds). The second rebuild uses the new bounds and produces the correctly-windowed surface. Performance impact: two full evals per animation tick instead of one; acceptable for simple expressions, potentially significant for heavier sessions. A future optimization could short-circuit the second rebuild when the only namespace change was the bound values themselves.
+When a slider drives `cfg.x_max = a * t`, animation fires `_rebuild_namespace` repeatedly. Each pass: evaluates cells → detects `cfg` mutated → emits `bounds_override` → `set_bounds` → `bounds_changed` → `update_grid` → `_rebuild_namespace` again. The double-rebuild per animation tick is unavoidable (the grid `x, y` arrays depend on the bounds). Performance impact is the same as in the original flat-name design: two full evals per animation tick, acceptable for simple sessions.
 
 ---
 
 **Open questions:**
 
-1. **Name collision:** `x_min`, `x_max`, etc. are generic names a user might want for their own local variables unrelated to axis bounds. Should there be a prefix (e.g. `view_x_min`) or should the design accept this collision as intentional (the feature is specifically about coupling these names to the bounds)?
-2. **Write-back to spinboxes:** When a cell drives `x_max`, the spinbox in `ViewSettingsWidget` updates to reflect the override. Is this desirable? It means the spinbox value "jumps" during animation. An alternative is to show a visual indicator (e.g., a small lock icon or tinted spinbox) that bounds are currently overridden by a cell.
-3. **Restore behavior:** On session load, cell values are restored first, then `_rebuild_namespace` runs. If a cell drives `x_max`, the bounds will be overridden before the saved YAML bounds can take effect. This may be correct, but it means the `x_max_expr` in the session's `view` block is irrelevant whenever a cell also writes `x_max`. Should the session format mark bound names as "cell-driven" vs. "UI-driven" to avoid confusion?
+1. **Write-back to spinboxes:** When a cell drives `cfg.x_max`, the spinbox in `ViewSettingsWidget` updates to reflect the override. Is this desirable? It means the spinbox value "jumps" during animation. An alternative is a visual indicator (e.g., a tinted spinbox) to signal that the bound is currently cell-driven.
+2. **Restore behavior:** On session load, `_rebuild_namespace` runs after cells are restored. If a cell drives `cfg.x_max`, the bounds are overridden before the saved YAML bounds can take effect. This is probably correct, but should the session format mark bound attributes as "cell-driven" to avoid confusion when inspecting the YAML?
 
 ---
 
 **Tests to add:**
 
-- Cell `x_max = 5` causes `x_max` to read back as `5.0` in the namespace; subsequent cells can reference it.
-- Surface cell referencing `x_max` in its expression evaluates without an "Undefined" warning.
-- Slider `a` connected via `x_max = a` fires `bounds_override` on slider change.
-- If no cell writes to bound names, `bounds_override` is not emitted.
-- Read-only use: `z = sin(x_max * x)` evaluates correctly and uses the current spinbox value.
+- `cfg.x_max` reads back as the current grid config value at the start of eval; subsequent cells see the correct float.
+- `cfg.x_max = 5` in a cell causes `bounds_override` to emit `5.0` for `x_max`; the spinbox updates accordingly.
+- Slider `a` connected via `cfg.x_max = a` fires `bounds_override` on slider change.
+- If no cell writes to `cfg` attributes, `bounds_override` is not emitted.
+- Read-only use: `z = sin(cfg.x_max * x)` evaluates without an "Undefined" warning.
+- `cfg.__class__` in a cell raises `SecurityError` (dunder attribute guard).
+- `get_cfg_writes("cfg.x_max = t")` returns `{"x_max"}`; plain `cfg.x_max` returns `set()`.
 
 ---
 
@@ -733,41 +640,152 @@ In the typical use case (gradient arrays derived from the same slider parameters
 
 
 
-### FEAT-025 — Save button and unsaved-changes indicator
+### FEAT-025 — Expression panel toolbar (New / Open / Save + cell-add buttons)
 **Status:** Open  
-**Logged:** 2026-05-18
+**Logged:** 2026-05-18  
+**Updated:** 2026-05-24
 
 **Description:**  
-Add a visible save button and/or an unsaved-changes indicator to the UI. The app already tracks `_modified` and keyboard shortcuts (`Cmd+S` / `Ctrl+S`) work, but there is no on-screen affordance communicating save state or providing a click target for users who don't know the shortcut.
+Consolidate file management and cell-add actions into a single **expression toolbar** pinned to the top of the expression pane. The toolbar replaces the current bottom-anchored add-button row and adds New, Open, and Save buttons to its left side. Save visually reflects unsaved-changes state. The `[*]` window-title mechanism is also fixed as part of this work.
 
-**What's already in place (`app.py:324–335`):**  
-- `_modified: bool` is set on every cell/slider change and cleared on save.
-- `_update_title()` prepends `"* "` to the window title when modified — e.g. `"* pringle — rossler.yml"`.
-- `Cmd+S` / `Ctrl+S` (save) and `Cmd+Shift+S` / `Ctrl+Shift+S` (save-as) shortcuts are registered.
+**What's already in place:**  
+- `_modified: bool` is tracked in `app.py`; `_update_title()` prepends `"* "` to the window title.
+- `Cmd+S` / `Ctrl+S` (save) and `Cmd+Shift+S` / `Ctrl+Shift+S` (save-as) shortcuts work.
+- `_on_new`, `_on_open`, `_on_save` handlers exist in `app.py`.
+- The current add-button row (`_add_eq_btn`, `_add_folder_btn`) sits at the **bottom** of `CellListWidget`'s outer layout.
 
-**What's missing:**
+---
 
-1. **Native macOS close-button dot:** Qt provides `QMainWindow.setWindowModified(bool)` and a `[*]` placeholder in `setWindowTitle`. When used together, Qt automatically shows the native dot inside the red traffic-light close button on macOS (and an asterisk in the title on other platforms). The current code uses a manual `"* "` prefix instead, so the macOS dot never appears. Fix: replace the manual prefix with the standard Qt mechanism:
-   ```python
-   # _update_title in app.py
-   self.setWindowTitle(f"pringle — {name}[*]")   # [*] is Qt's placeholder
-   self.setWindowModified(self._modified)          # drives the dot on macOS
-   ```
+**Toolbar layout (left → right):**
 
-2. **On-screen save button / indicator:** The window title `*` is easy to miss. An explicit UI element (location and style TBD — to be discussed) would make the save state more prominent. Options to consider:
-   - A small `●` dot or `Save` button in the top bar / toolbar area that is highlighted when `_modified` is True and grayed out when clean.
-   - A floppy-disk icon button (`💾` or a custom SVG) that triggers `_on_save` on click.
-   - A pill-shaped status label (e.g. `"Unsaved"` / `"Saved"`) styled similarly to how the cell status area works.
-   - A thin colored border or highlight on the left panel header when unsaved (minimal footprint, no extra button).
+```
+[ New ]  [ Open ]  [ Save ]  ·  [ + Equation ]  [ + Folder ]
+```
+
+A thin vertical separator (`·`) visually groups the file-management buttons on the left from the cell-add buttons on the right. Both groups live in one `QHBoxLayout` (the toolbar row); a `QFrame` with `VLine` shape serves as the separator.
+
+**Naming:** The widget is called `_toolbar` in code and "expression toolbar" in docs/comments. `QToolBar` (a `QMainWindow`-specific docking widget) is not used — the toolbar is a plain `QWidget` with a `QHBoxLayout` embedded at the top of `CellListWidget`'s outer layout. `QToolButton` (rather than `QPushButton`) is preferred for the file-management buttons since it offers better icon/text layout control and inherits the standard toolbar button appearance in QSS.
+
+---
+
+**`cell_list.py` changes:**
+
+**1. Move add-button row to the top of `_build_ui`:**
+
+```python
+def _build_ui(self):
+    outer = QVBoxLayout(self)
+    outer.setContentsMargins(0, 0, 0, 0)
+    outer.setSpacing(0)
+
+    outer.addWidget(self._build_toolbar())   # toolbar at top
+    outer.addWidget(self._scroll)            # scroll area below
+```
+
+**2. New `_build_toolbar()` method:**
+
+```python
+def _build_toolbar(self) -> QWidget:
+    bar = QWidget()
+    bar.setObjectName("cell_toolbar")
+    row = QHBoxLayout(bar)
+    row.setContentsMargins(4, 2, 4, 2)
+    row.setSpacing(0)
+
+    self._new_btn  = QToolButton(); self._new_btn.setText("New")
+    self._open_btn = QToolButton(); self._open_btn.setText("Open")
+    self._save_btn = QToolButton(); self._save_btn.setText("Save")
+    for btn in (self._new_btn, self._open_btn, self._save_btn):
+        btn.setObjectName("toolbar_file_btn")
+        btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        row.addWidget(btn)
+
+    sep = QFrame(); sep.setFrameShape(QFrame.Shape.VLine)
+    sep.setObjectName("toolbar_sep")
+    row.addWidget(sep)
+
+    self._add_eq_btn = QToolButton(); self._add_eq_btn.setText("+ Equation")
+    self._add_folder_btn = QToolButton(); self._add_folder_btn.setText("+ Folder")
+    for btn in (self._add_eq_btn, self._add_folder_btn):
+        btn.setObjectName("toolbar_add_btn")
+        btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        row.addWidget(btn)
+
+    row.addStretch(1)
+
+    self._new_btn.clicked.connect(self.new_file_requested)
+    self._open_btn.clicked.connect(self.open_file_requested)
+    self._save_btn.clicked.connect(self.save_requested)
+    self._add_eq_btn.clicked.connect(lambda: self.add_cell(after_id=self._focused_cell_id()))
+    self._add_folder_btn.clicked.connect(lambda: self.add_folder(after_id=self._focused_cell_id()))
+
+    return bar
+```
+
+**3. New signals on `CellListWidget`:**
+
+```python
+new_file_requested  = pyqtSignal()
+open_file_requested = pyqtSignal()
+save_requested      = pyqtSignal()
+```
+
+These are thin forwarding signals. `app.py` connects them:
+
+```python
+self._cell_list.new_file_requested.connect(self._on_new)
+self._cell_list.open_file_requested.connect(self._on_open)
+self._cell_list.save_requested.connect(self._on_save)
+```
+
+**4. Save button modified-state indicator:**
+
+Add a public method so `app.py` can push save state to the toolbar:
+
+```python
+def set_modified(self, modified: bool) -> None:
+    """Update the Save button appearance to reflect unsaved-changes state."""
+    self._save_btn.setProperty("modified", modified)
+    self._save_btn.style().unpolish(self._save_btn)
+    self._save_btn.style().polish(self._save_btn)
+```
+
+In `app.py`, call `self._cell_list.set_modified(self._modified)` wherever `_update_title()` is called today. In `theme.qss`, the `:modified` dynamic property drives the visual:
+
+```css
+QToolButton#toolbar_file_btn[modified="true"]  { color: #ffffff; }
+QToolButton#toolbar_file_btn[modified="false"] { color: #888888; }
+```
+
+Only the Save button has `modified` set; New and Open always use the unmodified style.
+
+---
+
+**`app.py` — `[*]` title fix:**
+
+Replace the manual `"* "` prefix in `_update_title` with Qt's native mechanism:
+
+```python
+def _update_title(self) -> None:
+    name = Path(self._session_path).name if self._session_path else "untitled"
+    self.setWindowTitle(f"pringle — {name}[*]")  # [*] is Qt's placeholder
+    self.setWindowModified(self._modified)         # drives native dot on macOS
+```
+
+On macOS, `setWindowModified(True)` shows the native bullet `•` in the red traffic-light close button at no additional cost. On Windows/Linux, Qt substitutes `[*]` with `*` in the title. The on-screen Save button in the toolbar is the primary indicator on all platforms.
+
+---
 
 **Cross-platform notes:**  
-- **macOS:** native dot on the red close button via `setWindowModified` (free once the `[*]` fix above is applied). No extra work needed for the title bar — macOS renders `[*]` as a bullet `•` before the filename automatically.
-- **Windows/Linux:** `setWindowModified` causes Qt to substitute `[*]` with `*` in the title. An explicit on-screen indicator matters more on these platforms since there's no native close-button equivalent.
+- **macOS:** native close-button dot via `setWindowModified` (free from the `[*]` fix). The toolbar Save button provides a visible click target and modified indicator.
+- **Windows/Linux:** no native close-button equivalent; the toolbar Save button is the primary unsaved-changes signal.
 
-**Open questions (to discuss before implementing):**  
-- Where should the save button live? Top-left of the left panel? Inline in the menu/toolbar area? Inside the axis settings popup?
-- Should it be icon-only, text-only, or icon+text?
-- Should "Save" and "Save As…" both be surfaced, or just "Save"?
+---
+
+**Open questions:**
+- Should "Save As…" also be surfaced in the toolbar, or remain keyboard-only (`Cmd+Shift+S`)?
+- Icon-only vs. text-only vs. icon+text for the file buttons? Icons would require SVG assets; text labels are simpler and already readable at small sizes.
+- Should the toolbar have a bottom border / separator line to visually divide it from the cell list, or rely purely on background contrast?
 
 ---
 
