@@ -29,7 +29,7 @@ _ICON_PATH = Path(__file__).parent / "assets" / "icon.png"
 from rendercanvas.qt import QRenderWidget
 
 import pygfx as gfx
-from pringle.renderer import PringleRenderer, make_line_mesh, make_scatter_mesh
+from pringle.renderer import PringleRenderer, make_line_mesh, make_scatter_mesh, make_parametric_surface_mesh
 from pringle.grid import GridConfig, Grid, make_grid
 from pringle.evaluator import run_cell, CellResult
 from pringle.style import CellStyle
@@ -693,7 +693,13 @@ class PringleWindow(QMainWindow):
 
         elif result.render_type == "parametric":
             pts = np.asarray(result.data, dtype=np.float32)
-            if pts.ndim == 2 and pts.shape[1] in (2, 3):
+            if pts.ndim == 3 and pts.shape[0] == 3:
+                mesh = make_parametric_surface_mesh(
+                    pts, color=style.color, opacity=style.opacity,
+                    colormap=cmap, colormap_reversed=cmap_rev,
+                )
+                vp.add_object(cell_id, mesh)
+            elif pts.ndim == 2 and pts.shape[1] in (2, 3):
                 scatter = make_scatter_mesh(pts, color=style.color, opacity=style.opacity,
                                             size=style.point_size,
                                             as_spheres=(style.scatter_render_mode == "spheres"),

@@ -1,0 +1,89 @@
+version: 1
+grid:
+  x_min: -6.0
+  x_max: 6.0
+  y_min: -6.0
+  y_max: 6.0
+  z_min: -3.0
+  z_max: 3.0
+  n: 96
+cells:
+- id: b2c3d4e5-0002-0002-0002-000000000001
+  style:
+    color:
+    - 0.1
+    - 0.65
+    - 0.55
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# KLEIN BOTTLE — non-orientable closed surface (figure-8 immersion in R³)'
+- id: b2c3d4e5-0002-0002-0002-000000000002
+  style:
+    color:
+    - 0.2
+    - 0.4
+    - 0.9
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: a = 1.4000000000000001
+  name: a
+  value: 1.4000000000000001
+  min_val: 1.0
+  max_val: 5.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: b2c3d4e5-0002-0002-0002-000000000003
+  style:
+    color:
+    - 0.1
+    - 0.65
+    - 0.55
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: viridis
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: "xyz = array([\n    (a + cos(u / 2) * sin(v) - sin(u / 2) * sin(2 * v))\
+    \ * cos(u),\n    (a + cos(u / 2) * sin(v) - sin(u / 2) * sin(2 * v)) * sin(u),\n\
+    \    sin(u / 2) * sin(v) + cos(u / 2) * sin(2 * v),\n])"
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+view:
+  show_axes: false
+  show_bbox: true
+  show_crosshair: false
+  show_light_bg: false
+  show_shadow: true
+  shadow_opacity: 0.4
+  camera_position:
+  - 6.071484894969073
+  - -9.614263215206371
+  - 9.377157311330745
+  orbit_target:
+  - 0.0
+  - 0.0
+  - 0.0
+  angular_velocity:
+  - 0.3008242312954758
+  - 0.0

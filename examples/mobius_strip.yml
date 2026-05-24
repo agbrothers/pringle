@@ -1,0 +1,109 @@
+version: 1
+grid:
+  x_min: -4.0
+  x_max: 4.0
+  y_min: -4.0
+  y_max: 4.0
+  z_min: -2.0
+  z_max: 2.0
+  n: 64
+cells:
+- id: a1b2c3d4-0001-0001-0001-000000000001
+  style:
+    color:
+    - 0.85
+    - 0.35
+    - 0.1
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# MÖBIUS STRIP — one-sided non-orientable surface'
+- id: a1b2c3d4-0001-0001-0001-000000000002
+  style:
+    color:
+    - 0.2
+    - 0.4
+    - 0.9
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: R = 2.0
+  name: R
+  value: 2.0
+  min_val: 0.5
+  max_val: 4.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: a1b2c3d4-0001-0001-0001-000000000003
+  style:
+    color:
+    - 0.2
+    - 0.4
+    - 0.9
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: width = 0.8
+  name: width
+  value: 0.8
+  min_val: 0.1
+  max_val: 2.0
+  step: 0.05
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: a1b2c3d4-0001-0001-0001-000000000004
+  style:
+    color:
+    - 0.85
+    - 0.35
+    - 0.1
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: plasma
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: "s = width * (v / pi - 1)\nxyz = array([\n    (R + s * cos(u / 2)) * cos(u),\n\
+    \    (R + s * cos(u / 2)) * sin(u),\n    s * sin(u / 2),\n])"
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+view:
+  show_axes: false
+  show_bbox: true
+  show_crosshair: false
+  show_light_bg: false
+  show_shadow: true
+  shadow_opacity: 0.4
+  camera_position:
+  - -3.5
+  - -7.5
+  - 5.5
+  orbit_target:
+  - 0.0
+  - 0.0
+  - 0.0

@@ -6,6 +6,16 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-059 — Parametric surface rendering from `xyz = (3, N, M)` assignment
+**Status:** Closed (implemented 2026-05-24)
+
+**Implementation:**
+- **`pringle/renderer.py`**: Added `_parametric_normals(xyz)` — computes per-vertex normals via tangent cross product (`np.gradient` along u/v axes); guards against degenerate poles with a `1e-10` clamp. Added `make_parametric_surface_mesh(xyz, ...)` — reshapes `(3, N, M)` to `(N*M, 3)` positions, calls `_grid_indices` (unchanged), calls `_parametric_normals`, builds `gfx.Geometry` and `MeshPhongMaterial`/`MeshBasicMaterial` (colormap path). Opacity < 1 enables WBOIT `weighted_blend`.
+- **`pringle/app.py`**: Updated import to include `make_parametric_surface_mesh`. Replaced `else: vp.remove_object` fallback in `_on_cell_result` parametric branch with a `pts.ndim == 3 and pts.shape[0] == 3` guard that calls `make_parametric_surface_mesh`; the existing `(N, 3)` curve path is preserved unchanged below it.
+- **`tests/test_feat059.py`**: 6 tests — cylinder/torus mesh construction, unit-length normals, WBOIT on opacity < 1, full-opacity does not set alpha_mode, regression for (N, 3) curve path.
+
+---
+
 ### FEAT-058 — Cmd+D / Ctrl+D: duplicate focused cell in-place
 **Status:** Closed (implemented 2026-05-23)
 

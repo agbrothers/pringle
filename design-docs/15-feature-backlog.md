@@ -7,6 +7,209 @@ See [17-closed-features.md](17-closed-features.md) for implemented features.
 
 ---
 
+### FEAT-060 — Consolidate Qt styles into a central `theme.qss` stylesheet
+**Status:** Open  
+**Logged:** 2026-05-24
+
+**Description:**  
+Migrate the ~40 scattered inline `setStyleSheet()` calls across the UI files into a single `pringle/theme.qss` file loaded once at `QApplication` startup. Static and structural styles (backgrounds, borders, fonts, spacing, hover states) move to QSS. A small number of genuinely data-driven `setStyleSheet()` calls (color dots, error/stale state indicators) remain in Python but are minimized.
+
+**Motivation:**  
+All visual appearance is currently defined inline across seven files, making a UI overhaul require hunting across the codebase. A central stylesheet enables rapid iteration — changing a font size or color scheme is a one-line edit rather than a grep-and-replace session. It also eliminates a class of Python boilerplate: `enterEvent`/`leaveEvent` overrides that toggle style strings manually can be replaced by QSS `:hover` pseudo-states.
+
+**Files with inline styles today (all in scope):**  
+`cell_widget.py`, `cell_list.py`, `slider_widget.py`, `folder_cell_widget.py`, `comment_cell_widget.py`, `style_popover.py`, `app.py`
+
+---
+
+**What moves to `theme.qss`:**
+
+- All static background colors, borders, padding, font sizes, and colors.
+- Hover states — the `_IDLE`/`_HOVER`/`_ACTIVE` string constants on `_DeleteButton` in `cell_widget.py` (lines 45–82) become a single `:hover` rule; the `enterEvent`/`leaveEvent` overrides are removed.
+- Shared button styles currently copy-pasted as local variables (`_btn_style` in `cell_list.py`, `_rb_style` and `_BTN_STYLE` in `style_popover.py`) — defined once under a shared selector.
+- Separator line colors, label colors, scroll area backgrounds.
+
+**What stays in Python `setStyleSheet()`:**
+
+| Call site | Why it stays |
+|---|---|
+| `cell_widget.py:671` — color dot background | Per-instance color from `CellStyle.color_qss()`; inherently dynamic |
+| `cell_widget.py:484` — `_DATA_DOT` state (idle/stale/running/done) | State-driven color change per data cell |
+| `cell_widget.py:618` — status dot reset | Same `_DATA_DOT` state machine |
+| `slider_widget.py:159` — flash red border on conflict | Transient animation (500ms timer), not a stable state |
+| `slider_widget.py:465` — invalid name border | Validation state, toggled on/off |
+| `slider_widget.py:534–535` — min/max out-of-range red | Same |
+| `style_popover.py:224,241` — reverse/swatch buttons | Per-instance color from `CellStyle` |
+
+All other `setStyleSheet()` calls are static strings that belong in the QSS file.
+
+---
+
+**Implementation:**
+
+**1. Create `pringle/theme.qss`**
+
+Organize by component section with comments:
+
+```css
+/* ── Cell list ──────────────────────────────────────── */
+QScrollArea#cell_scroll { background: #171717; border: none; }
+QWidget#cell_container  { background-color: #171717; }
+...
+
+/* ── Cell widget ─────────────────────────────────────── */
+QPlainTextEdit#cell_edit { border: none; background: transparent; }
+QLabel#delete_btn        { color: transparent; font-size: 14px; padding: 0; }
+QLabel#delete_btn:hover  { color: #aaa; }
+...
+```
+
+Object names (`setObjectName`) are already present on many widgets; add them to any that are missing so QSS selectors can target them precisely.
+
+**2. Load in `app.py` at startup**
+
+```python
+from importlib.resources import files
+
+def _load_theme(app: QApplication) -> None:
+    qss = files("pringle").joinpath("theme.qss").read_text()
+    app.setStyleSheet(qss)
+```
+
+Called once before `MainWindow` is constructed. `importlib.resources` keeps the path portable when the package is installed.
+
+**3. Remove redundant Python code**
+
+- Delete `_DeleteButton._IDLE`, `_HOVER`, `_ACTIVE` class attributes and the `enterEvent`/`leaveEvent` overrides in `cell_widget.py`.
+- Delete the `_btn_style`, `_rb_style`, `_BTN_STYLE` local variables in `cell_list.py` and `style_popover.py`.
+- Remove the `setStyleSheet()` calls that are now covered by `theme.qss`.
+
+**Naming note:**  
+The existing `style.py` is named for `CellStyle` — it covers 3D rendering metadata (color, opacity, line width) and has nothing to do with Qt appearance. The new Qt theme file should be `theme.qss` (and a thin loader in `app.py`) to avoid conflating the two concerns.
+
+**v1 scope:**  
+Dark theme only — move the current appearance into `theme.qss` unchanged. Light mode / theme switching (FEAT-017) is a natural follow-on once a single stylesheet exists, but is out of scope here.
+
+---
+
+**Tests to add:**
+
+- `theme.qss` loads without error and `QApplication.styleSheet()` is non-empty after startup.
+- `_DeleteButton` no longer defines `enterEvent`/`leaveEvent` (assert via `hasattr`).
+- Dynamic style calls still function: color dot reflects `CellStyle.color`, error borders appear on invalid slider name, data-dot cycles through idle/stale/running states.
+
+---
+
+### FEAT-059 — Parametric surface rendering from `xyz = (3, N, M)` assignment
+**Status:** Closed (implemented 2026-05-24)
+**Logged:** 2026-05-24
+
+**Description:**  
+When a cell assigns `xyz` to a `(3, N, M)` array, render it as a smooth parametric surface mesh. Currently the `parametric` render type in `app.py` only handles the `(N, 3)` curve case; `(3, N, M)` hits `else: vp.remove_object(cell_id)` and produces nothing. This feature wires up the full surface path.
+
+**Motivation:**  
+This unlocks a class of shapes that cannot be expressed as height fields (`z = f(x, y)`): spheres, tori, Möbius strips, Klein bottles, and any other surface parametrized over a 2D `(u, v)` domain. The `u` and `v` grids are already injected into the evaluation namespace and span `[0, 2π]` each by default, making these the natural choice for closed surfaces.
+
+**Are there good reasons not to support this?**  
+No architectural blockers. The triangle index builder (`_grid_indices`) is already grid-shape agnostic and reusable unchanged. The main addition is a new normal computation function (cross product of tangent vectors rather than the height-field shortcut), a new `make_parametric_surface_mesh` builder, and a one-line routing change in `app.py`. Constraint sub-cells and in-place re-render are not supported for v1 — see below.
+
+---
+
+**New helper — `_parametric_normals` (`renderer.py`):**
+
+The height-field normal shortcut `n = (-dz/dx, -dz/dy, 1)` doesn't apply here. Normals must be the cross product of the two surface tangent vectors:
+
+```python
+def _parametric_normals(xyz: np.ndarray) -> np.ndarray:
+    """Per-vertex normals for a parametric surface (3, N, M) via tangent cross product.
+    Returns (N*M, 3) float32."""
+    dPdu = np.gradient(xyz, axis=2)   # (3, N, M) tangent along u
+    dPdv = np.gradient(xyz, axis=1)   # (3, N, M) tangent along v
+    nx = dPdu[1] * dPdv[2] - dPdu[2] * dPdv[1]
+    ny = dPdu[2] * dPdv[0] - dPdu[0] * dPdv[2]
+    nz = dPdu[0] * dPdv[1] - dPdu[1] * dPdv[0]
+    length = np.sqrt(nx**2 + ny**2 + nz**2)
+    length = np.where(length < 1e-10, 1.0, length)   # guard against poles / degenerate pts
+    nx /= length; ny /= length; nz /= length
+    return np.stack([nx.ravel(), ny.ravel(), nz.ravel()], axis=1).astype(np.float32)
+```
+
+`np.gradient` along `axis=2` gives ∂P/∂u (varying column, fixed row); along `axis=1` gives ∂P/∂v. The cross product is then the surface normal pointing outward (direction depends on parametrization orientation — consistent within a session, may need negation for inside-out surfaces, which can always be corrected by swapping u/v in the expression).
+
+**New mesh builder — `make_parametric_surface_mesh` (`renderer.py`):**
+
+```python
+def make_parametric_surface_mesh(
+    xyz: np.ndarray,
+    color: tuple = (0.2, 0.4, 0.9, 1.0),
+    opacity: float = 1.0,
+    colormap: str | None = None,
+    colormap_reversed: bool = False,
+) -> gfx.Mesh:
+    """Build a pygfx Mesh from a (3, N, M) parametric surface array."""
+    _, rows, cols = xyz.shape
+    positions = xyz.reshape(3, -1).T.astype(np.float32)
+    indices   = _grid_indices(rows, cols)
+    normals   = _parametric_normals(xyz)
+    if colormap is not None:
+        colors = _apply_colormap(positions[:, 2], colormap, colormap_reversed)
+        geo = gfx.Geometry(positions=positions, indices=indices, normals=normals, colors=colors)
+        mat = gfx.MeshBasicMaterial(color_mode="vertex", side="both")
+    else:
+        geo = gfx.Geometry(positions=positions, indices=indices, normals=normals)
+        mat = gfx.MeshPhongMaterial(color=color, side="both")
+    if opacity < 1.0:
+        mat.opacity = opacity
+        mat.alpha_mode = "weighted_blend"
+    return gfx.Mesh(geo, mat)
+```
+
+`_grid_indices` is unchanged — it generates the same quad tessellation regardless of whether the positions come from a height field or a parametric map.
+
+**Routing change — `app.py` (`_on_cell_result`):**
+
+Replace the existing parametric branch (lines 693–702):
+
+```python
+elif result.render_type == "parametric":
+    pts = np.asarray(result.data, dtype=np.float32)
+    if pts.ndim == 3 and pts.shape[0] == 3:
+        mesh = make_parametric_surface_mesh(
+            pts, color=style.color, opacity=style.opacity,
+            colormap=cmap, colormap_reversed=cmap_rev,
+        )
+        vp.add_object(cell_id, mesh)
+    elif pts.ndim == 2 and pts.shape[1] in (2, 3):
+        # Parametric curve: (N, 3) — existing scatter path
+        scatter = make_scatter_mesh(pts, color=style.color, opacity=style.opacity,
+                                    size=style.point_size,
+                                    as_spheres=(style.scatter_render_mode == "spheres"),
+                                    colormap=cmap, colormap_reversed=cmap_rev)
+        vp.add_object(cell_id, scatter)
+    else:
+        vp.remove_object(cell_id)
+```
+
+**v1 limitations:**
+
+- **No constraint sub-cells.** Constraints currently mask against `z` (the height). For parametric surfaces, no single scalar is appropriate. Constraint sub-cells attached to a parametric cell are silently ignored for v1.
+- **No in-place re-render.** The fast in-place update path (`_try_inplace_render`) assumes a height field and updates z-column of `positions` only. Parametric surfaces fall through to the full `make_parametric_surface_mesh` + `add_object` rebuild on every slider tick. This is acceptable for v1; the in-place path can be extended later.
+- **Polar degeneracy.** At parameter-space poles (e.g., top/bottom of a sphere where all u values map to the same world point), tangent vectors collapse to zero and normals become arbitrary. The `1e-10` guard prevents NaN normals, but triangles at poles will look slightly wrong (pinched). This is a standard limitation of quad-grid tessellation at poles, independent of Pringle's design. A UV-sphere with slightly offset pole rows (`v ∈ [ε, π − ε]`) is the standard workaround.
+- **Colormap default is world-space z.** For height-field surfaces this is the natural default. For parametric surfaces it is less natural (e.g., for a vertical torus, z-coloring produces horizontal bands rather than contours along the surface). A future improvement is to default to the `v` parameter value instead. For now, the user can always override with FEAT-035 (`colormap_expr`).
+
+**`u_max` and `v_max` in the UI:**  
+The `u` and `v` grids are currently hardcoded at `[0, 2π]` each in `GridConfig` and not exposed in `ViewSettingsWidget`. For a sphere, `v` needs to span `[0, π]`, requiring a `v/2` remapping in the expression (e.g. `sin(v/2)` instead of `sin(v)`). Exposing `u_min`, `u_max`, `v_min`, `v_max` as editable bounds in the axis settings panel is a natural companion feature but is out of scope here.
+
+**Tests to add:**
+
+- `xyz = array([cos(u), sin(u), v])` (helix-like cylinder) produces a `parametric` result with shape `(3, n, n)` and renders as a `gfx.Mesh`.
+- `xyz = array([(2 + cos(v)) * cos(u), (2 + cos(v)) * sin(u), sin(v)])` (torus) renders without error.
+- Normals are unit-length at non-degenerate points.
+- Opacity < 1.0 enables WBOIT alpha mode.
+- `(N, 3)` curve data still routes to `make_scatter_mesh` (regression test for the existing curve path).
+
+---
+
 ### FEAT-057 — Axis bound variables in the expression namespace
 **Status:** Open  
 **Logged:** 2026-05-23

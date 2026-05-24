@@ -196,6 +196,20 @@ def _grid_normals(dz_dx: np.ndarray, dz_dy: np.ndarray) -> np.ndarray:
     return np.stack([nx.ravel(), ny.ravel(), nz.ravel()], axis=1).astype(np.float32)
 
 
+def _parametric_normals(xyz: np.ndarray) -> np.ndarray:
+    """Per-vertex normals for a parametric surface (3, N, M) via tangent cross product.
+    Returns (N*M, 3) float32."""
+    dPdu = np.gradient(xyz, axis=2)   # (3, N, M) tangent along u
+    dPdv = np.gradient(xyz, axis=1)   # (3, N, M) tangent along v
+    nx = dPdu[1] * dPdv[2] - dPdu[2] * dPdv[1]
+    ny = dPdu[2] * dPdv[0] - dPdu[0] * dPdv[2]
+    nz = dPdu[0] * dPdv[1] - dPdu[1] * dPdv[0]
+    length = np.sqrt(nx**2 + ny**2 + nz**2)
+    length = np.where(length < 1e-10, 1.0, length)
+    nx /= length; ny /= length; nz /= length
+    return np.stack([nx.ravel(), ny.ravel(), nz.ravel()], axis=1).astype(np.float32)
+
+
 def _grid_indices(rows: int, cols: int) -> np.ndarray:
     """
     Build triangle indices for a rows×cols grid of vertices.
@@ -586,6 +600,31 @@ def make_surface_mesh(
             cmap_min = cmap_max = None
         colors = _apply_colormap(positions[:, 2], colormap, colormap_reversed,
                                  v_min=cmap_min, v_max=cmap_max)
+        geo = gfx.Geometry(positions=positions, indices=indices, normals=normals, colors=colors)
+        mat = gfx.MeshBasicMaterial(color_mode="vertex", side="both")
+    else:
+        geo = gfx.Geometry(positions=positions, indices=indices, normals=normals)
+        mat = gfx.MeshPhongMaterial(color=color, side="both")
+    if opacity < 1.0:
+        mat.opacity = opacity
+        mat.alpha_mode = "weighted_blend"
+    return gfx.Mesh(geo, mat)
+
+
+def make_parametric_surface_mesh(
+    xyz: np.ndarray,
+    color: tuple = (0.2, 0.4, 0.9, 1.0),
+    opacity: float = 1.0,
+    colormap: str | None = None,
+    colormap_reversed: bool = False,
+) -> gfx.Mesh:
+    """Build a pygfx Mesh from a (3, N, M) parametric surface array."""
+    _, rows, cols = xyz.shape
+    positions = xyz.reshape(3, -1).T.astype(np.float32)
+    indices   = _grid_indices(rows, cols)
+    normals   = _parametric_normals(xyz)
+    if colormap is not None:
+        colors = _apply_colormap(positions[:, 2], colormap, colormap_reversed)
         geo = gfx.Geometry(positions=positions, indices=indices, normals=normals, colors=colors)
         mat = gfx.MeshBasicMaterial(color_mode="vertex", side="both")
     else:

@@ -1,0 +1,246 @@
+version: 1
+grid:
+  x_min: -5.0
+  x_max: 5.0
+  y_min: -5.0
+  y_max: 5.0
+  z_min: -3.0
+  z_max: 3.0
+  n: 96
+cells:
+- id: e4a44e49-bb61-46a8-9a68-e559b661bfd7
+  style:
+    color:
+    - 0.5
+    - 0.35
+    - 0.2
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# SPHERE — parametric surface via xyz = (3, N, M)'
+- id: 71d265b0-9863-4b92-8505-ff9e704a77c2
+  style:
+    color:
+    - 0.5
+    - 0.35
+    - 0.2
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: r = 2.5
+  name: r
+  value: 2.5
+  min_val: 0.0
+  max_val: 10.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  sub_cells: []
+- id: d137c762-86bd-4732-85b4-0a7fc4381e6c
+  style:
+    color:
+    - 0.9
+    - 0.3
+    - 0.65
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# SURFACE'
+- id: 1194785d-c821-483f-9428-d40000497291
+  style:
+    color:
+    - 0.2
+    - 0.2
+    - 0.2
+    - 1.0
+    opacity: 0.3
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: "xyz = array([\n    r*cos(v)*cos(u), \n    r*cos(v)*sin(u), \n    r*sin(v),\n\
+    ])"
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: 924ce03f-b817-450b-89a6-1e29bdb1a4a9
+  style:
+    color:
+    - 0.5
+    - 0.35
+    - 0.2
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '#  GRID POINTS'
+- id: 314dac95-4819-4edd-894d-db21ae53f9b0
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 1.0
+    line_width: 0.02
+    point_size: 0.02
+    scatter_render_mode: spheres
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: "pts = array([\n    r*cos(v)*cos(u), \n    r*cos(v)*sin(u), \n    r*sin(v),\n\
+    ]).reshape(3, -1).T"
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: a57a581c-f82e-4aa8-a824-935ee8b4c130
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: "# VISUALIZE THE UV PARAMETERIZATION: \n\nPlay with the sliders to help\
+    \ build your intuition."
+- id: 87a0b29a-0875-4935-835a-59df458340f1
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: n = u.shape[0]
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: b64be3b7-72c0-45c9-bfa0-a723c010e1d6
+  style:
+    color:
+    - 0.9
+    - 0.3
+    - 0.65
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: u_ = 30.0
+  name: u_
+  value: 30.0
+  min_val: 0.0
+  max_val: 96.0
+  step: 1.0
+  max_expr: n
+  is_playing: true
+  anim_mode: pingpong
+  sub_cells: []
+- id: 61a84fd0-8ad6-45ab-9e42-d99299cd2aa0
+  style:
+    color:
+    - 0.1
+    - 0.65
+    - 0.75
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: v_ = 87.0
+  name: v_
+  value: 87.0
+  min_val: 0.0
+  max_val: 96.0
+  step: 1.0
+  max_expr: n
+  is_playing: true
+  anim_mode: pingpong
+  sub_cells: []
+- id: 1a89f713-c4eb-4c5c-8116-daab942f1081
+  style:
+    color:
+    - 0.2
+    - 0.7
+    - 0.3
+    - 1.0
+    opacity: 1.0
+    line_width: 0.04
+    point_size: 0.04
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: "patch = array([\n    r * cos(v) * cos(u), \n    r * cos(v) * sin(u), \n\
+    \    r * sin(v),\n])[:, :u_, :v_].reshape(3, -1).T"
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+view:
+  show_axes: false
+  show_bbox: false
+  show_crosshair: false
+  show_light_bg: false
+  show_shadow: true
+  shadow_opacity: 0.5
+  camera_position:
+  - 4.035209560667567
+  - -7.049783158558246
+  - 3.753998204731808
+  orbit_target:
+  - 0.0
+  - 0.0
+  - 0.0
+  angular_velocity:
+  - -0.13854781492347443
+  - 0.0
