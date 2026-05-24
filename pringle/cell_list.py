@@ -423,6 +423,8 @@ class CellListWidget(QWidget):
             cell.navigate_down_requested.connect(self._on_navigate_down)
             cell.indent_requested.connect(self.indent_cell)
             cell.outdent_requested.connect(self.outdent_cell)
+            cell.move_up_requested.connect(self.move_cell_up)
+            cell.move_down_requested.connect(self.move_cell_down)
         else:
             cell = CellWidget(style=style)
             cell.content_changed.connect(self._on_cell_changed)
@@ -437,6 +439,8 @@ class CellListWidget(QWidget):
             cell.navigate_down_requested.connect(self._on_navigate_down)
             cell.indent_requested.connect(self.indent_cell)
             cell.outdent_requested.connect(self.outdent_cell)
+            cell.move_up_requested.connect(self.move_cell_up)
+            cell.move_down_requested.connect(self.move_cell_down)
 
         cell.drag_started.connect(self._on_drag_started)
         cell.drag_moved.connect(self._on_drag_moved)
@@ -500,6 +504,8 @@ class CellListWidget(QWidget):
         cell.navigate_down_requested.connect(self._on_navigate_down)
         cell.indent_requested.connect(self.indent_cell)
         cell.outdent_requested.connect(self.outdent_cell)
+        cell.move_up_requested.connect(self.move_cell_up)
+        cell.move_down_requested.connect(self.move_cell_down)
 
         if after_id is not None:
             idx = self._index_of(after_id)
@@ -1023,6 +1029,8 @@ class CellListWidget(QWidget):
         comment.navigate_down_requested.connect(self._on_navigate_down)
         comment.indent_requested.connect(self.indent_cell)
         comment.outdent_requested.connect(self.outdent_cell)
+        comment.move_up_requested.connect(self.move_cell_up)
+        comment.move_down_requested.connect(self.move_cell_down)
 
         self._layout.replaceWidget(cell, comment)
         self._cells[idx] = comment
@@ -1063,6 +1071,8 @@ class CellListWidget(QWidget):
         slider.navigate_down_requested.connect(self._on_navigate_down)
         slider.indent_requested.connect(self.indent_cell)
         slider.outdent_requested.connect(self.outdent_cell)
+        slider.move_up_requested.connect(self.move_cell_up)
+        slider.move_down_requested.connect(self.move_cell_down)
 
         # Swap in the layout and the cells list
         self._layout.replaceWidget(cell, slider)
@@ -1111,6 +1121,8 @@ class CellListWidget(QWidget):
         comment.navigate_down_requested.connect(self._on_navigate_down)
         comment.indent_requested.connect(self.indent_cell)
         comment.outdent_requested.connect(self.outdent_cell)
+        comment.move_up_requested.connect(self.move_cell_up)
+        comment.move_down_requested.connect(self.move_cell_down)
         self._layout.replaceWidget(cell, comment)
         self._cells[idx] = comment
         cell.deleteLater()
@@ -1148,6 +1160,8 @@ class CellListWidget(QWidget):
         new_cell.navigate_down_requested.connect(self._on_navigate_down)
         new_cell.indent_requested.connect(self.indent_cell)
         new_cell.outdent_requested.connect(self.outdent_cell)
+        new_cell.move_up_requested.connect(self.move_cell_up)
+        new_cell.move_down_requested.connect(self.move_cell_down)
         self._layout.replaceWidget(cell, new_cell)
         self._cells[idx] = new_cell
         cell.deleteLater()
@@ -1448,6 +1462,42 @@ class CellListWidget(QWidget):
             if new_folder != self._cell_folder.get(cell.cell_id):
                 self._assign_folder(cell, new_folder)
 
+        self._sync_layout()
+        self._rebuild_namespace()
+
+    def move_cell_up(self, cell_id: str) -> None:
+        """Cmd+Up: move cell one position up in the flat list, re-inferring folder."""
+        from pringle.folder_cell_widget import FolderCellWidget
+        idx = self._index_of(cell_id)
+        if idx <= 0:
+            return
+        cell = self._cells[idx]
+        if isinstance(cell, FolderCellWidget):
+            return
+        self._push_undo()
+        self._cells.pop(idx)
+        self._cells.insert(idx - 1, cell)
+        new_folder = self._infer_folder(idx - 1)
+        if new_folder != self._cell_folder.get(cell_id):
+            self._assign_folder(cell, new_folder)
+        self._sync_layout()
+        self._rebuild_namespace()
+
+    def move_cell_down(self, cell_id: str) -> None:
+        """Cmd+Down: move cell one position down in the flat list, re-inferring folder."""
+        from pringle.folder_cell_widget import FolderCellWidget
+        idx = self._index_of(cell_id)
+        if idx >= len(self._cells) - 1:
+            return
+        cell = self._cells[idx]
+        if isinstance(cell, FolderCellWidget):
+            return
+        self._push_undo()
+        self._cells.pop(idx)
+        self._cells.insert(idx + 1, cell)
+        new_folder = self._infer_folder(idx + 1)
+        if new_folder != self._cell_folder.get(cell_id):
+            self._assign_folder(cell, new_folder)
         self._sync_layout()
         self._rebuild_namespace()
 

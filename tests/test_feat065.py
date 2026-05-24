@@ -333,3 +333,144 @@ def test_cell_text_edit_emits_outdent_signal(qapp):
     )
     cell._text_edit.keyPressEvent(event)
     assert received == [cell.cell_id]
+
+
+# ---------------------------------------------------------------------------
+# move_cell_up / move_cell_down — no-ops
+# ---------------------------------------------------------------------------
+
+def test_move_up_noop_first_cell(qapp):
+    """move_cell_up on the first cell is a no-op."""
+    cl = CellListWidget(on_cell_result=lambda *a: None, grid=make_grid(GridConfig(n=32)))
+    cell = cl.add_cell(source="z = x")
+    order_before = [c.cell_id for c in cl._cells]
+    cl.move_cell_up(cell.cell_id)
+    assert [c.cell_id for c in cl._cells] == order_before
+
+
+def test_move_down_noop_last_cell(qapp):
+    """move_cell_down on the last cell is a no-op."""
+    cl = CellListWidget(on_cell_result=lambda *a: None, grid=make_grid(GridConfig(n=32)))
+    cl.add_cell(source="a = 1")
+    cell = cl.add_cell(source="z = x")
+    order_before = [c.cell_id for c in cl._cells]
+    cl.move_cell_down(cell.cell_id)
+    assert [c.cell_id for c in cl._cells] == order_before
+
+
+def test_move_up_noop_on_folder_cell(qapp):
+    """move_cell_up on a FolderCellWidget is a no-op."""
+    cl = CellListWidget(on_cell_result=lambda *a: None, grid=make_grid(GridConfig(n=32)))
+    cl.add_cell(source="z = x")
+    folder = cl.add_folder(name="F")
+    order_before = [c.cell_id for c in cl._cells]
+    cl.move_cell_up(folder.cell_id)
+    assert [c.cell_id for c in cl._cells] == order_before
+
+
+# ---------------------------------------------------------------------------
+# move_cell_up / move_cell_down — basic reordering
+# ---------------------------------------------------------------------------
+
+def test_move_cell_up_swaps_with_above(qapp):
+    """move_cell_up swaps the cell with the one directly above."""
+    cl = CellListWidget(on_cell_result=lambda *a: None, grid=make_grid(GridConfig(n=32)))
+    c1 = cl.add_cell(source="a = 1")
+    c2 = cl.add_cell(source="b = 2")
+    c3 = cl.add_cell(source="c = 3")
+
+    cl.move_cell_up(c3.cell_id)
+
+    ids = [c.cell_id for c in cl._cells]
+    assert ids == [c1.cell_id, c3.cell_id, c2.cell_id]
+
+
+def test_move_cell_down_swaps_with_below(qapp):
+    """move_cell_down swaps the cell with the one directly below."""
+    cl = CellListWidget(on_cell_result=lambda *a: None, grid=make_grid(GridConfig(n=32)))
+    c1 = cl.add_cell(source="a = 1")
+    c2 = cl.add_cell(source="b = 2")
+    c3 = cl.add_cell(source="c = 3")
+
+    cl.move_cell_down(c1.cell_id)
+
+    ids = [c.cell_id for c in cl._cells]
+    assert ids == [c2.cell_id, c1.cell_id, c3.cell_id]
+
+
+# ---------------------------------------------------------------------------
+# move_cell_up — folder boundary: first member exits folder when moved up
+# ---------------------------------------------------------------------------
+
+def test_move_up_first_member_exits_folder(qapp):
+    """move_cell_up on the first folder member moves it above the folder header."""
+    cl = CellListWidget(on_cell_result=lambda *a: None, grid=make_grid(GridConfig(n=32)))
+    folder = cl.add_folder(name="F")
+    folder_id = folder.cell_id
+    member = cl.add_cell(source="z = x")
+    member_id = member.cell_id
+    cl._assign_folder(member, folder_id)
+
+    cl.move_cell_up(member_id)
+
+    ids = [c.cell_id for c in cl._cells]
+    assert ids.index(member_id) < ids.index(folder_id)
+    assert cl._cell_folder.get(member_id) is None
+
+
+# ---------------------------------------------------------------------------
+# Cmd+Up / Cmd+Down key events fire move_up_requested / move_down_requested
+# ---------------------------------------------------------------------------
+
+def test_cell_text_edit_emits_move_up_signal(qapp):
+    from PyQt6.QtCore import Qt, QEvent
+    from PyQt6.QtGui import QKeyEvent
+
+    cell = CellWidget()
+    received = []
+    cell.move_up_requested.connect(lambda cid: received.append(cid))
+
+    event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Up, Qt.KeyboardModifier.ControlModifier)
+    cell._text_edit.keyPressEvent(event)
+    assert received == [cell.cell_id]
+
+
+def test_cell_text_edit_emits_move_down_signal(qapp):
+    from PyQt6.QtCore import Qt, QEvent
+    from PyQt6.QtGui import QKeyEvent
+
+    cell = CellWidget()
+    received = []
+    cell.move_down_requested.connect(lambda cid: received.append(cid))
+
+    event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Down, Qt.KeyboardModifier.ControlModifier)
+    cell._text_edit.keyPressEvent(event)
+    assert received == [cell.cell_id]
+
+
+def test_cmd_right_emits_indent_signal(qapp):
+    """Cmd+Right is an alias for Cmd+] (indent)."""
+    from PyQt6.QtCore import Qt, QEvent
+    from PyQt6.QtGui import QKeyEvent
+
+    cell = CellWidget()
+    received = []
+    cell.indent_requested.connect(lambda cid: received.append(cid))
+
+    event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Right, Qt.KeyboardModifier.ControlModifier)
+    cell._text_edit.keyPressEvent(event)
+    assert received == [cell.cell_id]
+
+
+def test_cmd_left_emits_outdent_signal(qapp):
+    """Cmd+Left is an alias for Cmd+[ (outdent)."""
+    from PyQt6.QtCore import Qt, QEvent
+    from PyQt6.QtGui import QKeyEvent
+
+    cell = CellWidget()
+    received = []
+    cell.outdent_requested.connect(lambda cid: received.append(cid))
+
+    event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Left, Qt.KeyboardModifier.ControlModifier)
+    cell._text_edit.keyPressEvent(event)
+    assert received == [cell.cell_id]

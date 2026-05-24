@@ -186,6 +186,10 @@ Selecting "Add Constraint" appends a constraint sub-cell below the primary cell,
 | `Ctrl+[` / `Ctrl+]` | Collapse / expand focused folder cell |
 | `Cmd+]` / `Ctrl+]` | Indent cell into the folder directly above it (equation, slider, comment cells; no-op on folder cells and when no folder is adjacent above) |
 | `Cmd+[` / `Ctrl+[` | Outdent cell out of its current folder, placing it below the folder's last member (no-op when cell is not in a folder) |
+| `Cmd+→` / `Ctrl+→` | Alias for Cmd+] — indent cell into folder above |
+| `Cmd+←` / `Ctrl+←` | Alias for Cmd+[ — outdent cell out of its current folder |
+| `Cmd+↑` / `Ctrl+↑` | Move cell one position up in the expression panel (re-infers folder membership from new position) |
+| `Cmd+↓` / `Ctrl+↓` | Move cell one position down in the expression panel (re-infers folder membership from new position) |
 
 ---
 

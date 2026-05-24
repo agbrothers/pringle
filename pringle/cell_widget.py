@@ -168,6 +168,8 @@ class CellTextEdit(QPlainTextEdit):
     navigate_up_requested = pyqtSignal()
     indent_at = pyqtSignal()
     outdent_at = pyqtSignal()
+    move_up_at = pyqtSignal()
+    move_down_at = pyqtSignal()
 
     def __init__(self, parent=None, allow_newline: bool = False):
         super().__init__(parent)
@@ -229,12 +231,19 @@ class CellTextEdit(QPlainTextEdit):
             return
 
         ctrl = Qt.KeyboardModifier.ControlModifier
-        if key == Qt.Key.Key_BracketRight and mod == ctrl:
-            self.indent_at.emit()
-            return
-        if key == Qt.Key.Key_BracketLeft and mod == ctrl:
-            self.outdent_at.emit()
-            return
+        if mod == ctrl:
+            if key == Qt.Key.Key_BracketRight or key == Qt.Key.Key_Right:
+                self.indent_at.emit()
+                return
+            if key == Qt.Key.Key_BracketLeft or key == Qt.Key.Key_Left:
+                self.outdent_at.emit()
+                return
+            if key == Qt.Key.Key_Up:
+                self.move_up_at.emit()
+                return
+            if key == Qt.Key.Key_Down:
+                self.move_down_at.emit()
+                return
 
         if key in _WRAP_PAIRS and self.textCursor().hasSelection():
             open_, close = _WRAP_PAIRS[key]
@@ -291,8 +300,10 @@ class CellWidget(QWidget):
     style_updated = pyqtSignal(str)        # cell_id — color/opacity/size changed, no re-eval needed
     navigate_down_requested = pyqtSignal(str)  # cell_id or subcell_id
     navigate_up_requested = pyqtSignal(str)    # cell_id or subcell_id
-    indent_requested = pyqtSignal(str)         # cell_id — Cmd+] move into folder above
-    outdent_requested = pyqtSignal(str)        # cell_id — Cmd+[ move out of folder
+    indent_requested = pyqtSignal(str)         # cell_id — Cmd+] / Cmd+Right
+    outdent_requested = pyqtSignal(str)        # cell_id — Cmd+[ / Cmd+Left
+    move_up_requested = pyqtSignal(str)        # cell_id — Cmd+Up
+    move_down_requested = pyqtSignal(str)      # cell_id — Cmd+Down
 
     _DEBOUNCE_MS = 300
 
@@ -360,6 +371,8 @@ class CellWidget(QWidget):
         self._text_edit.navigate_up_requested.connect(lambda: self.navigate_up_requested.emit(self.cell_id))
         self._text_edit.indent_at.connect(lambda: self.indent_requested.emit(self.cell_id))
         self._text_edit.outdent_at.connect(lambda: self.outdent_requested.emit(self.cell_id))
+        self._text_edit.move_up_at.connect(lambda: self.move_up_requested.emit(self.cell_id))
+        self._text_edit.move_down_at.connect(lambda: self.move_down_requested.emit(self.cell_id))
         row.addWidget(self._text_edit, 1)
 
         self._eye_btn = QPushButton("👁")

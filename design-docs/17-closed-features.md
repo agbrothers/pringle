@@ -6,15 +6,15 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
-### FEAT-065 — Cmd+[ / Cmd+] to move cells in and out of folders
+### FEAT-065 — Cmd+[ / Cmd+] and Cmd+Arrow keys to move cells in/out of folders and reorder them
 **Status:** Closed (implemented 2026-05-24)
 
 **Implementation:**
-- **`pringle/cell_list.py`**: Added `_sync_layout()` helper (extracted from `_move_cell` to avoid duplication). Added `indent_cell(cell_id)` and `outdent_cell(cell_id)` public methods. Both call `_push_undo()`, mutate `self._cells`, call `_assign_folder`, `_sync_layout`, and `_rebuild_namespace`. Connected `cell.indent_requested` / `cell.outdent_requested` in `add_cell` (both equation and slider paths), `add_comment_cell`, `_maybe_morph_to_comment`, `_maybe_morph_to_slider`, `_morph_equation_to_comment`, and `_morph_comment_to_equation`.
-- **`pringle/cell_widget.py`**: `CellTextEdit` gains `indent_at` and `outdent_at` signals; `keyPressEvent` handles `ControlModifier+Key_BracketRight/Left`. `CellWidget` gains `indent_requested` and `outdent_requested` signals wired from `_text_edit`.
-- **`pringle/comment_cell_widget.py`**: `_CommentEdit` gains `indent_at`/`outdent_at` signals and key handling. `CommentCellWidget` gains `indent_requested`/`outdent_requested` signals wired from `_edit`.
-- **`pringle/slider_widget.py`**: `_SpinBox` and `_ExprBox` gain `indent_at`/`outdent_at` signals and key handling. `SliderWidget` gains `indent_requested`/`outdent_requested` signals; all four fields (`_spinbox`, `_min_box`, `_max_box`, `_step_box`) connect to them.
-- **`tests/test_feat065.py`**: 17 tests covering all no-op cases, indent/outdent into folder header, folder member, collapsed folder, undo, and signal wiring.
+- **`pringle/cell_list.py`**: Added `_sync_layout()` helper (extracted from `_move_cell` to avoid duplication). Added `indent_cell(cell_id)`, `outdent_cell(cell_id)`, `move_cell_up(cell_id)`, and `move_cell_down(cell_id)` public methods. All call `_push_undo()`, mutate `self._cells`, call `_sync_layout` and `_rebuild_namespace`. `move_cell_up`/`move_cell_down` re-infer folder membership via `_infer_folder` so moving across a folder boundary naturally joins or exits the folder. Connected all four `*_requested` signals in `add_cell` (both equation and slider paths), `add_comment_cell`, `_maybe_morph_to_comment`, `_maybe_morph_to_slider`, `_morph_equation_to_comment`, and `_morph_comment_to_equation`.
+- **`pringle/cell_widget.py`**: `CellTextEdit` gains `indent_at`, `outdent_at`, `move_up_at`, `move_down_at` signals; `keyPressEvent` handles `ControlModifier+Key_BracketRight/Left` (indent/outdent) and `ControlModifier+Key_Right/Left/Up/Down` (arrow aliases). `CellWidget` gains the matching four `*_requested` signals wired from `_text_edit`.
+- **`pringle/comment_cell_widget.py`**: `_CommentEdit` gains all four signals and the same `ControlModifier` key handling. `CommentCellWidget` gains the four `*_requested` signals wired from `_edit`.
+- **`pringle/slider_widget.py`**: `_SpinBox`, `_ExprBox`, and `_NameLineEdit` (the transient rename field) all gain the four signals and `ControlModifier` key handling. `SliderWidget` gains the four `*_requested` signals; `_build_ui` connects all four numeric fields, and `_on_name_clicked` connects the transient `_name_edit` each time it is created.
+- **`tests/test_feat065.py`**: 27 tests covering no-op cases, indent/outdent into folder header/member/collapsed folder, undo, move_cell_up/down basic reorder, folder boundary exit on move_up, and Cmd+Arrow key signal wiring for all cell types.
 
 ---
 

@@ -88,17 +88,26 @@ class _CommentEdit(QPlainTextEdit):
     navigate_up_requested = pyqtSignal()
     indent_at = pyqtSignal()
     outdent_at = pyqtSignal()
+    move_up_at = pyqtSignal()
+    move_down_at = pyqtSignal()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         key = event.key()
         mod = event.modifiers()
         ctrl = Qt.KeyboardModifier.ControlModifier
-        if key == Qt.Key.Key_BracketRight and mod == ctrl:
-            self.indent_at.emit()
-            return
-        if key == Qt.Key.Key_BracketLeft and mod == ctrl:
-            self.outdent_at.emit()
-            return
+        if mod == ctrl:
+            if key == Qt.Key.Key_BracketRight or key == Qt.Key.Key_Right:
+                self.indent_at.emit()
+                return
+            if key == Qt.Key.Key_BracketLeft or key == Qt.Key.Key_Left:
+                self.outdent_at.emit()
+                return
+            if key == Qt.Key.Key_Up:
+                self.move_up_at.emit()
+                return
+            if key == Qt.Key.Key_Down:
+                self.move_down_at.emit()
+                return
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             if mod == ctrl:
                 self.folder_requested.emit()
@@ -132,6 +141,8 @@ class CommentCellWidget(QWidget):
     navigate_up_requested = pyqtSignal(str)    # cell_id
     indent_requested = pyqtSignal(str)         # cell_id
     outdent_requested = pyqtSignal(str)        # cell_id
+    move_up_requested = pyqtSignal(str)        # cell_id
+    move_down_requested = pyqtSignal(str)      # cell_id
 
     def __init__(
         self,
@@ -150,6 +161,8 @@ class CommentCellWidget(QWidget):
         self._edit.navigate_up_requested.connect(lambda: self.navigate_up_requested.emit(self.cell_id))
         self._edit.indent_at.connect(lambda: self.indent_requested.emit(self.cell_id))
         self._edit.outdent_at.connect(lambda: self.outdent_requested.emit(self.cell_id))
+        self._edit.move_up_at.connect(lambda: self.move_up_requested.emit(self.cell_id))
+        self._edit.move_down_at.connect(lambda: self.move_down_requested.emit(self.cell_id))
         if source:
             self.set_source(source)
 

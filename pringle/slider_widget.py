@@ -48,6 +48,8 @@ class _SpinBox(QDoubleSpinBox):
     navigate_down = pyqtSignal()
     indent_at = pyqtSignal()
     outdent_at = pyqtSignal()
+    move_up_at = pyqtSignal()
+    move_down_at = pyqtSignal()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -63,12 +65,19 @@ class _SpinBox(QDoubleSpinBox):
         key = event.key()
         mod = event.modifiers()
         ctrl = Qt.KeyboardModifier.ControlModifier
-        if key == Qt.Key.Key_BracketRight and mod == ctrl:
-            self.indent_at.emit()
-            return
-        if key == Qt.Key.Key_BracketLeft and mod == ctrl:
-            self.outdent_at.emit()
-            return
+        if mod == ctrl:
+            if key == Qt.Key.Key_BracketRight or key == Qt.Key.Key_Right:
+                self.indent_at.emit()
+                return
+            if key == Qt.Key.Key_BracketLeft or key == Qt.Key.Key_Left:
+                self.outdent_at.emit()
+                return
+            if key == Qt.Key.Key_Up:
+                self.move_up_at.emit()
+                return
+            if key == Qt.Key.Key_Down:
+                self.move_down_at.emit()
+                return
         if key == Qt.Key.Key_Up:
             self.navigate_up.emit()
             return
@@ -98,6 +107,8 @@ class _ExprBox(QLineEdit):
     navigate_right = pyqtSignal()  # emitted when Right is pressed at end of text
     indent_at = pyqtSignal()
     outdent_at = pyqtSignal()
+    move_up_at = pyqtSignal()
+    move_down_at = pyqtSignal()
 
     def __init__(self, value: float = 0.0, parent=None):
         super().__init__(_fmt(value), parent)
@@ -151,12 +162,19 @@ class _ExprBox(QLineEdit):
         key = event.key()
         mod = event.modifiers()
         ctrl = Qt.KeyboardModifier.ControlModifier
-        if key == Qt.Key.Key_BracketRight and mod == ctrl:
-            self.indent_at.emit()
-            return
-        if key == Qt.Key.Key_BracketLeft and mod == ctrl:
-            self.outdent_at.emit()
-            return
+        if mod == ctrl:
+            if key == Qt.Key.Key_BracketRight or key == Qt.Key.Key_Right:
+                self.indent_at.emit()
+                return
+            if key == Qt.Key.Key_BracketLeft or key == Qt.Key.Key_Left:
+                self.outdent_at.emit()
+                return
+            if key == Qt.Key.Key_Up:
+                self.move_up_at.emit()
+                return
+            if key == Qt.Key.Key_Down:
+                self.move_down_at.emit()
+                return
         if key == Qt.Key.Key_Up:
             self.navigate_up.emit()
             return
@@ -182,9 +200,29 @@ class _ExprBox(QLineEdit):
 class _NameLineEdit(QLineEdit):
     """Inline name editor for SliderWidget; Enter commits then requests a new cell."""
     new_cell_requested = pyqtSignal()
+    indent_at = pyqtSignal()
+    outdent_at = pyqtSignal()
+    move_up_at = pyqtSignal()
+    move_down_at = pyqtSignal()
 
     def keyPressEvent(self, event) -> None:
-        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+        key = event.key()
+        mod = event.modifiers()
+        ctrl = Qt.KeyboardModifier.ControlModifier
+        if mod == ctrl:
+            if key == Qt.Key.Key_BracketRight or key == Qt.Key.Key_Right:
+                self.indent_at.emit()
+                return
+            if key == Qt.Key.Key_BracketLeft or key == Qt.Key.Key_Left:
+                self.outdent_at.emit()
+                return
+            if key == Qt.Key.Key_Up:
+                self.move_up_at.emit()
+                return
+            if key == Qt.Key.Key_Down:
+                self.move_down_at.emit()
+                return
+        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             self.editingFinished.emit()   # commits the name
             self.new_cell_requested.emit()
             return
@@ -203,8 +241,10 @@ class SliderWidget(QWidget):
     drag_ended = pyqtSignal(str)                # cell_id
     navigate_up_requested = pyqtSignal(str)     # cell_id — exit slider upward
     navigate_down_requested = pyqtSignal(str)   # cell_id — exit slider downward
-    indent_requested = pyqtSignal(str)          # cell_id — Cmd+]
-    outdent_requested = pyqtSignal(str)         # cell_id — Cmd+[
+    indent_requested = pyqtSignal(str)          # cell_id — Cmd+] / Cmd+Right
+    outdent_requested = pyqtSignal(str)         # cell_id — Cmd+[ / Cmd+Left
+    move_up_requested = pyqtSignal(str)         # cell_id — Cmd+Up
+    move_down_requested = pyqtSignal(str)       # cell_id — Cmd+Down
 
     _ANIM_INTERVAL_MS = 16   # ~60fps animation step
 
@@ -378,10 +418,12 @@ class SliderWidget(QWidget):
         )
         # min navigate_left and step navigate_right are deliberately unconnected (no-op)
 
-        # Indent/outdent (Cmd+] / Cmd+[) from any focused field
+        # Cell movement (Cmd+[/]/Up/Down) from any focused field
         for _field in (self._spinbox, self._min_box, self._max_box, self._step_box):
             _field.indent_at.connect(lambda: self.indent_requested.emit(self.cell_id))
             _field.outdent_at.connect(lambda: self.outdent_requested.emit(self.cell_id))
+            _field.move_up_at.connect(lambda: self.move_up_requested.emit(self.cell_id))
+            _field.move_down_at.connect(lambda: self.move_down_requested.emit(self.cell_id))
 
         # Separator
         line = QFrame()
@@ -479,6 +521,10 @@ class SliderWidget(QWidget):
         self._name_edit.textChanged.connect(self._on_name_text_changed)
         self._name_edit.editingFinished.connect(self._on_name_commit)
         self._name_edit.new_cell_requested.connect(lambda: self.enter_pressed.emit(self.cell_id))
+        self._name_edit.indent_at.connect(lambda: self.indent_requested.emit(self.cell_id))
+        self._name_edit.outdent_at.connect(lambda: self.outdent_requested.emit(self.cell_id))
+        self._name_edit.move_up_at.connect(lambda: self.move_up_requested.emit(self.cell_id))
+        self._name_edit.move_down_at.connect(lambda: self.move_down_requested.emit(self.cell_id))
         self._name_edit.setFocus()
 
     def _on_name_text_changed(self, text: str) -> None:
