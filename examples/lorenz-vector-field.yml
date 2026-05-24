@@ -8,6 +8,122 @@ grid:
   z_max: 75.0
   n: 64
 cells:
+- id: 2005f886-515d-4f53-bd0b-7400ea0621e0
+  style:
+    color:
+    - 0.55
+    - 0.55
+    - 0.55
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: folder
+  name: LORENZ DIFFERENTIAL EQUATIONS
+  collapsed: false
+  visible: true
+  sub_cells: []
+- id: 6c2c4d01-132d-40d3-aa6d-0104ec69e5a6
+  style:
+    color:
+    - 0.5
+    - 0.35
+    - 0.2
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# Define the partial derivatives of the Lorenz system'
+  folder_id: 2005f886-515d-4f53-bd0b-7400ea0621e0
+- id: a2ac01ec-9fe4-4241-ba66-43194da15226
+  style:
+    color:
+    - 0.5
+    - 0.35
+    - 0.2
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 2005f886-515d-4f53-bd0b-7400ea0621e0
+  type: equation
+  source: dx(pos) = sigma * (pos[1] - pos[0])
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 0303de34-ae80-4da4-8a1f-ad5c1462e0ad
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 2005f886-515d-4f53-bd0b-7400ea0621e0
+  type: equation
+  source: dy(pos) = pos[0] * (rho - pos[2]) - pos[1]
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: b1b95d8e-df2b-4086-843a-a0dbfb58e116
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 2005f886-515d-4f53-bd0b-7400ea0621e0
+  type: equation
+  source: dz(pos) = pos[0] * pos[1] - beta * pos[2]
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: e6659b8a-cd16-42ea-a229-bab20a443a88
+  style:
+    color:
+    - 0.1
+    - 0.65
+    - 0.75
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 2005f886-515d-4f53-bd0b-7400ea0621e0
+  type: equation
+  source: grad(pos) = array([dx(pos), dy(pos), dz(pos)])
+  visible: false
+  sub_cells: []
+  rng_seed: 0
 - id: 53079b25-6819-49cd-821d-1d5fd81abbcf
   style:
     color:
@@ -246,40 +362,14 @@ cells:
     normalize_arrows: false
   folder_id: 856e61ba-4577-4bac-af9f-b64a5c676df0
   type: slider
-  source: time = 514.0
-  name: time
-  value: 514.0
-  min_val: 0.0
+  source: t = 11.0
+  name: t
+  value: 11.0
+  min_val: 1.0
   max_val: 2000.0
   step: 1.0
   is_playing: true
   anim_mode: loop
-  sub_cells: []
-- id: be7faafd-a32c-4e59-9fdc-3277fc5f334d
-  style:
-    color:
-    - 0.85
-    - 0.22
-    - 0.22
-    - 1.0
-    opacity: 1.0
-    line_width: 0.05
-    point_size: 0.1
-    scatter_render_mode: circles
-    colormap: null
-    colormap_reversed: false
-    normalize_arrows: false
-  folder_id: 856e61ba-4577-4bac-af9f-b64a5c676df0
-  type: slider
-  source: T = 7.0
-  name: T
-  value: 7.0
-  min_val: 0.0
-  max_val: 15.0
-  step: 1.0
-  max_expr: n-1
-  is_playing: false
-  anim_mode: pingpong
   sub_cells: []
 - id: f089f530-bbb0-481e-94c1-c0cdd83a09de
   style:
@@ -297,124 +387,8 @@ cells:
     normalize_arrows: false
   folder_id: 856e61ba-4577-4bac-af9f-b64a5c676df0
   type: equation
-  source: i = round(anim[time-1, 1] + 50)
+  source: i = int(n * round(anim[t-1, 1] + 50) / 100)
   visible: true
-  sub_cells: []
-  rng_seed: 0
-- id: 2005f886-515d-4f53-bd0b-7400ea0621e0
-  style:
-    color:
-    - 0.55
-    - 0.55
-    - 0.55
-    - 1.0
-    opacity: 1.0
-    line_width: 0.05
-    point_size: 0.1
-    scatter_render_mode: circles
-    colormap: null
-    colormap_reversed: false
-    normalize_arrows: false
-  type: folder
-  name: LORENZ DIFFERENTIAL EQUATIONS
-  collapsed: false
-  visible: true
-  sub_cells: []
-- id: 6c2c4d01-132d-40d3-aa6d-0104ec69e5a6
-  style:
-    color:
-    - 0.5
-    - 0.35
-    - 0.2
-    - 1.0
-    opacity: 1.0
-    line_width: 0.05
-    point_size: 0.1
-    scatter_render_mode: circles
-    colormap: null
-    colormap_reversed: false
-    normalize_arrows: false
-  type: comment
-  source: '# Define the partial derivatives of the Lorenz system'
-  folder_id: 2005f886-515d-4f53-bd0b-7400ea0621e0
-- id: a2ac01ec-9fe4-4241-ba66-43194da15226
-  style:
-    color:
-    - 0.5
-    - 0.35
-    - 0.2
-    - 1.0
-    opacity: 1.0
-    line_width: 0.05
-    point_size: 0.1
-    scatter_render_mode: circles
-    colormap: null
-    colormap_reversed: false
-    normalize_arrows: false
-  folder_id: 2005f886-515d-4f53-bd0b-7400ea0621e0
-  type: equation
-  source: dx(pos) = sigma * (pos[1] - pos[0])
-  visible: false
-  sub_cells: []
-  rng_seed: 0
-- id: 0303de34-ae80-4da4-8a1f-ad5c1462e0ad
-  style:
-    color:
-    - 0.22
-    - 0.4
-    - 0.88
-    - 1.0
-    opacity: 1.0
-    line_width: 0.05
-    point_size: 0.1
-    scatter_render_mode: circles
-    colormap: null
-    colormap_reversed: false
-    normalize_arrows: false
-  folder_id: 2005f886-515d-4f53-bd0b-7400ea0621e0
-  type: equation
-  source: dy(pos) = pos[0] * (rho - pos[2]) - pos[1]
-  visible: false
-  sub_cells: []
-  rng_seed: 0
-- id: b1b95d8e-df2b-4086-843a-a0dbfb58e116
-  style:
-    color:
-    - 0.85
-    - 0.22
-    - 0.22
-    - 1.0
-    opacity: 1.0
-    line_width: 0.05
-    point_size: 0.1
-    scatter_render_mode: circles
-    colormap: null
-    colormap_reversed: false
-    normalize_arrows: false
-  folder_id: 2005f886-515d-4f53-bd0b-7400ea0621e0
-  type: equation
-  source: dz(pos) = pos[0] * pos[1] - beta * pos[2]
-  visible: false
-  sub_cells: []
-  rng_seed: 0
-- id: e6659b8a-cd16-42ea-a229-bab20a443a88
-  style:
-    color:
-    - 0.1
-    - 0.65
-    - 0.75
-    - 1.0
-    opacity: 1.0
-    line_width: 0.05
-    point_size: 0.1
-    scatter_render_mode: circles
-    colormap: null
-    colormap_reversed: false
-    normalize_arrows: false
-  folder_id: 2005f886-515d-4f53-bd0b-7400ea0621e0
-  type: equation
-  source: grad(pos) = array([dx(pos), dy(pos), dz(pos)])
-  visible: false
   sub_cells: []
   rng_seed: 0
 - id: 66fedd76-2772-4b34-b08c-9063783fdb2c
@@ -495,7 +469,7 @@ cells:
     normalize_arrows: false
   folder_id: 66fedd76-2772-4b34-b08c-9063783fdb2c
   type: equation
-  source: 'anim = path[:time] '
+  source: 'anim = path[:t] '
   visible: true
   sub_cells: []
   rng_seed: 0
@@ -615,23 +589,6 @@ cells:
   visible: true
   sub_cells: []
   rng_seed: 0
-- id: 27976690-5a44-41a8-a926-c92cfb5ba1ea
-  style:
-    color:
-    - 0.9
-    - 0.3
-    - 0.65
-    - 1.0
-    opacity: 1.0
-    line_width: 0.05
-    point_size: 0.1
-    scatter_render_mode: circles
-    colormap: null
-    colormap_reversed: false
-    normalize_arrows: false
-  type: comment
-  source: '# z = linspace(z_min, z_max, n, dtype=np.float32)'
-  folder_id: 3640b23f-5b55-4450-aab6-2e58c913f6c6
 - id: 35effaf5-abc0-4b92-8c08-6db55d83d806
   style:
     color:
@@ -652,23 +609,6 @@ cells:
   visible: true
   sub_cells: []
   rng_seed: 0
-- id: 02da37fa-4777-4287-908c-08504a5f688f
-  style:
-    color:
-    - 0.5
-    - 0.35
-    - 0.2
-    - 1.0
-    opacity: 1.0
-    line_width: 0.05
-    point_size: 0.1
-    scatter_render_mode: circles
-    colormap: null
-    colormap_reversed: false
-    normalize_arrows: false
-  type: comment
-  source: '# paths = (x, z*y, vec)'
-  folder_id: 3640b23f-5b55-4450-aab6-2e58c913f6c6
 - id: d7572e34-ebd5-4734-b682-89f4f4e39cc8
   style:
     color:
@@ -691,25 +631,8 @@ cells:
   - type: initial_condition
     source: field[0] = volume
   - type: recursion
-    source: field[n] = field[n-1] - dt_vec * grad(field[n-1])
-  rng_seed: 11
-- id: 0c6e29bb-f0c2-4059-8490-2010550f6f06
-  style:
-    color:
-    - 0.2
-    - 0.7
-    - 0.3
-    - 1.0
-    opacity: 1.0
-    line_width: 0.05
-    point_size: 0.1
-    scatter_render_mode: circles
-    colormap: null
-    colormap_reversed: false
-    normalize_arrows: false
-  type: comment
-  source: '# COMPUTE THE HEIGHT AT EACH GRID POINT ACROSS TIME STEPS'
-  folder_id: 3640b23f-5b55-4450-aab6-2e58c913f6c6
+    source: field[n] = field[n-1] + dt_vec * grad(field[n-1])
+  rng_seed: 12
 - id: 11483fe8-e2dd-4883-92d3-2646e1ae37b5
   style:
     color:
@@ -726,7 +649,8 @@ cells:
     normalize_arrows: false
   folder_id: 3640b23f-5b55-4450-aab6-2e58c913f6c6
   type: equation
-  source: frames = field.reshape(6, n, n*n).transpose(1, 2, 0)
+  source: frames = field.reshape(6, n, n, n).transpose(2, 1, 3, 0).reshape(n, n*n,
+    6)
   visible: false
   sub_cells: []
   rng_seed: 0
@@ -766,22 +690,25 @@ cells:
     normalize_arrows: true
   folder_id: 3640b23f-5b55-4450-aab6-2e58c913f6c6
   type: equation
-  source: anim_vec = frames[T]
+  source: anim_vec = frames[i]
   visible: true
   sub_cells: []
   rng_seed: 0
 view:
   show_axes: false
   show_bbox: true
-  show_crosshair: true
+  show_crosshair: false
   show_light_bg: false
   show_shadow: true
   shadow_opacity: 0.5
   camera_position:
-  - 134.50819997425853
-  - 134.8999633217234
-  - 97.12431567935381
+  - -182.71872667476674
+  - -9.307601487265723
+  - 70.49647377555337
   orbit_target:
-  - -5.877542495727539
-  - -8.386056900024414
-  - 16.43870735168457
+  - -10.32343864440918
+  - 1.1359509229660034
+  - 35.415626525878906
+  angular_velocity:
+  - -0.1505068309166702
+  - 0.0

@@ -113,9 +113,10 @@ The result namespace is then inspected for magic variable names (`z`, `y`, `x`, 
 
 The expression language is Python math syntax. Conventions:
 
-- **Spatial variables** (reserved): `x`, `y`, `z`, `u`, `v` — injected as numpy arrays (the evaluation grid)
-- **Time** (reserved): `t` — the current animation time value; injected as a scalar
-- **Slider parameters**: any other name defined in a slider cell — injected as scalars
+- **Spatial variables** (reserved): `x`, `y`, `u`, `v` — injected as numpy arrays (the evaluation grid); `z` is a magic output name, not an input
+- **Slider parameters**: any name defined in a slider cell (e.g. `time = 0`) — injected as scalars; whole-number floats are automatically promoted to Python `int` so they can be used directly as array indices (`path[:time]`)
+- **`t` is not a built-in**: unlike Desmos, Pringle has no implicit animation-time variable. For a frame counter, create a slider (e.g. `time = 0` with step 1). Use `int(round(t))` rather than `int(t)` when coercing a non-integer slider to an index to avoid floating-point off-by-one errors.
+- **Integer casting for array indices**: Use `int_(expr)` to cast a float scalar or array to integer type for use as an array index. For scalars, `int(expr)` also works (Python builtin, already in namespace). Prefer `int_(round(expr))` over `int_(floor(expr))` to avoid floating-point off-by-one errors at whole numbers. The `intp` type is equivalent but sized for indexing on the current platform — either is acceptable. This fills the gap between slider auto-promotion (which converts whole-number slider floats to Python `int` automatically) and equation-cell outputs, which remain numpy floats and cannot be used as array indices without explicit casting.
 - **Helper functions**: `f = lambda x, y: sin(x) * cos(y)` in any cell — available in the shared namespace
 - **Data**: names from the data panel — available in the shared namespace
 - **Math builtins**: `sin`, `cos`, `pi`, etc. from the whitelisted namespace — no prefix needed

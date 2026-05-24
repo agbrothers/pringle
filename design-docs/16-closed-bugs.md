@@ -6,6 +6,71 @@ See [14-bug-backlog.md](14-bug-backlog.md) for open bugs.
 
 ---
 
+### BUG-040 — RuntimeWarning: overflow in float32 cast for vector-field-trajectory data
+**Status:** Closed (fixed 2026-05-23)
+
+**Root cause:** `evaluator.py` cast render data to float32 with bare `np.asarray(data, dtype=np.float32)`. When values exceed the float32 range (~3.4×10³⁸), numpy emits `RuntimeWarning: overflow encountered in cast` to the console and silently replaces the values with `±inf` in the GPU buffer. The user had no indication that values were lost; the warning was only visible if running from a terminal with warning output enabled.
+
+**Fix:** Added `_cast_float32(data)` helper in `pringle/evaluator.py` that wraps the cast in `warnings.catch_warnings`, counts any resulting `±inf` values, and returns `(arr, warning_str)`. All five normalization casts in `run_cell` (surface, curve, scatter, vectors, parametric) now go through this helper. If overflow is detected, `result.warning` is set on the successful-render path so the cell renders (with inf values treated as NaN by the renderer) but shows an orange indicator. The `RuntimeWarning` is captured internally and never propagates to the process.
+
+**Tests:** `tests/test_bug040.py` — 7 cases: clean cast returns no warning; overflow returns a warning containing the count; NaN passthrough doesn't trigger a warning; surface and scatter cells with out-of-range values set `result.warning` without crashing; a normal surface produces no overflow warning.
+
+---
+
+### BUG-041 — SyntaxError in recurrence RHS during mid-edit causes unhandled crash (Abort trap: 6)
+**Status:** Closed (fixed 2026-05-23)
+
+**Root cause:** `execute_recurrence` called `compile(rhs, "<recurrence>", "eval")` without a `try/except SyntaxError`. A partially-typed RHS (e.g. `path[n-1] - dt*`) produced a `SyntaxError` that escaped `execute_recurrence`, propagated up through `_eval_cell` → `_rebuild_namespace` → `_on_cell_changed`, and reached wgpu/pygfx internals causing `Abort trap: 6`. Both call sites for `execute_recurrence` in `cell_list.py` are outside any `try/except` block, so the exception could not be recovered there.
+
+**Fix:** `pringle/recurrence.py:70` — wrapped `compile(rhs, ...)` in `try/except SyntaxError`; on failure, returns `(result, f"Syntax error in recurrence rule: {e}")` immediately. This is consistent with how every other error in `execute_recurrence` is handled (return `(array, warning_str)` rather than raise). The returned warning surfaces as an orange indicator on the cell via `_eval_cell`.
+
+**Tests:** `tests/test_bug041.py` — 4 cases: incomplete RHS returns a non-empty "syntax"-containing warning without raising; empty RHS does the same; a valid rule still evaluates correctly; `parse_recurrence` is unaffected.
+
+---
+
+### BUG-037 — Renderer test suite crashes with SIGABRT under Python 3.13 incremental GC
+**Status:** Closed (fixed 2026-05-23)
+
+**Root cause:** Python 3.13 introduced incremental GC which can fire at any instruction boundary, including inside cffi/wgpu C-extension calls. The wgpu-native poller thread holds GPU resources also accessed during a GC cycle on the main thread; the race causes a fatal SIGABRT inside `wgpu_native`. Confirmed pre-existing across wgpu 0.31.0 / pygfx 0.16.0 (latest). The crash is in wgpu upstream, not in Pringle code.
+
+**Fix:** Added `tests/conftest.py` with `gc.disable()` for Python 3.13+ at import time. This prevents automatic GC triggers from firing during C-extension calls; explicit `gc.collect()` calls still work, so memory is still reclaimed. Also updated `tests/test_phase2.py::test_dunder_blocked` to use `z =` instead of `x =` as the assignment target, since BUG-038's reserved-variable guard now intercepts `x = ...` before the AST security check runs.
+
+**Result:** Full 551-test suite passes clean (`python -m pytest tests/`) — no `--ignore` flags needed. Remove the `gc.disable()` call in `conftest.py` once wgpu upstream resolves the threading issue.
+
+---
+
+### BUG-038 — Assigning to a reserved spatial variable crashes the app instead of warning the user
+**Status:** Closed (fixed 2026-05-23)
+
+**Root cause:** Three layers interacted badly: (1) `exec` in `run_cell` let the user's `x = linspace(...)` overwrite the 2D grid `x` array in `local_ns`; (2) `_detect_magic` saw `"x"` in `user_stores` and returned render type `curve_x` with a mismatched 1D array; (3) `_on_cell_result` called `np.column_stack` with mismatched lengths (`result.data` vs `y1d`), producing an unhandled `ValueError` → `Abort trap: 6`.
+
+**Fix:**
+- `pringle/evaluator.py` — `run_cell`: added early-return guard after `user_stores` is computed; any assignment to `SPATIAL_NAMES - {"y"}` (i.e. `x`, `u`, `v`) sets `result.warning` and returns without executing. `y` is exempt (valid magic output for `curve`/`surface_y`).
+- `pringle/evaluator.py` — `_detect_magic`: removed the dead `if "x" in user_stores` block (`curve_x` path). `x` is an input variable only.
+- `pringle/app.py` — `_on_cell_result`: added length guard in the `curve_x` branch (calls `vp.remove_object` and returns on length mismatch) to prevent future regressions.
+- `design-docs/05-architecture-decisions.md` — removed `x = f(y)` from the implemented curve plots list.
+- `design-docs/07-cell-types-and-blocks.md` — removed `x` from the magic variable table; updated magic scoping section and shape validation table accordingly.
+
+**Tests:** `tests/test_bug038.py` — 5 cases: assigning `x`, `u`, `v` each produce `result.warning` with no exception; `y = sin(x)` still renders; `z = x**2 + y**2` still renders.
+
+---
+
+### BUG-042 — `t` cannot be used as a reliable integer index
+**Status:** Closed (fixed 2026-05-23)
+
+**Root cause (actual):** Two independent bugs combined to cause the reported confusion.
+1. `"t"` was in `_ALWAYS_DEFINED` in `dag.py`, so cells using `t` without a corresponding slider cell received no "Undefined" warning from the DAG — yet execution still failed with `NameError` because `t` was never injected into the eval namespace. (`t` is not a grid variable; the design-doc reference to `t` as reserved animation time is an unimplemented aspiration, not current behaviour.)
+2. `int` was absent from the equation namespace (`__builtins__ = {}`), so `path[int(t)]` raised `NameError: name 'int' is not defined` regardless of whether a slider `t` existed.
+
+**Fix:**
+- `pringle/dag.py` — removed `"t"` from `_ALWAYS_DEFINED`. Cells that reference `t` with no slider `t` now correctly show "Undefined: 't'" in the UI.
+- `pringle/namespace.py` — added `"int": int` to the equation namespace. `int()` is safe (no file/import access) and is needed for slider-to-index coercion.
+- `design-docs/03-expression-evaluation.md` — corrected the variable reference table: `t` is not a built-in; for a frame counter, define a slider (e.g. `time = 0`, step 1). Noted that `int(round(t))` is safer than `int(t)` for non-integer slider steps.
+
+**Tests:** `tests/test_bug042.py` — 5 cases: `t` absent from `_always_defined`; `int()` available in namespace; integer slider used as index; `int(round(t))` handles floating-point slider values; `int(t)` of a whole-number float slider.
+
+---
+
 ### BUG-045 — Slider value clamped to range bounds instead of flagging the offending bound
 **Status:** Closed (fixed 2026-05-23)
 

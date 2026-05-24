@@ -25,7 +25,6 @@ Output type is determined by which magic name is assigned. These take priority o
 |---|---|---|---|
 | `z` | Explicit surface | `(N, M)` float, matching `(x, y)` grid | `z = sin(x) * cos(y)` |
 | `y` | Curve in 3D | `(N,)` float, matching `x` grid | `y = x**3` |
-| `x` | Curve (implicit role) | `(N,)` float, matching `y` grid | `x = sin(y)` |
 | `xyz` | Parametric surface or curve | `(3, N, M)` or `(3, N)` float | `xyz = array([cos(u), sin(u), v])` |
 | `points` | Scatter plot | `(N, 3)` or `(N, 2)` float | `points = d` |
 | `vectors` | Vector field | `(N, 6)` float — tail+head pairs | via shape inference (see below) |
@@ -64,7 +63,7 @@ def preprocess_func_def(line: str) -> str:
 
 ## Magic Variable Scoping
 
-Magic variable names (`z`, `y`, `x`, `xyz`, `points`, `vectors`) are **local to the cell's execution and consumed by the renderer only**. They are never exported to the shared namespace.
+Magic variable names (`z`, `y`, `xyz`, `points`, `vectors`) are **local to the cell's execution and consumed by the renderer only**. They are never exported to the shared namespace.
 
 This means:
 - Two cells both writing `z = expr` produce two independent surfaces — no namespace collision
@@ -236,7 +235,7 @@ Shape validation runs after every cell execution. Mismatches display as yellow i
 | Magic name | Expected | Common mistake |
 |---|---|---|
 | `z` | `(N, M)` matching x.shape | Scalar returned; forgot that x, y are 2D grids |
-| `y` / `x` | `(N,)` matching grid | 2D array returned instead of 1D |
+| `y` | `(N,)` matching grid | 2D array returned instead of 1D |
 | `xyz` | `(3, N)` or `(3, N, M)` | Wrong axis: `(N, 3)` instead of `(3, N)` — Pringle transposes if unambiguous |
 | `points` | `(N, 2)` or `(N, 3)` | Wrong column count |
 

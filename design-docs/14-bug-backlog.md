@@ -7,248 +7,75 @@ See [16-closed-bugs.md](16-closed-bugs.md) for resolved bugs.
 
 ---
 
-### BUG-037 — Renderer test suite crashes with SIGABRT under Python 3.13 incremental GC
-
-**Status:** Open  
-**Logged:** 2026-05-22  
-**Severity:** HIGH — all tests that instantiate `PringleRenderer` / wgpu are non-runnable in CI
-
-**Affected test files:**
-- `tests/test_phase1.py`
-- `tests/test_phase2.py`
-- `tests/test_phase3.py`
-- `tests/test_phase4_5.py`
-- `tests/test_phase10.py`
-- `tests/test_phase11.py`
-
-**Symptom:**  
-Tests abort mid-run with `Fatal Python error: Aborted`. The crash occurs in the wgpu-native poller thread while the Python main thread is in a GC cycle:
-
-```
-Thread 0x... (most recent call first):
-  ... wgpu/backends/wgpu_native/_poller.py line 101 in run  ← poller thread
-
-Current thread 0x... (most recent call first):
-  Garbage-collecting
-  ... renderstate.py in __init__   ← main thread inside wgpu/pygfx
-```
-
-**Root cause:**  
-Python 3.13 introduced incremental garbage collection. GC can fire at any instruction boundary, including inside `cffi`/wgpu C-extension calls. The wgpu-native poller thread holds resources that are also accessed by the main thread's GC cycle. The combination causes an internal abort in the native wgpu library (`wgpu_native`).
-
-Confirmed pre-existing: `git stash` of all current changes → same crash on all 6 test files. The crash is in `wgpu` / `pygfx`, not in Pringle code.
-
-**Workaround:**  
-Run tests excluding renderer test files:
-```
-python -m pytest tests/ --ignore=tests/test_rendering.py \
-  --ignore=tests/test_phase1.py --ignore=tests/test_phase2.py \
-  --ignore=tests/test_phase3.py --ignore=tests/test_phase4_5.py \
-  --ignore=tests/test_phase10.py --ignore=tests/test_phase11.py
-```
-157 tests pass cleanly.
-
-**Fix directions:**
-- Disable Python 3.13 incremental GC in tests via `gc.set_threshold(0)` or `gc.disable()` in a pytest plugin/conftest — may mask the crash but doesn't fix it
-- Upgrade wgpu-py / pygfx — the issue may be fixed in a newer wgpu-native release
-- Use Python 3.12 (no incremental GC) for CI until wgpu is fixed
-- File upstream bug with wgpu-py
-
----
-
----
-
-### BUG-040 — RuntimeWarning: overflow in float32 cast for vector-field-trajectory data
-
-**Status:** Open  
-**Logged:** 2026-05-23
-
-**Description:**  
-Running `vector-field-trajectory.yml` prints the following warning to the console:
-
-```
-/Users/greysonbrothers/code/pringle/pringle/evaluator.py:551: RuntimeWarning: overflow encountered in cast
-  data = np.asarray(data, dtype=np.float32)
-```
-
-The application continues, but overflowed values are silently replaced with ±`inf` in the GPU buffer, which can produce rendering artifacts (NaN geometry, invisible faces, or stray polygons).
-
-**Reproduction:**
-1. Open `examples/vector-field-trajectory.yml`.
-2. Observe the warning on stdout.
-
-**Root cause:**  
-`evaluator.py:551` casts the evaluated data to `float32` unconditionally. If the expression produces values outside the float32 range (`|x| > 3.4 × 10³⁸`), numpy emits `RuntimeWarning: overflow encountered in cast` and replaces the out-of-range values with `±inf`. The vector-field-trajectory example likely accumulates trajectory positions over many time steps, producing large values in at least one component.
-
-**Fix directions:**
-- Clamp or clip values to a safe float32 range before casting, and surface a warning on the cell if any value was clipped.
-- Alternatively, detect the overflow after cast (`np.any(np.isinf(data))`) and set `result.warning` with the count of overflowed values so the user is informed.
-- Review the trajectory computation in `vector-field-trajectory.yml` to check whether the overflow is a data error (e.g. unbounded trajectory escaping the domain) or just values that are legitimately large but expected.
-
-**Affected files:**  
-- `pringle/evaluator.py:551`
-
----
-
-### BUG-041 — SyntaxError in recurrence RHS during mid-edit causes unhandled crash (Abort trap: 6)
+### BUG-043 — Camera/orbit target drifts off-screen during fast circular mouse dragging
 
 **Status:** Open  
 **Logged:** 2026-05-23  
-**Possibly related:** BUG-038
+**Severity:** MEDIUM — reproducible with deliberate input; recovers via double-click reset
 
-**Description:**  
-While editing a recurrence cell (specifically when adding `x` as a function argument), the app crashes with `Abort trap: 6` instead of showing an inline error. The traceback shows a `SyntaxError` during `compile()` inside `execute_recurrence`, which propagates unhandled up through `_eval_cell` → `_rebuild_namespace` → `_on_cell_changed`.
+**Symptoms:**  
+When the user drags the mouse in fast clockwise + counterclockwise orbits (or circles), the scene gradually drifts away from the origin. After several cycles the scene moves off-screen. The orbit target crosshair visibly separates from the scene center. Double-clicking the viewport (recenter) recovers.
 
-**Traceback:**
-```
-File ".../cell_list.py", line 876, in _on_cell_changed
-    self._rebuild_namespace()
-File ".../cell_list.py", line 768, in _eval_cell
-    arr, warn = execute_recurrence(...)
-File ".../recurrence.py", line 70, in execute_recurrence
-    code = compile(rhs, "<recurrence>", "eval")
-  File "<recurrence>", line 1
-    path[n-1] - dt*
-SyntaxError: invalid syntax
-Abort trap: 6
-```
+**Reproduction steps:**
+1. Open any session with a visible surface.
+2. Left-click-drag clockwise for ~2 full rotations (fast).
+3. Left-click-drag counterclockwise for ~2 full rotations (fast).
+4. Repeat 3–4 times.
+5. Observe: the scene drifts progressively off-center.
 
-**Root cause:**  
-`execute_recurrence` calls `compile(rhs, "<recurrence>", "eval")` without wrapping it in a `try/except SyntaxError`. The `SyntaxError` propagates out of `_eval_cell`, which also doesn't catch it, and the exception reaches a layer (likely inside wgpu / pygfx internals) that causes a fatal abort instead of a recoverable error.
+**Root cause analysis:**
 
-The immediate trigger is a partially-typed RHS (`path[n-1] - dt*`) — mid-edit state where the user had not yet finished the expression. The debounce or reactive evaluation fired before editing was complete.
-
-**Note on `x` as argument:** The user noted this occurred while adding `x` as a function argument. It is possible the edit produced an intermediate parse-invalid state in the recurrence RHS, but the crash mechanism is the uncaught `SyntaxError` in `execute_recurrence` regardless of what specifically triggered the partial expression.
-
-**Fix:**  
-Wrap the `compile()` call in `recurrence.py` with `try/except SyntaxError` and return it as a user-visible warning on the cell, consistent with how other eval errors are handled:
+The `_IncrementalOrbitHandler` (`renderer.py:699`) calls `self._controller.rotate((dx * 0.005, dy * 0.005), rect)` with per-frame pixel deltas. This routes into `OrbitController._update_rotate()` (pygfx), which computes the new camera position using two sequential quaternion operations:
 
 ```python
-try:
-    code = compile(rhs, "<recurrence>", "eval")
-except SyntaxError as e:
-    raise ValueError(f"Syntax error in recurrence rule: {e}") from e
+# Step 1: rotate camera-to-target vector by azimuth
+pos1_to_target_rotated = la.vec_transform_quat(pos1_to_target, r_azimuth)
+
+# Step 2: rotate result by elevation, around the camera's pre-azimuth right vector
+right = la.vec_transform_quat((1, 0, 0), rot1)          # ← uses original rotation
+r_elevation_world = la.quat_from_axis_angle(right, -delta_elevation)
+pos1_to_target_final = la.vec_transform_quat(pos1_to_target_rotated, r_elevation_world)
+
+pos2 = target_pos - pos1_to_target_final  # new camera position
 ```
 
-The `ValueError` will then be caught by the existing exception handler in `_eval_cell`, which sets `result.error` and returns without crashing.
+Two drift mechanisms compound here:
+
+1. **Axis mismatch in combined az+el moves.** The elevation rotation uses `right` derived from `rot1` (the camera's rotation *before* the azimuth step is applied). When both `dx` and `dy` are non-zero in the same call (diagonal mouse movement), the azimuth step rotates `pos1_to_target` but the elevation rotation axis is still the pre-azimuth right vector — a slightly wrong axis. For any single small step the error is negligible, but rapid circular dragging applies many such steps per second, and the resulting rotation is not exactly the inverse of the preceding one. A full CW circle does not compose back to the identity, leaving a small residual shift in camera position each time.
+
+2. **Quaternion normalization drift.** Repeated `quat_mul` calls in `_update_rotate` accumulate floating-point error in `rot2`. A quaternion representing a rotation must be unit-length; accumulated error causes its length to drift. When `rot2` is used as `rot1` in the next call, the `right = vec_transform_quat((1, 0, 0), rot1)` vector is no longer unit-length, which means `quat_from_axis_angle(right, angle)` receives a non-unit axis. This corrupts the elevation rotation subtly but persistently. Over hundreds of fast-drag events, the camera's distance from the target grows or shrinks, and `pos2 = target_pos - pos1_to_target_final` places the camera at the wrong radius.
+
+The combined effect of (1) and (2) is a net camera position error per circular orbit that accumulates without bound.
+
+**Why the standard handler doesn't show this:**  
+`OrbitController.register_events()` (pygfx's stock handler) snapshots the camera state at `pointer_down` and recomputes the full rotation from that snapshot on each `pointer_move`. It never accumulates incremental quaternion operations — each move recalculates from a known-good starting quaternion. Pringle's incremental handler was introduced to allow simultaneous WASD+mouse (BUG-013), but sacrifices this reset-each-frame property.
+
+**Fix directions:**
+
+**Option A — Re-normalize the camera quaternion periodically (low effort):**  
+After each `rotate()` call in `_handle`, read back `camera.local.rotation`, normalize the quaternion, and write it back. This corrects drift (2) and does not touch the azimuth/elevation axis-mismatch problem, but the axis-mismatch error per call is so small (~1e-6 rad) that it is unlikely to produce visible drift on its own.
+
+```python
+# in _IncrementalOrbitHandler._handle, after controller.rotate(...):
+cam = self._controller._cameras[0] if self._controller._cameras else None
+if cam is not None:
+    q = cam.local.rotation
+    length = (q[0]**2 + q[1]**2 + q[2]**2 + q[3]**2) ** 0.5
+    if abs(length - 1.0) > 1e-6:
+        cam.local.rotation = (q[0]/length, q[1]/length, q[2]/length, q[3]/length)
+```
+
+**Option B — Periodically re-anchor camera state from spherical coordinates (more robust):**  
+Track `(azimuth, elevation, distance)` in `_IncrementalOrbitHandler` directly. On each drag event, accumulate `azimuth += dx * sensitivity` and `elevation += dy * sensitivity`. Every N frames (or every `pointer_up`), recompute the camera's exact position from `(azimuth, elevation, distance, target)` in closed form, replacing the accumulated quaternion state with a freshly computed quaternion. This is immune to both drift mechanisms. Cost: requires knowing or replicating the controller's spherical-to-Cartesian formula, or calling a `look_at` rebuild.
+
+**Option C — Upstream fix:**  
+File a bug with pygfx: `OrbitController._update_rotate` should normalize the quaternion after each update and use the post-azimuth `right` vector for the elevation step. This would fix both drift mechanisms at the source, with no Pringle-side workaround needed. Option A is a reasonable local mitigation to apply while waiting for an upstream fix.
+
+**Recommended path:** Apply Option A immediately (low risk, one-liner), then file upstream. If drift persists after Option A, implement Option B.
 
 **Tests to add:**
-- A recurrence cell with an incomplete RHS (e.g. `arr[n] = arr[n-1] +`) should produce `result.error` containing a syntax error message, not raise an unhandled exception.
-
-**Affected files:**  
-- `pringle/recurrence.py:70` — `compile()` call needs `try/except SyntaxError`
-
----
-
-### BUG-042 — `t` cannot be used as a reliable integer index
-
-**Status:** Open  
-**Logged:** 2026-05-23
-
-**Description:**  
-`t` cannot be used as a reliable integer array index in expressions, particularly in patterns analogous to how `time` is used in `examples/vector-field-trajectory.yml` (e.g. `path[t]` or `path[int(t)]`). This is confusing because `time` (a slider) works cleanly as an index while `t` (a magic spatial variable) does not.
-
-**Root cause (likely):**  
-`t` is a magic spatial variable injected by the evaluation grid — it is a 2D float array of shape `(n, n)`, not a scalar. Attempting to use it as an array index either raises an `IndexError` (non-integer index), produces a broadcast over the 2D grid, or returns a value that is unexpectedly shaped. Additionally, if the user defines a slider named `t`, it shadows the magic `t` and the interaction between the slider scalar and the grid variable may be non-obvious or inconsistent.
-
-A further issue: even when `t` is coerced via `int(t)`, floating-point precision at certain slider values can cause `int(1.9999...)` to undercount by 1, producing off-by-one indexing that is hard to debug.
-
-**Expected behavior:**  
-- If the user defines a slider `t`, it should be a scalar and usable as `int(t)` as an index without precision surprises.
-- If no slider `t` is defined, attempting to use the magic `t` grid as an index should produce a clear warning rather than a confusing broadcast result or silent error.
-- Documentation should clarify that `t` as a magic variable is the grid time axis and is not an integer counter; users wanting an integer animation frame counter should use a slider with `int()` coercion or use the `n` loop index in recurrence cells.
-
-**Affected files:**  
-- `pringle/namespace.py` — magic variable injection
-- `pringle/evaluator.py` — possible conflict between slider `t` and magic `t`
-- `design-docs/03-expression-evaluation.md` — documentation clarification
-- `design-docs/07-cell-types-and-blocks.md` — magic variable table
-
----
-
-### BUG-038 — Assigning to a reserved spatial variable crashes the app instead of warning the user
-
-**Status:** Open  
-**Logged:** 2026-05-22
-
-**Description:**  
-Writing `x = linspace(0, 100)` (or any bare assignment to a reserved spatial variable) in an equation cell causes an unhandled `ValueError` that propagates past the renderer and terminates the process with `Abort trap: 6`. The user receives no diagnostic; the application dies silently. The correct behavior is a warning message explaining that the variable is reserved.
-
-**Reproduction:**
-1. Open a fresh Pringle session (default 64-point grid).
-2. Add an equation cell and type `x = linspace(0, 100)`.
-3. The cell evaluates → `ValueError: all the input array dimensions except for the concatenation axis must match exactly, but along dimension 0, the array at index 0 has size 50 and the array at index 1 has size 64` → `Abort trap: 6`.
-
-**Root cause:**  
-The evaluation pipeline has three layers that interact incorrectly:
-
-1. **`preprocess.is_slider_cell`** (`preprocess.py:102`) correctly rejects `x = linspace(0, 100)` as a slider (it checks `name in MAGIC_NAMES or name in SPATIAL_NAMES`). The cell is therefore routed through the full equation evaluator.
-
-2. **`run_cell`** (`evaluator.py:336`) executes the source with `exec(preprocessed, local_ns)`. The grid variables (`x`, `y`, `u`, `v`, `t`) are injected into `local_ns` at Layer 5 *before* exec runs (line ~401), but `exec` writes back into that same dict, so the user's `x = linspace(0, 100)` overwrites the grid's 2D `x` array with a 50-element 1D array. `get_store_names` records `"x"` in `user_stores`. No guard exists here.
-
-3. **`_detect_magic`** (`evaluator.py:61`) sees `"x" in user_stores`, finds a 1D ndarray in `local_ns["x"]`, and returns render type `"curve_x"` with the user's 50-element array as `result.data`.
-
-4. **`_on_cell_result`** (`app.py:602`) handles `"curve_x"` by calling `np.column_stack([result.data, self._grid.y1d, zeros(...)])`. `result.data` has 50 elements; `self._grid.y1d` has 64 elements → `ValueError` → unhandled → `Abort trap: 6`.
-
-The shape-validation helper `_check_render_data` (`evaluator.py:305`) already validates `surface`, `curve`, and `scatter` types but has no case for `curve_x`, so the bad length slips through.
-
-**Design note — `curve_x` removal:**  
-`x = f(y)` (the `curve_x` render type) is currently listed as a supported feature in `05-architecture-decisions.md` and `07-cell-types-and-blocks.md`. The decision has been made to **remove** this feature: `x`, `u`, `v`, and `t` are strictly input/spatial variables and should not be assignable. This bug fix should implement that removal. `y` remains a valid magic output variable for curve rendering (`y = f(x)`).
-
-**Affected files:**  
-- `pringle/evaluator.py` — `run_cell`, `_detect_magic`, `_check_render_data`
-- `pringle/app.py` — `_on_cell_result` (defensive guard)
-- `design-docs/05-architecture-decisions.md` — remove `x = f(y)` from curve list
-- `design-docs/07-cell-types-and-blocks.md` — remove `x` row from magic variable table
-
-**Suggested fix:**
-
-**Step 1 — Guard in `run_cell` (`evaluator.py`, after line 385):**  
-After `user_stores = get_store_names(preprocessed)`, add an early-return that fires whenever the user assigns to any reserved spatial input variable. Use the set `SPATIAL_NAMES - {"y"}` (i.e., `{"x", "u", "v", "t"}`); `y` is exempt because it is a valid magic output for curve rendering.
-
-```python
-_RESERVED_INPUT = SPATIAL_NAMES - {"y"}  # x, u, v, t are input-only
-reserved_conflicts = user_stores & _RESERVED_INPUT
-if reserved_conflicts:
-    name = sorted(reserved_conflicts)[0]
-    result.warning = (
-        f"'{name}' is a reserved variable and cannot be assigned to. "
-        f"Pringle automatically injects x, y, u, v, and t as the evaluation grid. "
-        f"To render, assign to a magic output variable: "
-        f"z (surface), y (curve), xyz (parametric), or points (scatter)."
-    )
-    return result
-```
-
-The warning is intentionally set on `result.warning` (orange indicator), not `result.error`, so the cell stays non-fatal.
-
-**Step 2 — Remove `x` branch from `_detect_magic` (`evaluator.py:87-90`):**  
-Delete the `if "x" in user_stores:` block. It is dead code once the Step 1 guard is in place, and removing it makes the intent explicit.
-
-**Step 3 — Defensive guard in `_on_cell_result` (`app.py`, `curve_x` branch):**  
-Even if Step 1 is present, add a length check before `np.column_stack` to prevent any future regression from reaching an unhandled exception:
-
-```python
-elif result.render_type == "curve_x":
-    if len(result.data) != len(self._grid.y1d):
-        # Mismatched lengths — silently skip; upstream should have warned
-        vp.remove_object(cell_id)
-        return
-    pts = np.column_stack([...])
-```
-
-**Step 4 — Update design docs:**  
-- `05-architecture-decisions.md` line 117: remove `x = f(y)` from the curve plots entry.
-- `07-cell-types-and-blocks.md` line 28: remove the `x` / `Curve (implicit role)` row from the magic variable table.
-
-**Tests to add:**  
-Add to the existing evaluator test suite (e.g., `tests/test_phase3.py`):
-- `x = linspace(0, 100)` → `result.warning` is non-empty, `result.render_type` is `None`, no exception raised
-- `u = zeros((64, 64))` → same: warning, no crash
-- `t = 5.0` → same: warning, no crash
-- `y = sin(x)` → still produces `render_type == "curve"` (y is not blocked)
-- `z = x**2 + y**2` → still produces `render_type == "surface"` (z is not blocked)
-
----
+- After 100 consecutive `rotate((0.1, 0.1), rect)` calls, camera-to-target distance is within 0.01% of its initial value.
+- After 360 × `rotate((dx, 0), rect)` calls summing to a full azimuth circle, camera position is within 1e-4 of the starting position.
+- Camera rotation quaternion length remains within 1e-5 of 1.0 after 1000 rapid rotate calls.
 
 ---

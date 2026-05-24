@@ -115,7 +115,7 @@ Deferred to v2. Focus v1 on explicit and parametric surfaces.
 ### Implemented (v1)
 - Explicit surfaces: `z = f(x, y)` ✓
 - Parametric surfaces/scatter: `xyz = array(...)` ✓
-- Curve / line plots: `y = f(x)`, `x = f(y)` ✓
+- Curve / line plots: `y = f(x)` ✓
 - Piecewise surfaces: `z = [f, g, h]` with N condition sub-cells ✓
 - Named parameter sliders with editable range + drag handle ✓
 - Slider morph: typing `a = 1` in any cell promotes it to a SliderWidget ✓

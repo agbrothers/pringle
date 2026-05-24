@@ -266,8 +266,16 @@ Pressing ENTER in any cell should add a new equation cell beneath. SHIFT+ENTER t
 
 time animation doesn't work with `t`
 
+
+-------------------------------
+
+
 /Users/greysonbrothers/code/pringle/pringle/evaluator.py:551: RuntimeWarning: overflow encountered in cast
   data = np.asarray(data, dtype=np.float32)
+
+
+-------------------------------
+
 
 Traceback (most recent call last):
   File "/Users/greysonbrothers/code/pringle/pringle/cell_list.py", line 876, in _on_cell_changed
@@ -292,7 +300,7 @@ SyntaxError: invalid syntax
 Abort trap: 6
 
 
-
+-------------------------------
 
 
 ^C^CReceived signal Interrupt: 2
@@ -319,3 +327,27 @@ Abort trap: 6
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
 KeyboardInterrupt
 Abort trap: 6
+
+
+-------------------------------
+
+
+Remove trailing zeros from visual styles panel
+
+Have it create templates for issues, features, and commits so that it doesn't have to eat up context to infer style. 
+
+Integrate github CLI to move issues out of the docs and onto github. Closed issue docs are becoming bloated and probably hurt context. 
+
+Probably want unto/redo buttons and functionality to apply to any updates that impact the expression panel. Basically, anything that would change the yaml save file should be un-doable and re-doable. How feasible is this? Does this add a lot of memory overhead?
+
+
+Down arrow should scroll the expression panel to keep in line with the cursor location. 
+
+
+When spinning the plot fast, the camera center drifts away from the crosshair. Hold down the mouse, drag clockwise, then counter-clockwise, and continue repeating a few times, and the plot moves off the screen. Same thing happens when you click and drag the mouse in circles. 
+
+crosshair shadow
+
+safe way to cast as int?
+
+slider speed knob
