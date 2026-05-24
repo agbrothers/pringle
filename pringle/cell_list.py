@@ -474,7 +474,7 @@ class CellListWidget(QWidget):
 
     def add_comment_cell(
         self,
-        source: str = "#",
+        source: str = "# ",
         after_id: str | None = None,
         style: CellStyle | None = None,
     ):
@@ -977,7 +977,11 @@ class CellListWidget(QWidget):
                 self._on_cell_result(member.cell_id, CellResult(), member.style)
 
     def _on_comment_changed(self, cell_id: str) -> None:
-        pass  # comment edits don't affect the namespace or any render output
+        idx = self._index_of(cell_id)
+        if idx < 0:
+            return
+        if not self._cells[idx].source().startswith("#"):
+            self._morph_comment_to_equation(cell_id)
 
     def _on_cell_changed(self, cell_id: str) -> None:
         self._maybe_morph_to_comment(cell_id)

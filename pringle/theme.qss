@@ -83,13 +83,6 @@ QPushButton#folder_del:hover { color: #ccc; }
 
 /* ── Comment cell ─────────────────────────────────────────────────── */
 CommentCellWidget { background: #171717; }
-QLabel#hash_lbl {
-    color: #4a7c59;
-    font-size: 13px;
-    font-family: 'Menlo', 'Consolas', 'Courier New';
-    font-weight: bold;
-    padding-top: 5px;
-}
 QPlainTextEdit#comment_edit {
     background: transparent;
     color: #79838E;

@@ -7,12 +7,12 @@ namespace builder skip it entirely.
 
 Layout
 ------
-  [drag handle] [# label] [auto-grow QPlainTextEdit] [✕]
+  [drag handle] [auto-grow QPlainTextEdit] [✕]
 
-The ``#`` is shown as a fixed decoration in the left margin and is NOT
-included in the text area.  ``source()`` prepends ``# `` to the stored
-text so that the YAML session round-trip preserves the comment prefix and
-the morph trigger stays intact on reload.
+The ``# `` prefix is stored as literal text inside the edit area so the
+user can see and edit it directly.  ``source()`` returns the raw text;
+``set_source()`` sets it as-is.  The morph trigger and YAML round-trip
+rely on the source starting with ``#``.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ import uuid
 import re
 
 from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QPlainTextEdit, QPushButton, QLabel, QSizePolicy,
+    QWidget, QHBoxLayout, QPlainTextEdit, QPushButton, QSizePolicy,
 )
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QFontMetricsF, QKeyEvent, QTextOption
@@ -156,14 +156,7 @@ class CommentCellWidget(QWidget):
         self._drag_handle.drag_ended.connect(lambda: self.drag_ended.emit(self.cell_id))
         outer_h.addWidget(self._drag_handle)
 
-        # '#' decoration — pinned to top to align with the first text line
-        hash_lbl = QLabel("#")
-        hash_lbl.setObjectName("hash_lbl")
-        hash_lbl.setFixedWidth(18)
-        hash_lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
-        outer_h.addWidget(hash_lbl, 0, Qt.AlignmentFlag.AlignTop)
-
-        # Auto-grow text area
+        # Auto-grow text area — "# " prefix is part of the cell text
         self._edit = _CommentEdit()
         self._edit.setObjectName("comment_edit")
         self._edit.setPlaceholderText("comment…")
@@ -185,14 +178,12 @@ class CommentCellWidget(QWidget):
     # ------------------------------------------------------------------
 
     def source(self) -> str:
-        """Return the full source string including the leading '# '."""
-        text = self._edit.toPlainText()
-        return "# " + text if text else "#"
+        """Return the raw text including the leading '# '."""
+        return self._edit.toPlainText()
 
     def set_source(self, text: str) -> None:
-        """Accept a source string with or without leading '#'; stores body only."""
-        body = _HASH_RE.sub("", text, count=1)
-        self._edit.setPlainText(body)
+        """Set the cell text directly; the caller is responsible for the '# ' prefix."""
+        self._edit.setPlainText(text)
 
     def is_visible_cell(self) -> bool:
         return False

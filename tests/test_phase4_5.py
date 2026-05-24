@@ -283,7 +283,7 @@ class TestCommentCellNoRebuild:
         clist._rebuild_namespace = counting_rebuild
 
         rebuild_count = 0
-        comment._edit.setPlainText("edited body")
+        comment._edit.setPlainText("# edited body")   # keep '#' so no morph fires
         assert rebuild_count == 0
 
     def test_equation_cell_still_rebuilds(self, qapp, grid):

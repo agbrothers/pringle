@@ -169,6 +169,69 @@ class TestFolderMembership:
         assert cur.contentsMargins().left() == indent_before
 
 
+class TestAutoReverseOnHashRemoval:
+    """Editing a comment cell to remove the leading '#' auto-morphs it back to an equation cell."""
+
+    def _make_list(self, qapp):
+        from pringle.grid import make_grid, GridConfig
+        return CellListWidget(on_cell_result=lambda *a: None, grid=make_grid(GridConfig(n=32)))
+
+    def test_removing_hash_morphs_to_equation(self, qapp):
+        clist = self._make_list(qapp)
+        comment = clist.add_comment_cell("# z = sin(x)")
+        cell_id = comment.cell_id
+        # Simulate user deleting the '# ' prefix
+        comment._edit.setPlainText("z = sin(x)")
+        comment.content_changed.emit(cell_id)
+        qapp.processEvents()
+        new = clist._cells[clist._index_of(cell_id)]
+        assert isinstance(new, CellWidget)
+        assert new.source() == "z = sin(x)"
+
+    def test_removing_hash_preserves_source_text(self, qapp):
+        clist = self._make_list(qapp)
+        comment = clist.add_comment_cell("# a = 5")
+        cell_id = comment.cell_id
+        comment._edit.setPlainText("a = 5")
+        comment.content_changed.emit(cell_id)
+        qapp.processEvents()
+        # Should morph to a SliderWidget since it's a scalar assignment
+        from pringle.slider_widget import SliderWidget
+        new = clist._cells[clist._index_of(cell_id)]
+        assert isinstance(new, SliderWidget)
+        assert new.name == "a"
+
+    def test_hash_without_space_does_not_morph(self, qapp):
+        """'#foo' still starts with '#' — no morph should occur."""
+        clist = self._make_list(qapp)
+        comment = clist.add_comment_cell("# foo")
+        cell_id = comment.cell_id
+        comment._edit.setPlainText("#foo")
+        comment.content_changed.emit(cell_id)
+        qapp.processEvents()
+        assert isinstance(clist._cells[clist._index_of(cell_id)], CommentCellWidget)
+
+    def test_empty_text_does_morph(self, qapp):
+        """Clearing all text (no '#') also triggers morph."""
+        clist = self._make_list(qapp)
+        comment = clist.add_comment_cell("# note")
+        cell_id = comment.cell_id
+        comment._edit.setPlainText("")
+        comment.content_changed.emit(cell_id)
+        qapp.processEvents()
+        new = clist._cells[clist._index_of(cell_id)]
+        assert isinstance(new, CellWidget)
+
+    def test_cell_count_unchanged_after_morph(self, qapp):
+        clist = self._make_list(qapp)
+        comment = clist.add_comment_cell("# z = x")
+        count_before = len(clist._cells)
+        comment._edit.setPlainText("z = x")
+        comment.content_changed.emit(comment.cell_id)
+        qapp.processEvents()
+        assert len(clist._cells) == count_before
+
+
 class TestToggleCommentNoop:
     def test_no_focused_cell_does_nothing(self, qapp, clist):
         """toggle_comment_focused_cell is a no-op when nothing is focused."""

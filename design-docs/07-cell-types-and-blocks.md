@@ -176,7 +176,14 @@ A cell whose first character is `#` is treated as a comment cell — free text, 
 # This is a note about the equations below.
 ```
 
-**Detection and morphing:** on focus-out (`commit_requested`), if the cell source starts with `#`, the cell morphs to a `CommentCellWidget` in place (same pattern as scalar assignment → `SliderWidget`). If the `#` is removed from the start, it morphs back to a `CellWidget`.
+**Layout:** `[drag handle] [auto-grow QPlainTextEdit] [✕]`. The `# ` prefix is stored as literal text inside the edit field — there is no separate margin decoration. New comment cells are created with `source="# "` so the cursor lands after the hash-space.
+
+**Detection and morphing:**
+- *Equation → comment:* on focus-out, if an equation cell's source starts with `#`, it morphs to `CommentCellWidget` in place (preserving `cell_id` and style). The full source string (including `# `) is passed to `set_source`, which sets it verbatim into the edit field.
+- *Comment → equation (manual):* `Ctrl+/` / `Cmd+/` strips the leading `# ` and morphs back.
+- *Comment → equation (auto):* editing the comment text so it no longer starts with `#` triggers an immediate morph back to `CellWidget` via `_on_comment_changed`. This fires on every keystroke; the morph only fires once the first character is no longer `#` (e.g. deleting `# foo` to `foo`, not mid-deletion after only the space is removed).
+
+**`source()` / `set_source()`:** both are pass-through — `source()` returns `_edit.toPlainText()` and `set_source(text)` calls `_edit.setPlainText(text)`. The caller (`_morph_equation_to_comment`) is responsible for constructing the `"# "` prefix; `_morph_comment_to_equation` uses `_HASH_RE` to strip it.
 
 **Previous design (superseded):** an earlier version triggered on Python docstrings (`"""..."""`) detected via `ast.Constant`. This is replaced by the `#` trigger only. Single/double-quoted strings are treated as equation cell content (they evaluate as string literals), not as comments.
 
