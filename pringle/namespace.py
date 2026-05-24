@@ -14,8 +14,8 @@ from numpy import (
     # Trig
     sin, cos, tan, arcsin, arccos, arctan, arctan2, hypot,
     sinh, cosh, tanh, arcsinh, arccosh, arctanh,
-    # Rounding / sign
-    abs, floor, ceil, round, sign, clip, mod,
+    # Rounding / sign / integer casting
+    abs, floor, ceil, round, sign, clip, mod, int_, intp,
     # Exponential / log
     exp, exp2, log, log2, log10, sqrt, cbrt, power,
     # Array creation
@@ -71,6 +71,7 @@ def build_equation_namespace() -> dict:
         "arcsinh": arcsinh, "arccosh": arccosh, "arctanh": arctanh,
         "abs": abs, "floor": floor, "ceil": ceil, "round": round,
         "sign": sign, "clip": clip, "mod": mod,
+        "int_": int_, "intp": intp,
         "exp": exp, "exp2": exp2, "log": log, "log2": log2,
         "log10": log10, "sqrt": sqrt, "cbrt": cbrt, "power": power,
         "zeros": zeros, "ones": ones, "empty": empty, "full": full,
@@ -94,6 +95,7 @@ def build_equation_namespace() -> dict:
         "logical_not": logical_not,
         "any": any, "all": all,
         "pi": pi, "e": e, "inf": inf, "nan": nan,
+        "int": int,  # safe builtin — needed for array indexing (e.g. path[int(t)])
         "random": random,
         # scipy.special
         "gamma": gamma, "factorial": factorial, "comb": comb,

@@ -67,7 +67,10 @@ def execute_recurrence(
     if not is_valid:
         return result, f"Cannot parse recurrence rule: {rule_expr!r}"
 
-    code = compile(rhs, "<recurrence>", "eval")  # noqa: S307
+    try:
+        code = compile(rhs, "<recurrence>", "eval")  # noqa: S307
+    except SyntaxError as e:
+        return result, f"Syntax error in recurrence rule: {e}"
     glob = {**namespace, "__builtins__": {}, array_name: result}
 
     with np.errstate(invalid="ignore", divide="ignore", over="ignore"):

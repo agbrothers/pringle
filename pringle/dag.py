@@ -31,7 +31,7 @@ def _always_defined() -> set[str]:
         _ALWAYS_DEFINED = (
             set(build_equation_namespace().keys())
             | SPATIAL_NAMES
-            | {"t", "True", "False", "None"}
+            | {"True", "False", "None"}
         )
     return _ALWAYS_DEFINED
 

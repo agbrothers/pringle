@@ -13,6 +13,7 @@ from __future__ import annotations
 import ast
 import math
 import traceback
+import warnings
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -84,10 +85,6 @@ def _detect_magic(local_ns: dict, grid: Grid, user_stores: set[str]) -> tuple[st
             return "curve", val
         if isinstance(val, np.ndarray):
             return "surface_y", val
-    if "x" in user_stores:
-        val = local_ns.get("x")
-        if isinstance(val, np.ndarray) and val.ndim == 1:
-            return "curve_x", val
     if "points" in user_stores:
         return "scatter", local_ns.get("points")
 
@@ -340,6 +337,32 @@ def validate_shape(render_type: str, data: Any, grid: Grid) -> str | None:
 
 
 # ---------------------------------------------------------------------------
+# Float32 cast helper
+# ---------------------------------------------------------------------------
+
+def _cast_float32(data: Any) -> tuple[np.ndarray, str | None]:
+    """
+    Cast data to float32, returning (arr, warning) if overflow occurred.
+
+    numpy silently replaces out-of-range float64 values with ±inf when casting
+    to float32 and emits a RuntimeWarning. This helper captures that warning and
+    converts it to an explicit message so the cell can surface it to the user.
+    """
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", RuntimeWarning)
+        arr = np.asarray(data, dtype=np.float32)
+    if caught:
+        n_inf = int(np.isinf(arr).sum())
+        if n_inf:
+            s = "s" if n_inf != 1 else ""
+            return arr, (
+                f"Overflow: {n_inf} value{s} exceed the float32 range "
+                f"and became ±inf — check for unbounded values in your expression"
+            )
+    return arr, None
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
@@ -391,6 +414,19 @@ def run_cell(
 
     result.free_names = get_free_names(preprocessed)
     user_stores = get_store_names(preprocessed)
+
+    # --- Guard: x, u, v are input-only spatial variables; assigning them is an error ---
+    _RESERVED_INPUT = SPATIAL_NAMES - {"y"}  # y is a valid magic output (curve)
+    reserved_conflicts = user_stores & _RESERVED_INPUT
+    if reserved_conflicts:
+        name = sorted(reserved_conflicts)[0]
+        result.warning = (
+            f"'{name}' is a reserved variable and cannot be assigned to. "
+            f"Pringle automatically injects x, y, u, and v as the evaluation grid. "
+            f"To render, assign to a magic output variable: "
+            f"z (surface), y (curve), xyz (parametric), or points (scatter)."
+        )
+        return result
 
     # --- Safety check (equation cells only) ---
     if not is_data_cell:
@@ -526,10 +562,12 @@ def run_cell(
             result.warning = warn
             return result
 
-    # --- Normalize surface data ---
+    # --- Normalize render data (cast to float32, detect overflow) ---
+    _overflow_warn: str | None = None
+
     if render_type == "surface":
         try:
-            data = np.asarray(data, dtype=np.float32)
+            data, _overflow_warn = _cast_float32(data)
         except (TypeError, ValueError):
             result.error = f"Surface data must be numeric (got {type(data).__name__})"
             return result
@@ -545,28 +583,28 @@ def run_cell(
 
     elif render_type == "curve":
         try:
-            data = np.asarray(data, dtype=np.float32)
+            data, _overflow_warn = _cast_float32(data)
         except (TypeError, ValueError):
             result.error = f"Curve data must be numeric (got {type(data).__name__})"
             return result
 
     elif render_type in ("scatter", "scatter_2d"):
         try:
-            data = np.asarray(data, dtype=np.float32)
+            data, _overflow_warn = _cast_float32(data)
         except (TypeError, ValueError):
             result.error = f"Scatter data must be numeric (got {type(data).__name__})"
             return result
 
     elif render_type in ("vectors", "vectors_2d"):
         try:
-            data = np.asarray(data, dtype=np.float32)
+            data, _overflow_warn = _cast_float32(data)
         except (TypeError, ValueError):
             result.error = f"Vector data must be numeric (got {type(data).__name__})"
             return result
 
     elif render_type == "parametric":
         try:
-            data = np.asarray(data, dtype=np.float32)
+            data, _overflow_warn = _cast_float32(data)
         except (TypeError, ValueError):
             result.error = f"Parametric data must be numeric (got {type(data).__name__})"
             return result
@@ -579,6 +617,8 @@ def run_cell(
 
     result.render_type = render_type
     result.data = data
+    if _overflow_warn:
+        result.warning = _overflow_warn
     # Only set shape_preview from render data when the preview loop didn't already
     # set it from the user's variable (which may differ, e.g. FEAT-049 flattening).
     if isinstance(data, np.ndarray) and result.shape_preview is None:

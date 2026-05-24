@@ -242,7 +242,7 @@ class TestRunCell:
         assert "import" in result.error.lower()
 
     def test_dunder_blocked(self, grid):
-        result = run_cell("x = __import__('os')", {}, grid)
+        result = run_cell("z = __import__('os')", {}, grid)
         assert result.error is not None
 
     def test_undefined_var_free_names(self, grid):
