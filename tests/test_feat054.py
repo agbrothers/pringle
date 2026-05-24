@@ -75,17 +75,24 @@ def test_navigate_up_at_first_cell_no_call(clist):
 # New cell creation (Enter path)
 # ---------------------------------------------------------------------------
 
-def test_add_cell_calls_ensure_visible(clist):
+def test_add_cell_calls_ensure_visible(qapp, clist):
+    # ensureWidgetVisible is deferred via QTimer.singleShot — must processEvents first
     c0 = clist.add_cell("p = 5")
+    qapp.processEvents()  # drain c0's own deferred scroll
     with patch.object(clist._scroll, "ensureWidgetVisible") as mock_ewv:
         c1 = clist.add_cell(after_id=c0.cell_id)
+        mock_ewv.assert_not_called()   # not synchronous
+        qapp.processEvents()
         mock_ewv.assert_called_once_with(c1)
 
 
-def test_add_comment_cell_calls_ensure_visible(clist):
+def test_add_comment_cell_calls_ensure_visible(qapp, clist):
     c0 = clist.add_cell("q = 7")
+    qapp.processEvents()
     with patch.object(clist._scroll, "ensureWidgetVisible") as mock_ewv:
         cc = clist.add_comment_cell(after_id=c0.cell_id)
+        mock_ewv.assert_not_called()
+        qapp.processEvents()
         mock_ewv.assert_called_once_with(cc)
 
 

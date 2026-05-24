@@ -29,7 +29,7 @@ from PyQt6.QtWidgets import (
     QWidget, QScrollArea, QVBoxLayout, QHBoxLayout, QPushButton,
     QFrame, QSizePolicy, QLabel, QApplication,
 )
-from PyQt6.QtCore import Qt, QObject, QThread, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import Qt, QObject, QThread, QTimer, pyqtSignal, pyqtSlot
 
 from pringle.cell_widget import CellWidget
 from pringle.slider_widget import SliderWidget
@@ -449,7 +449,7 @@ class CellListWidget(QWidget):
                     cell.set_source(source)
                 if not self._skip_rebuild:
                     cell.focus()
-                    self._scroll.ensureWidgetVisible(cell)
+                    QTimer.singleShot(0, lambda c=cell: self._scroll.ensureWidgetVisible(c))
                 if source and not self._skip_rebuild:
                     self._rebuild_namespace()
                 self._update_placeholder()
@@ -466,7 +466,7 @@ class CellListWidget(QWidget):
             cell.set_source(source)
         if not self._skip_rebuild:
             cell.focus()
-            self._scroll.ensureWidgetVisible(cell)
+            QTimer.singleShot(0, lambda c=cell: self._scroll.ensureWidgetVisible(c))
         if source and not self._skip_rebuild:
             self._rebuild_namespace()
         self._update_placeholder()
@@ -504,7 +504,7 @@ class CellListWidget(QWidget):
                     self._assign_folder(cell, self._infer_folder(idx + 1))
                 if not self._skip_rebuild:
                     cell.focus()
-                    self._scroll.ensureWidgetVisible(cell)
+                    QTimer.singleShot(0, lambda c=cell: self._scroll.ensureWidgetVisible(c))
                 self._update_placeholder()
                 return cell
 
@@ -515,7 +515,7 @@ class CellListWidget(QWidget):
             self._assign_folder(cell, self._infer_folder(len(self._cells) - 1))
         if not self._skip_rebuild:
             cell.focus()
-            self._scroll.ensureWidgetVisible(cell)
+            QTimer.singleShot(0, lambda c=cell: self._scroll.ensureWidgetVisible(c))
         self._update_placeholder()
         return cell
 

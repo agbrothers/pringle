@@ -58,7 +58,7 @@ With no remaining callers, `new_cell_requested = pyqtSignal()` on `_ExprBox` can
 ---
 
 ### FEAT-061 — Auto-scroll expression panel to reveal newly added cell
-**Status:** Open  
+**Status:** Closed (implemented 2026-05-24)  
 **Logged:** 2026-05-24
 
 **Description:**  

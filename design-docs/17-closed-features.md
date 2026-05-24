@@ -6,6 +6,16 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-061 — Auto-scroll expression panel to reveal newly added cell
+**Status:** Closed (implemented 2026-05-24)
+
+**Implementation:**
+- **`pringle/cell_list.py`**: Added `QTimer` to the `PyQt6.QtCore` import. Replaced the four direct `self._scroll.ensureWidgetVisible(cell)` calls inside `not self._skip_rebuild` guards in `add_cell` and `add_comment_cell` with `QTimer.singleShot(0, lambda c=cell: self._scroll.ensureWidgetVisible(c))`. The lambda captures `cell` by default argument to avoid closure rebinding. Session restore paths (`_skip_rebuild=True`) are unaffected.
+- **`tests/test_feat061.py`**: 5 tests — verifies `ensureWidgetVisible` is not called synchronously during `add_cell`/`add_comment_cell`, is called after `processEvents()`, and is suppressed during session restore.
+- **`tests/test_feat054.py`**: Updated `test_add_cell_calls_ensure_visible` and `test_add_comment_cell_calls_ensure_visible` to call `processEvents()` before asserting (previously passed because the call was synchronous).
+
+---
+
 ### FEAT-062 — Revert: Enter in slider min/max/step fields should not create a new cell
 **Status:** Closed (implemented 2026-05-24)
 
