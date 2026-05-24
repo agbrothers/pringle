@@ -1,3 +1,7 @@
+> **ARCHIVED** — Issue tracking moved to GitHub Issues as of 2026-05-24.
+> Active issues: `gh issue list` or https://github.com/agbrothers/pringle/issues
+> This file is frozen and will not be updated.
+
 # Pringle — Feature Backlog
 
 Desired features and enhancements are logged here as they are identified. Each entry includes a description, motivation, and implementation notes or open questions where known.
@@ -7,6 +11,264 @@ See [17-closed-features.md](17-closed-features.md) for implemented features.
 
 ---
 
+
+### FEAT-066 — Migrate issue tracking from markdown files to GitHub Issues
+**Status:** Closed (completed 2026-05-24) — GitHub issue: #134  
+**Logged:** 2026-05-24
+
+**Migration progress (2026-05-24):**
+- [x] Phase 1: Labels, issue templates (`.github/ISSUE_TEMPLATE/`), `.gitmessage` created
+- [x] Phase 2: Closed issues migrated (bugs, features, perf — chronological order)
+- [x] Phase 3: Open issues migrated
+- [x] Phase 4: Docs updated (roles, CLAUDE.md, archive headers)
+- [x] FEAT-066 filed on GitHub as #134; markdown files frozen
+
+**Description:**  
+Replace the current markdown-file issue tracking system (docs 14–19) with GitHub Issues managed via the `gh` CLI. Includes a full retroactive migration of all closed and open issues, creation of GitHub issue templates and a commit message template, and updates to all three role docs and `CLAUDE.md`.
+
+This is the last issue logged under the FEAT-XXX naming scheme. Future issues are filed directly on GitHub without a prefix.
+
+**Motivation:**  
+- The closed-issue markdown files (16, 17, 19) are becoming bloated as the natural byproduct of active development, making them slow to skim and harder to search.
+- GitHub Issues provides label-based filtering by type (bug / feature / performance) and severity without requiring separate files.
+- `gh issue list --json number,title,labels,body` retrieves all issue content in one structured call, equivalent to a single `Read` on a markdown file and more amenable to future scale.
+- Closing an issue via `gh issue close <N>` with a commit reference creates a bidirectional link visible in both the issue and the commit — replacing the manual **Status: Closed (fixed YYYY-MM-DD)** updates in markdown.
+- Issue templates in `.github/ISSUE_TEMPLATE/` enforce consistent structure for any new team member without requiring them to read historical examples.
+- Commit message templates lower the bar for correctly formatted commits on first contribution.
+
+**Tradeoffs considered:**  
+- **Full migration vs. forward-only**: Forward-only (stop writing to markdown, file new issues on GitHub) would be faster but would leave the historical record split across two systems. Full migration costs more upfront but results in a single source of truth. User chose full migration.
+- **ID numbering**: GitHub uses a single sequential integer pool across all issue types. The BUG-XXX / FEAT-XXX / PERF-XXX prefixes that signal type are replaced by labels. All existing references to those IDs in design docs and code comments become legacy historical pointers — no mass find-and-replace; document the cutover in `CLAUDE.md` and move on.
+- **Closed issue state**: Closed issues should be created and immediately closed on GitHub, with the closing comment linking to the fixing commit. This preserves their resolved status rather than polluting the open queue.
+- **Markdown archives**: Files 14–19 are frozen (not deleted) after migration. Files 14, 15, 18 (open backlogs) get a header note pointing to GitHub. Files 16, 17, 19 (closed archives) are left as-is as historical reference with a similar header note.
+- **Connectivity**: `gh` requires network access for writes; markdown files are fully local. Acceptable tradeoff given the team is always online during development sessions.
+
+---
+
+**Implementation Steps:**
+
+**Phase 1 — GitHub setup (planner)**
+
+1. Create labels on the repo:
+   - Type labels: `bug`, `feature`, `performance`
+   - Severity labels (bugs only): `critical`, `high`, `medium`, `low`
+   - `open` and `closed` are handled by GitHub issue state, not labels
+
+   ```bash
+   gh label create bug --color d73a4a --description "Incorrect behavior"
+   gh label create feature --color a2eeef --description "New capability or enhancement"
+   gh label create performance --color 0075ca --description "Speed or memory optimization"
+   gh label create critical --color b60205 --description "Crash or data loss"
+   gh label create high --color e4e669 --description "Major functional impact"
+   gh label create medium --color fbca04 --description "Moderate impact"
+   gh label create low --color c2e0c6 --description "Minor or cosmetic impact"
+   gh label create benchmark --color 5319e7 --description "Issue carries benchmark results"
+   ```
+
+2. Create `.github/ISSUE_TEMPLATE/` directory with three templates (see template content below).
+
+3. Create `.gitmessage` commit template at repo root and commit it so all contributors get it on clone (see template content below).
+
+---
+
+**Phase 2 — Migrate closed issues (planner)**
+
+Process all closed issues in chronological order of their resolution date, interleaving bugs, features, and performance items. For each:
+
+```bash
+# Create the issue (closed issues get their type label only)
+gh issue create \
+  --title "<concise description from markdown header>" \
+  --body "<full markdown body from the closed doc>" \
+  --label "bug"          # or "feature" or "performance"
+
+# Immediately close it with a link to the fixing commit
+gh issue close <N> \
+  --comment "Fixed in https://github.com/agbrothers/pringle/commit/<sha>"
+```
+
+To find the relevant commit SHA for a given bug or feature, search git log by the old issue ID or keywords from the fix description:
+
+```bash
+git log --oneline --all | grep -i "BUG-013\|orbit\|incremental"
+```
+
+When code links are relevant (root cause points to a specific file/line), embed them in the issue body as:
+```
+https://github.com/agbrothers/pringle/blob/main/pringle/renderer.py#L35-L36
+```
+
+Use `main` branch for code links (stable reference); the commit link covers the exact state at fix time.
+
+For cross-issue references in an issue body, if the referenced issue has not been created yet, use a `[→ #TBD: <old-id>]` placeholder and edit the issue once the referenced issue exists:
+```bash
+gh issue edit <N> --body "<updated body with real #M links>"
+```
+
+Approximate chronological order for the migration (by resolution date):
+
+*2026-05-15:* BUG-002, BUG-003  
+*2026-05-18:* BUG-006, BUG-008, BUG-010, BUG-011, BUG-012, BUG-014, BUG-015, BUG-016, BUG-017, BUG-018, BUG-019  
+*2026-05-20:* BUG-001, BUG-007, BUG-009, BUG-020, BUG-021, BUG-022, BUG-024  
+*2026-05-21:* BUG-023, BUG-025, BUG-026, BUG-027, BUG-028  
+*2026-05-22:* BUG-013, BUG-030, BUG-031, BUG-032, BUG-033, BUG-034, BUG-035, BUG-036, BUG-039 (comment cell rebuild)  
+*2026-05-23:* BUG-037, BUG-038, BUG-039 (crosshair drift), BUG-040, BUG-041, BUG-042, BUG-043, BUG-044, BUG-045  
+*2026-05-24:* BUG-046, BUG-047  
+
+Closed features and performance items: read `17-closed-features.md` and `19-closed-performance.md` for resolution dates and interleave accordingly.
+
+---
+
+**Phase 3 — Migrate open issues (planner)**
+
+Open issues are created without closing. Process in backlog order: bugs (14) → features (15) → performance (18).
+
+Current open bugs: none (14-bug-backlog.md is empty as of 2026-05-24).
+
+Open features in order (FEAT-017, FEAT-018, FEAT-035, FEAT-036, FEAT-037, FEAT-047, FEAT-048, FEAT-056, FEAT-064, FEAT-066):
+```bash
+gh issue create \
+  --title "<concise description>" \
+  --body "<full markdown body>" \
+  --label "feature"
+```
+
+FEAT-066 (this issue) is filed on GitHub last, as a `feature` issue, once all others have been migrated. After filing, immediately reference the GitHub issue number in this markdown entry and freeze the file.
+
+Open performance items: read `18-performance-backlog.md` in index order.
+
+---
+
+**Phase 4 — Update documentation (planner)**
+
+Update the following files to reflect the new workflow. Do not modify code files.
+
+**`design-docs/roles/planner.md`** — replace references to `14-bug-backlog.md` / `15-feature-backlog.md` / `16-closed-bugs.md` / `17-closed-features.md` with `gh issue` commands:
+- `gh issue create --title "..." --body "..." --label "bug|feature|performance"` to file a new issue
+- `gh issue list` / `gh issue view <N>` to read existing issues
+- `gh issue close <N> --comment "..."` is no longer the planner's job (that belongs to the developer); the planner only creates and describes issues
+
+**`design-docs/roles/developer.md`** — replace references to markdown backlogs:
+- "The user will reference open issues" → `gh issue view <N>` or GitHub URL
+- "Remove items from the backlogs and add them to the closed docs" → `gh issue close <N> --comment "Fixed in <commit-url>"`
+- Remove specific file references (14, 15, 16, 17, 18, 19); replace with "GitHub Issues on the pringle repo"
+
+**`design-docs/roles/profiler.md`** — replace references to `18-performance-backlog.md` / `19-closed-performance.md`:
+- Benchmark results are posted as a dedicated **Benchmark Results** subsection in the body of the relevant GitHub performance issue (via `gh issue edit <N> --body "..."`) rather than maintained in a separate file. All such issues carry the `benchmark` label (`gh issue list --label benchmark` for quick lookup).
+- Filing new performance issues: `gh issue create --label performance --label benchmark` (add `benchmark` when the issue will carry measured results)
+- Reading open performance issues: `gh issue list --label performance`
+
+**`CLAUDE.md`** — three targeted updates:
+1. In the **Design Docs** section, add a note after entries 14–19: *"Docs 14–19 are frozen archives as of 2026-05-24; active issue tracking moved to GitHub Issues. See `gh issue list` or the repo issue tracker."*
+2. In the **GENERAL** section, add: *"When resuming work, check open GitHub Issues (`gh issue list`) in addition to the architecture decisions doc."*
+3. Update the **ROLES** section: add a line noting that the planner role uses `gh issue` commands rather than editing markdown backlog files.
+
+**`design-docs/14-bug-backlog.md`**, **`15-feature-backlog.md`**, **`18-performance-backlog.md`** — add to the top of each:
+```
+> **ARCHIVED** — Issue tracking moved to GitHub Issues as of 2026-05-24.
+> Active issues: `gh issue list` or https://github.com/agbrothers/pringle/issues
+> This file is frozen and will not be updated.
+```
+
+---
+
+**Issue template content:**
+
+`.github/ISSUE_TEMPLATE/bug.md`:
+```markdown
+---
+name: Bug
+about: Incorrect or crashing behavior
+labels: bug
+---
+
+**Severity:** <!-- critical / high / medium / low -->
+
+**Description:**
+<!-- What goes wrong and under what conditions. -->
+
+**Reproduction steps:**
+1. 
+2. 
+
+**Root cause:**
+<!-- Best current understanding of why this happens. -->
+
+**Suggested fix:**
+<!-- Implementation sketch or approach. -->
+
+**Tests to add:**
+- 
+```
+
+`.github/ISSUE_TEMPLATE/feature.md`:
+```markdown
+---
+name: Feature
+about: New capability or enhancement
+labels: feature
+---
+
+**Description:**
+<!-- What this adds or changes. -->
+
+**Motivation:**
+<!-- Why this is worth doing. -->
+
+**Depends on:**
+<!-- Other issues that must land first, if any. -->
+
+**Implementation sketch:**
+<!-- File-level plan, code snippets, or open questions. -->
+
+**Tests to add:**
+- 
+```
+
+`.github/ISSUE_TEMPLATE/performance.md`:
+```markdown
+---
+name: Performance
+about: Speed or memory optimization
+labels: performance
+---
+
+**Profile data:**
+<!-- Measured cost, benchmark configuration, flame graph notes. -->
+
+**Root cause:**
+<!-- Why this is slow or expensive. -->
+
+**Suggested fix:**
+<!-- Implementation approach and expected improvement. -->
+
+**Performance target:**
+<!-- What "done" looks like in measurable terms. -->
+```
+
+---
+
+**Commit message template (`.gitmessage`):**
+
+```
+# <type>(<scope>): <short summary>  (keep under 72 chars total)
+# type:  fix | feat | perf | refactor | test | docs | chore
+# scope: renderer | cell | session | ui | dag | evaluator | safety | tests
+
+
+# Closes #<N>   ← GitHub issue number (omit if no associated issue)
+# Related #<N>  ← for partial progress on an issue
+
+# ---------- 72-char ruler --------------------------------------------- #
+```
+
+---
+
+**Open questions:**
+
+- **Severity labels on non-bug issues**: Feature and performance issues currently don't carry severity. Worth adding `priority` labels (e.g. `p1`, `p2`, `p3`) that apply across all types? Deferred — add if the team finds it useful.
+
+---
 
 ### FEAT-064 — Syntax color settings panel
 **Status:** Open  

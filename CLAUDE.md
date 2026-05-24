@@ -8,17 +8,18 @@ Pringle is an open-source, python-native 3D scientific plotting tool for visuali
 
 **Why:** Existing interactive plotting tools, like Desmos 3D, are great but limited to their own expression language and have no Python ecosystem integration. Pringle brings the same UX to Python/numpy/scipy data structures.
 
-**How to apply:** When resuming work, read `design-docs/05-architecture-decisions.md` for locked choices and `design-docs/14-bug-backlog.md` / `design-docs/15-feature-backlog.md` for current open work.
+**How to apply:** When resuming work, read `design-docs/05-architecture-decisions.md` for locked choices and check open GitHub Issues (`gh issue list`) for current open work.
 
 
 ## ROLES
-You are assigned one of the following 3 roles: developer, planner, or profiler. If you have not been assigned a role, or if details regarding your role has been lost to compaction or otherwise appear ambiguous, you must ask the user to re-verify before proceeding. This is critically important to prevent stepping on the toes of other team members. Once assigned, please read the corresponding role description markdown file in /design-docs/roles. 
+You are assigned one of the following 3 roles: developer, planner, or profiler. If you have not been assigned a role, or if details regarding your role has been lost to compaction or otherwise appear ambiguous, you must ask the user to re-verify before proceeding. This is critically important to prevent stepping on the toes of other team members. Once assigned, please read the corresponding role description markdown file in /design-docs/roles. The planner role uses `gh issue` commands to file and read issues rather than editing markdown backlog files (see `design-docs/roles/planner.md`).
 
 
 ## GENERAL
 - DO NOT BE A SYCOPHANT. Provide direct and objective feedback. Flattery is not helpful and, in fact, can be actively detrimental if it masks important critical feedback. 
 - Review the relevant design-docs there when in need of context and before making assumptions or major changes. 
 - When designs or code changes, always update the relevant design-docs to capture the difference. Do not update the docs if the user has not been consulted or did not sign off on the change. 
+- When resuming work, check open GitHub Issues (`gh issue list`) in addition to the architecture decisions doc.
 
 
 ## DEVELOPMENT
@@ -81,3 +82,5 @@ You are assigned one of the following 3 roles: developer, planner, or profiler. 
 - `18` Performance backlog
 - `19` Closed performance items
 - `20` Profiling SOP
+
+**Note:** Docs 14–19 are frozen archives as of 2026-05-24; active issue tracking moved to GitHub Issues. See `gh issue list` or https://github.com/agbrothers/pringle/issues.

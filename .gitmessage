@@ -1,0 +1,9 @@
+# <type>(<scope>): <short summary>  (keep under 72 chars total)
+# type:  fix | feat | perf | refactor | test | docs | chore
+# scope: renderer | cell | session | ui | dag | evaluator | safety | tests
+
+
+# Closes #<N>   ← GitHub issue number (omit if no associated issue)
+# Related #<N>  ← for partial progress on an issue
+
+# ---------- 72-char ruler --------------------------------------------- #

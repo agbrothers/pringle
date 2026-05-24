@@ -1,3 +1,7 @@
+> **ARCHIVED** — Issue tracking moved to GitHub Issues as of 2026-05-24.
+> Active issues: `gh issue list --label performance` or https://github.com/agbrothers/pringle/issues
+> This file is frozen and will not be updated.
+
 # Pringle — Performance Backlog
 
 Performance issues are logged here as they are identified through static analysis, dynamic profiling, or user observation. Each entry includes a root cause analysis, estimated impact, and a suggested fix.
