@@ -42,32 +42,17 @@ class DragHandle(QLabel):
     drag_moved = pyqtSignal(int)   # global Y coordinate
     drag_ended = pyqtSignal()
 
-    _IDLE   = "color: transparent; font-size: 14px; padding: 0;"
-    _HOVER  = "color: #aaa; font-size: 14px; padding: 0;"
-    _ACTIVE = "color: #666; font-size: 14px; padding: 0;"
-
     def __init__(self, parent=None):
         super().__init__("⠿", parent)
         self.setFixedWidth(14)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setCursor(Qt.CursorShape.SizeVerCursor)
-        self.setStyleSheet(self._IDLE)
         self._dragging = False
-
-    def enterEvent(self, event):
-        if not self._dragging:
-            self.setStyleSheet(self._HOVER)
-        super().enterEvent(event)
-
-    def leaveEvent(self, event):
-        if not self._dragging:
-            self.setStyleSheet(self._IDLE)
-        super().leaveEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self._dragging = True
-            self.setStyleSheet(self._ACTIVE)
+            self.setStyleSheet("color: #666; font-size: 14px; padding: 0;")
             self.drag_started.emit()
         event.accept()
 
@@ -79,7 +64,7 @@ class DragHandle(QLabel):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and self._dragging:
             self._dragging = False
-            self.setStyleSheet(self._IDLE)
+            self.setStyleSheet("")  # clear inline style; QSS :hover takes over
             self.drag_ended.emit()
         event.accept()
 
@@ -125,17 +110,13 @@ class SubCell(QWidget):
         row.setSpacing(4)
 
         icon = QLabel(self._ICONS.get(self._sub_type, "⊂"))
-        icon.setStyleSheet("color: #888; font-size: 13px;")
+        icon.setObjectName("subcell_icon")
         icon.setFixedWidth(16)
         row.addWidget(icon)
 
         self._edit = CellTextEdit(self, allow_newline=True)
         self._edit.setPlaceholderText(
             self._PLACEHOLDERS.get(self._sub_type, "expression")
-        )
-        self._edit.setStyleSheet(
-            "QPlainTextEdit { border: 1px dashed #666; border-radius: 3px; "
-            "padding: 1px 4px; font-size: 12px; color: #ddd; background: transparent; }"
         )
         self._edit.textChanged.connect(self.content_changed)
         row.addWidget(self._edit, 1)
@@ -199,7 +180,6 @@ class CellTextEdit(QPlainTextEdit):
         self.setFont(_font)
         self.setTabStopDistance(QFontMetricsF(self.font()).horizontalAdvance(' ') * 4)
         self.setFrameShape(QFrame.Shape.NoFrame)
-        self.setStyleSheet("QPlainTextEdit { border: none; background: transparent; }")
         # documentSizeChanged fires after the layout engine has reflowed text
         # to the actual widget width — reliable for multi-line wrap.
         self.document().documentLayout().documentSizeChanged.connect(
@@ -404,7 +384,7 @@ class CellWidget(QWidget):
         data_rl.addWidget(self._run_btn)
 
         self._status_dot = QLabel("●")
-        self._status_dot.setStyleSheet("color: #bbb; font-size: 12px;")
+        self._status_dot.setObjectName("status_dot")
         self._status_dot.setToolTip("Cell status")
         data_rl.addWidget(self._status_dot)
         data_rl.addStretch(1)
@@ -421,19 +401,15 @@ class CellWidget(QWidget):
 
         # Error label (hidden until needed)
         self._error_label = QLabel()
+        self._error_label.setObjectName("error_label")
         self._error_label.setWordWrap(True)
-        self._error_label.setStyleSheet(
-            "color: #cc2222; font-size: 11px; padding: 2px 28px;"
-        )
         self._error_label.setVisible(False)
         outer.addWidget(self._error_label)
 
         # Warning label (hidden until needed)
         self._warning_label = QLabel()
+        self._warning_label.setObjectName("warning_label")
         self._warning_label.setWordWrap(True)
-        self._warning_label.setStyleSheet(
-            "color: #cc7700; font-size: 11px; padding: 2px 28px;"
-        )
         self._warning_label.setVisible(False)
         outer.addWidget(self._warning_label)
 
@@ -443,14 +419,14 @@ class CellWidget(QWidget):
         preview_row.setSpacing(0)
 
         self._preview_label = QLabel()
+        self._preview_label.setObjectName("preview_label")
         self._preview_label.setWordWrap(False)
-        self._preview_label.setStyleSheet("color: #888; font-size: 11px;")
         self._preview_label.setVisible(False)
         preview_row.addWidget(self._preview_label, 1)
 
         self._shape_label = QLabel()
+        self._shape_label.setObjectName("shape_label")
         self._shape_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._shape_label.setStyleSheet("color: #888; font-size: 11px;")
         self._shape_label.setVisible(False)
         preview_row.addWidget(self._shape_label)
 
@@ -458,8 +434,8 @@ class CellWidget(QWidget):
 
         # Thin separator line below
         line = QFrame()
+        line.setObjectName("separator")
         line.setFrameShape(QFrame.Shape.HLine)
-        line.setStyleSheet("color: #2a2a2a;")
         outer.addWidget(line)
 
     # ------------------------------------------------------------------

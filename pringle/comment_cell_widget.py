@@ -145,8 +145,6 @@ class CommentCellWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
-        self.setStyleSheet("background: #171717;")
-
         outer_h = QHBoxLayout(self)
         outer_h.setContentsMargins(0, 2, 4, 2)
         outer_h.setSpacing(0)
@@ -160,39 +158,25 @@ class CommentCellWidget(QWidget):
 
         # '#' decoration — pinned to top to align with the first text line
         hash_lbl = QLabel("#")
+        hash_lbl.setObjectName("hash_lbl")
         hash_lbl.setFixedWidth(18)
         hash_lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
-        hash_lbl.setStyleSheet(
-            "color: #4a7c59; font-size: 13px; font-family: 'Menlo', 'Consolas', 'Courier New'; font-weight: bold;"
-            "padding-top: 5px;"
-        )
         outer_h.addWidget(hash_lbl, 0, Qt.AlignmentFlag.AlignTop)
 
         # Auto-grow text area
         self._edit = _CommentEdit()
+        self._edit.setObjectName("comment_edit")
         self._edit.setPlaceholderText("comment…")
-        self._edit.setStyleSheet(
-            "QPlainTextEdit {"
-            "  background: transparent;"
-            "  color: #7a9e7a;"
-            "  font-size: 12px;"
-            "  font-family: 'Menlo', 'Consolas', 'Courier New';"
-            "  border: none;"
-            "  padding: 2px 0;"
-            "}"
-        )
         self._edit.document().contentsChanged.connect(
             lambda: self.content_changed.emit(self.cell_id)
         )
         outer_h.addWidget(self._edit, 1)
 
         del_btn = QPushButton("✕")
+        del_btn.setObjectName("comment_del")
         del_btn.setFixedSize(22, 22)
         del_btn.setFlat(True)
         del_btn.setToolTip("Delete comment")
-        del_btn.setStyleSheet(
-            "QPushButton { color: #555; } QPushButton:hover { color: #ccc; }"
-        )
         del_btn.clicked.connect(lambda: self.delete_requested.emit(self.cell_id))
         outer_h.addWidget(del_btn)
 

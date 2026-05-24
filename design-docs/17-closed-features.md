@@ -6,6 +6,24 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-060 — Consolidate Qt styles into a central `theme.qss` stylesheet
+**Status:** Closed (implemented 2026-05-24)
+
+**Implementation:**
+- **`pringle/theme.qss`** (new): Single QSS file organized by component. Covers `DragHandle` idle/hover, `CellTextEdit`, `SubCell CellTextEdit` (descendant override), cell labels (error/warning/preview/shape/status), separator lines, cell list chrome, slider labels, folder header, comment cell, style popover (all static styles), and the viewport ⚙ settings button.
+- **`pyproject.toml`**: Added `"*.qss"` to `package-data` so `theme.qss` is included in installs.
+- **`pringle/app.py`**: Added `_load_theme(app)` function using `importlib.resources.files("pringle").joinpath("theme.qss")`; called once at `QApplication` startup in `launch()` before `PringleWindow` is constructed. Added `setObjectName("settings_btn")` to the `⚙` overlay button; removed its `setStyleSheet` call.
+- **`pringle/cell_widget.py`**: Removed `DragHandle._IDLE`, `_HOVER`, `_ACTIVE` class constants and `enterEvent`/`leaveEvent` overrides — QSS `:hover` now handles idle↔hover; inline style is set only during active drag and cleared on release. Removed `setStyleSheet` from `CellTextEdit.__init__`, `SubCell` icon and edit, and the status/error/warning/preview/shape labels and separator. Added `setObjectName` to all of these.
+- **`pringle/cell_list.py`**: Removed `_btn_style` local variable and `setStyleSheet` calls on add buttons. Added `setObjectName` to scroll area, container, placeholder, drop indicator, and both add buttons.
+- **`pringle/slider_widget.py`**: Removed `setStyleSheet` from `sep_dot`, `step_lbl`, and separator `QFrame`. Added `setObjectName` to each.
+- **`pringle/folder_cell_widget.py`**: Removed `setStyleSheet` from folder header, toggle/name/del buttons, name edit, and separator. Added `setObjectName` to each.
+- **`pringle/comment_cell_widget.py`**: Removed widget-level `setStyleSheet("background: #171717;")` and all child `setStyleSheet` calls. Added `setObjectName` to hash label, comment edit, and delete button.
+- **`pringle/style_popover.py`**: Removed the large self `setStyleSheet` block; removed `_rb_style` and `_BTN_STYLE` local variables. Added `setObjectName("render_mode")` to radio buttons, `setObjectName("normalize_cb")` to checkboxes, `setObjectName("cmap_swatch")` to colormap buttons, `setObjectName("rev_btn")` to the reverse button.
+- **Dynamic calls kept**: `_update_color_dot` (per-instance color), `_DATA_DOT` state machine (idle/stale/ok/error), `_validate_bounds` red borders, `_indicate_error` flash, `_on_name_text_changed` invalid-name border, `_refresh_swatch` color swatch.
+- **`tests/test_feat060.py`**: 6 tests — theme.qss loads non-empty, `_load_theme` sets app stylesheet, `DragHandle` has no `enterEvent`/`leaveEvent`, color dot dynamic call, error border on invalid slider name, data-dot state machine cycles.
+
+---
+
 ### FEAT-059 — Parametric surface rendering from `xyz = (3, N, M)` assignment
 **Status:** Closed (implemented 2026-05-24)
 

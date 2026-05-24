@@ -79,38 +79,29 @@ class FolderCellWidget(QWidget):
 
         # Header row
         header = QWidget()
-        header.setStyleSheet(
-            "background: #252525; border-top: 1px solid #3a3a3a; border-bottom: 1px solid #3a3a3a;"
-        )
+        header.setObjectName("folder_header")
         row = QHBoxLayout(header)
         row.setContentsMargins(6, 2, 6, 2)
         row.setSpacing(4)
 
         self._toggle_btn = QPushButton("▼")
+        self._toggle_btn.setObjectName("folder_toggle")
         self._toggle_btn.setFixedSize(20, 20)
         self._toggle_btn.setFlat(True)
-        self._toggle_btn.setStyleSheet("QPushButton { color: #888; } QPushButton:hover { color: #ccc; }")
         self._toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._toggle_btn.clicked.connect(self._on_toggle)
         row.addWidget(self._toggle_btn)
 
         self._name_label = QPushButton(self._name)
+        self._name_label.setObjectName("folder_name")
         self._name_label.setFlat(True)
         self._name_label.setCursor(Qt.CursorShape.IBeamCursor)
         self._name_label.setToolTip("Click to rename group")
-        self._name_label.setStyleSheet(
-            "QPushButton { font-weight: bold; font-size: 12px; color: #ccc;"
-            " text-align: left; padding: 0; border: none; }"
-            "QPushButton:hover { color: #fff; }"
-        )
         self._name_label.clicked.connect(self._on_edit_clicked)
         row.addWidget(self._name_label, 1)
 
         self._name_edit = QLineEdit(self._name)
-        self._name_edit.setStyleSheet(
-            "font-weight: bold; font-size: 12px; border: 1px solid #555;"
-            "border-radius: 2px; background: #1e1e1e; color: #eee;"
-        )
+        self._name_edit.setObjectName("folder_name_edit")
         self._name_edit.setVisible(False)
         self._name_edit.returnPressed.connect(self._commit_rename)
         self._name_edit.editingFinished.connect(self._commit_rename)
@@ -127,9 +118,9 @@ class FolderCellWidget(QWidget):
         row.addWidget(self._eye_btn)
 
         del_btn = QPushButton("✕")
+        del_btn.setObjectName("folder_del")
         del_btn.setFixedSize(22, 22)
         del_btn.setFlat(True)
-        del_btn.setStyleSheet("QPushButton { color: #555; } QPushButton:hover { color: #ccc; }")
         del_btn.setToolTip("Delete group (members are kept)")
         del_btn.clicked.connect(lambda: self.delete_requested.emit(self.cell_id))
         row.addWidget(del_btn)
@@ -143,8 +134,8 @@ class FolderCellWidget(QWidget):
 
         # Separator
         sep = QFrame()
+        sep.setObjectName("folder_sep")
         sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet("color: #333;")
         outer.addWidget(sep)
 
     # ------------------------------------------------------------------

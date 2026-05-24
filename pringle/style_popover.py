@@ -65,15 +65,6 @@ class StylePopoverWidget(QFrame):
         self.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
         self.setFrameShape(QFrame.Shape.Box)
         self.setLineWidth(1)
-        self.setStyleSheet(
-            "StylePopoverWidget { background: #1e1e1e; border: 1px solid #555; border-radius: 4px; }"
-            "QLabel { color: #ccc; font-size: 12px; }"
-            "QLineEdit { background: #2d2d2d; color: #e0e0e0; border: 1px solid #555;"
-            "            border-radius: 3px; padding: 2px 4px; }"
-            "QDoubleSpinBox { background: #2d2d2d; color: #e0e0e0; border: 1px solid #555;"
-            "                 border-radius: 3px; padding: 1px 4px; }"
-            "QDoubleSpinBox::up-button, QDoubleSpinBox::down-button { width: 14px; }"
-        )
         self._build_ui()
 
     _RENDER_MODES = ["circles", "line", "spheres", "arrows"]
@@ -155,13 +146,12 @@ class StylePopoverWidget(QFrame):
             right_col.setSpacing(4)
             right_col.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
             self._render_group = QButtonGroup(self)
-            _rb_style = "QRadioButton { color: #ccc; font-size: 12px; }"
             for i, (label, mode) in enumerate([
                 ("Circles", "circles"), ("Line", "line"), ("Spheres", "spheres"), ("Arrows", "arrows")
             ]):
                 btn = QRadioButton(label)
+                btn.setObjectName("render_mode")
                 btn.setChecked(self._style.scatter_render_mode == mode)
-                btn.setStyleSheet(_rb_style)
                 self._render_group.addButton(btn, i)
                 right_col.addWidget(btn)
             self._render_group.idToggled.connect(self._on_render_mode_changed)
@@ -172,8 +162,8 @@ class StylePopoverWidget(QFrame):
 
             # Normalize checkbox — shown only when Arrows mode is active
             self._norm_cb = QCheckBox("Normalize lengths")
+            self._norm_cb.setObjectName("normalize_cb")
             self._norm_cb.setChecked(self._style.normalize_arrows)
-            self._norm_cb.setStyleSheet("QCheckBox { color: #ccc; font-size: 12px; }")
             self._norm_cb.toggled.connect(self._on_normalize_changed)
             self._norm_row = self._norm_cb
             layout.addWidget(self._norm_cb)
@@ -182,8 +172,8 @@ class StylePopoverWidget(QFrame):
         elif self._show_normalize:
             # Standalone normalize row for vector-type cells (always arrows, no mode choice)
             self._norm_cb = QCheckBox("Normalize lengths")
+            self._norm_cb.setObjectName("normalize_cb")
             self._norm_cb.setChecked(self._style.normalize_arrows)
-            self._norm_cb.setStyleSheet("QCheckBox { color: #ccc; font-size: 12px; }")
             self._norm_cb.toggled.connect(self._on_normalize_changed)
             layout.addWidget(self._norm_cb)
 
@@ -197,35 +187,27 @@ class StylePopoverWidget(QFrame):
         cmap_row.setSpacing(3)
 
         _SWATCH_W, _SWATCH_H = 48, 28
-        _BTN_STYLE = (
-            "QPushButton { border: 2px solid transparent; border-radius: 2px; padding: 0px; }"
-            "QPushButton:checked { border: 2px solid #fff; }"
-        )
         self._cmap_btns: dict[str, QPushButton] = {}
         for cmap_name in COLORMAPS:
             pix = _make_cmap_pixmap(cmap_name, _SWATCH_W, _SWATCH_H)
             btn = QPushButton()
+            btn.setObjectName("cmap_swatch")
             btn.setFixedSize(_SWATCH_W + 4, _SWATCH_H + 4)
             btn.setIcon(QIcon(pix))
             btn.setIconSize(QSize(_SWATCH_W, _SWATCH_H))
             btn.setCheckable(True)
             btn.setChecked(self._style.colormap == cmap_name)
             btn.setToolTip(cmap_name)
-            btn.setStyleSheet(_BTN_STYLE)
             btn.clicked.connect(lambda _checked, n=cmap_name: self._on_cmap_selected(n))
             cmap_row.addWidget(btn)
             self._cmap_btns[cmap_name] = btn
 
         self._rev_btn = QPushButton("⇄")
+        self._rev_btn.setObjectName("rev_btn")
         self._rev_btn.setFixedSize(28, _SWATCH_H + 4)
         self._rev_btn.setCheckable(True)
         self._rev_btn.setChecked(self._style.colormap_reversed)
         self._rev_btn.setToolTip("Reverse colormap")
-        self._rev_btn.setStyleSheet(
-            "QPushButton { color: #aaa; background: #2d2d2d; border: 1px solid #555;"
-            "              border-radius: 2px; font-size: 13px; }"
-            "QPushButton:checked { color: #fff; background: #3a5a8a; border-color: #4a7ab0; }"
-        )
         self._rev_btn.toggled.connect(self._on_cmap_reversed)
         cmap_row.addWidget(self._rev_btn)
         cmap_row.addStretch()

@@ -1,0 +1,164 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Pringle — application theme (dark, v1)
+   Loaded once at QApplication startup via _load_theme() in app.py.
+
+   Dynamic styles stay in Python (color dot, data-dot state machine,
+   validation borders, transient flash animations).  Everything else
+   lives here.  See design-docs/15-feature-backlog.md FEAT-060.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Drag handle ─────────────────────────────────────────────────── */
+DragHandle { color: transparent; font-size: 14px; padding: 0; }
+DragHandle:hover { color: #aaa; }
+
+/* ── Cell text edit (primary, standalone) ────────────────────────── */
+CellTextEdit { border: none; background: transparent; }
+
+/* ── Sub-cell edit (descendant override — higher specificity) ─────── */
+SubCell CellTextEdit {
+    border: 1px dashed #666;
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-size: 12px;
+    color: #ddd;
+    background: transparent;
+}
+QLabel#subcell_icon { color: #888; font-size: 13px; }
+
+/* ── Cell widget status / diagnostic labels ──────────────────────── */
+QLabel#error_label   { color: #cc2222; font-size: 11px; padding: 2px 28px; }
+QLabel#warning_label { color: #cc7700; font-size: 11px; padding: 2px 28px; }
+QLabel#preview_label { color: #888; font-size: 11px; }
+QLabel#shape_label   { color: #888; font-size: 11px; }
+QLabel#status_dot    { color: #bbb;  font-size: 12px; }
+
+/* ── Horizontal separator lines ──────────────────────────────────── */
+QFrame#separator  { color: #2a2a2a; }
+QFrame#folder_sep { color: #333; }
+
+/* ── Cell list ────────────────────────────────────────────────────── */
+QScrollArea#cell_scroll { background: #171717; border: none; }
+QWidget#cell_container  { background-color: #171717; }
+QLabel#placeholder      { color: #aaa; font-size: 13px; padding: 24px; }
+QFrame#drop_indicator   { background-color: #4a9eff; border: none; }
+QPushButton#add_btn {
+    color: #555;
+    padding: 8px;
+    font-size: 13px;
+    background: transparent;
+}
+QPushButton#add_btn:hover { color: #ccc; }
+
+/* ── Slider widget secondary labels ──────────────────────────────── */
+QLabel#sep_dot  { color: #888; padding: 0 2px; }
+QLabel#step_lbl { color: #888; font-size: 10px; }
+
+/* ── Folder cell header ───────────────────────────────────────────── */
+QWidget#folder_header {
+    background: #252525;
+    border-top: 1px solid #3a3a3a;
+    border-bottom: 1px solid #3a3a3a;
+}
+QPushButton#folder_toggle { color: #888; }
+QPushButton#folder_toggle:hover { color: #ccc; }
+QPushButton#folder_name {
+    font-weight: bold;
+    font-size: 12px;
+    color: #ccc;
+    text-align: left;
+    padding: 0;
+    border: none;
+}
+QPushButton#folder_name:hover { color: #fff; }
+QLineEdit#folder_name_edit {
+    font-weight: bold;
+    font-size: 12px;
+    border: 1px solid #555;
+    border-radius: 2px;
+    background: #1e1e1e;
+    color: #eee;
+}
+QPushButton#folder_del { color: #555; }
+QPushButton#folder_del:hover { color: #ccc; }
+
+/* ── Comment cell ─────────────────────────────────────────────────── */
+CommentCellWidget { background: #171717; }
+QLabel#hash_lbl {
+    color: #4a7c59;
+    font-size: 13px;
+    font-family: 'Menlo', 'Consolas', 'Courier New';
+    font-weight: bold;
+    padding-top: 5px;
+}
+QPlainTextEdit#comment_edit {
+    background: transparent;
+    color: #7a9e7a;
+    font-size: 12px;
+    font-family: 'Menlo', 'Consolas', 'Courier New';
+    border: none;
+    padding: 2px 0;
+}
+QPushButton#comment_del { color: #555; }
+QPushButton#comment_del:hover { color: #ccc; }
+
+/* ── Style popover ────────────────────────────────────────────────── */
+StylePopoverWidget {
+    background: #1e1e1e;
+    border: 1px solid #555;
+    border-radius: 4px;
+}
+StylePopoverWidget QLabel { color: #ccc; font-size: 12px; }
+StylePopoverWidget QLineEdit {
+    background: #2d2d2d;
+    color: #e0e0e0;
+    border: 1px solid #555;
+    border-radius: 3px;
+    padding: 2px 4px;
+}
+StylePopoverWidget QDoubleSpinBox {
+    background: #2d2d2d;
+    color: #e0e0e0;
+    border: 1px solid #555;
+    border-radius: 3px;
+    padding: 1px 4px;
+}
+StylePopoverWidget QDoubleSpinBox::up-button,
+StylePopoverWidget QDoubleSpinBox::down-button { width: 14px; }
+QRadioButton#render_mode { color: #ccc; font-size: 12px; }
+QCheckBox#normalize_cb   { color: #ccc; font-size: 12px; }
+QPushButton#cmap_swatch {
+    border: 2px solid transparent;
+    border-radius: 2px;
+    padding: 0px;
+}
+QPushButton#cmap_swatch:checked { border: 2px solid #fff; }
+QPushButton#rev_btn {
+    color: #aaa;
+    background: #2d2d2d;
+    border: 1px solid #555;
+    border-radius: 2px;
+    font-size: 13px;
+}
+QPushButton#rev_btn:checked {
+    color: #fff;
+    background: #3a5a8a;
+    border-color: #4a7ab0;
+}
+
+/* ── Viewport ⚙ settings button (overlay) ────────────────────────── */
+QPushButton#settings_btn {
+    color: #555;
+    font-size: 16px;
+    background: rgba(255,255,255,0.75);
+    border-radius: 5px;
+    border: 1px solid rgba(0,0,0,0.18);
+}
+QPushButton#settings_btn:hover {
+    background: rgba(255,255,255,0.95);
+    color: #222;
+}
+QPushButton#settings_btn:checked {
+    background: rgba(74,158,255,0.85);
+    color: #fff;
+    border-color: rgba(74,158,255,0.6);
+}

@@ -7,7 +7,7 @@ where   = ["."]
 include = ["pringle", "pringle.*"]
 
 [tool.setuptools.package-data]
-pringle = ["assets/*.png"]
+pringle = ["assets/*.png", "*.qss"]
 
 [project]
 name = "pringle"

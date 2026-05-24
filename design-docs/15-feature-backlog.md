@@ -8,7 +8,7 @@ See [17-closed-features.md](17-closed-features.md) for implemented features.
 ---
 
 ### FEAT-060 — Consolidate Qt styles into a central `theme.qss` stylesheet
-**Status:** Open  
+**Status:** Closed (implemented 2026-05-24)
 **Logged:** 2026-05-24
 
 **Description:**  

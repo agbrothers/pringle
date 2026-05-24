@@ -299,24 +299,22 @@ class CellListWidget(QWidget):
         outer.setSpacing(0)
 
         self._scroll = QScrollArea()
+        self._scroll.setObjectName("cell_scroll")
         self._scroll.setWidgetResizable(True)
         self._scroll.setFrameShape(QFrame.Shape.NoFrame)
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._scroll.setStyleSheet("QScrollArea { background: #171717; border: none; }")
         outer.addWidget(self._scroll)
 
         self._container = QWidget()
-        self._container.setStyleSheet("background-color: #171717;")
+        self._container.setObjectName("cell_container")
         self._layout = QVBoxLayout(self._container)
         self._layout.setContentsMargins(0, 4, 0, 4)
         self._layout.setSpacing(0)
 
         # Empty-state placeholder
         self._placeholder = QLabel("Press + to add an expression")
+        self._placeholder.setObjectName("placeholder")
         self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._placeholder.setStyleSheet(
-            "color: #aaa; font-size: 13px; padding: 24px;"
-        )
         self._layout.addWidget(self._placeholder)
         self._layout.addStretch(1)  # push cells to top
         self._scroll.setWidget(self._container)
@@ -324,30 +322,26 @@ class CellListWidget(QWidget):
         # Drop indicator: absolutely positioned 2-px accent line (not in layout)
         from PyQt6.QtWidgets import QFrame as _QFrame
         self._drop_indicator = _QFrame(self._container)
+        self._drop_indicator.setObjectName("drop_indicator")
         self._drop_indicator.setFixedHeight(2)
-        self._drop_indicator.setStyleSheet("background-color: #4a9eff; border: none;")
         self._drop_indicator.hide()
 
-        # Add buttons: equation cell (left) and data cell (right)
-        _btn_style = (
-            "QPushButton { color: #555; padding: 8px; font-size: 13px; background: transparent; }"
-            "QPushButton:hover { color: #ccc; }"
-        )
+        # Add buttons: equation cell (left) and folder (right)
         add_row = QHBoxLayout()
         add_row.setContentsMargins(0, 0, 0, 0)
         add_row.setSpacing(0)
 
         self._add_eq_btn = QPushButton("+ Equation")
+        self._add_eq_btn.setObjectName("add_btn")
         self._add_eq_btn.setFlat(True)
         self._add_eq_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._add_eq_btn.setStyleSheet(_btn_style)
         self._add_eq_btn.clicked.connect(lambda: self.add_cell(after_id=self._focused_cell_id()))
         add_row.addWidget(self._add_eq_btn)
 
         self._add_folder_btn = QPushButton("+ Folder")
+        self._add_folder_btn.setObjectName("add_btn")
         self._add_folder_btn.setFlat(True)
         self._add_folder_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._add_folder_btn.setStyleSheet(_btn_style)
         self._add_folder_btn.clicked.connect(lambda: self.add_folder(after_id=self._focused_cell_id()))
         add_row.addWidget(self._add_folder_btn)
 

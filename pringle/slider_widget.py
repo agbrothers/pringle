@@ -315,11 +315,11 @@ class SliderWidget(QWidget):
         row2.addWidget(self._max_box)
 
         sep = QLabel("·")
-        sep.setStyleSheet("color: #888; padding: 0 2px;")
+        sep.setObjectName("sep_dot")
         row2.addWidget(sep)
 
         step_lbl = QLabel("step")
-        step_lbl.setStyleSheet("color: #888; font-size: 10px;")
+        step_lbl.setObjectName("step_lbl")
         row2.addWidget(step_lbl)
 
         self._step_box = _ExprBox(self._step)
@@ -362,8 +362,8 @@ class SliderWidget(QWidget):
 
         # Separator
         line = QFrame()
+        line.setObjectName("separator")
         line.setFrameShape(QFrame.Shape.HLine)
-        line.setStyleSheet("color: #2a2a2a;")
         outer.addWidget(line)
 
     # ------------------------------------------------------------------

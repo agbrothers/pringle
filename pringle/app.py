@@ -261,23 +261,12 @@ class _ViewportContainer(QWidget):
         layout.addWidget(viewport)
 
         self._btn = QPushButton("⚙", self)
+        self._btn.setObjectName("settings_btn")
         self._btn.setFixedSize(self._BTN_SIZE, self._BTN_SIZE)
         self._btn.setFlat(True)
         self._btn.setCheckable(True)
         self._btn.setToolTip("Axis & view settings")
         self._btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn.setStyleSheet(
-            "QPushButton {"
-            "  color: #555; font-size: 16px;"
-            "  background: rgba(255,255,255,0.75);"
-            "  border-radius: 5px; border: 1px solid rgba(0,0,0,0.18);"
-            "}"
-            "QPushButton:hover { background: rgba(255,255,255,0.95); color: #222; }"
-            "QPushButton:checked {"
-            "  background: rgba(74,158,255,0.85); color: #fff;"
-            "  border-color: rgba(74,158,255,0.6);"
-            "}"
-        )
         self._btn.clicked.connect(self.settings_toggled)
         self._reposition_btn()
 
@@ -856,11 +845,19 @@ class PringleWindow(QMainWindow):
         return self._view_settings
 
 
+def _load_theme(app: QApplication) -> None:
+    """Load theme.qss from the package and apply it as the application stylesheet."""
+    from importlib.resources import files
+    qss = files("pringle").joinpath("theme.qss").read_text(encoding="utf-8")
+    app.setStyleSheet(qss)
+
+
 def launch(argv=None) -> int:
     """Start the Pringle Qt application. Returns exit code."""
     app = QApplication(argv or sys.argv)
     app.setApplicationName("pringle")
     app.setWindowIcon(QIcon(str(_ICON_PATH)))
+    _load_theme(app)
 
     win = PringleWindow(grid=make_grid(GridConfig(n=64)))
     win.show()
