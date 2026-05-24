@@ -9,6 +9,51 @@ See [20-profiling-sop.md](20-profiling-sop.md) for the profiling standard operat
 
 ---
 
+## Current Benchmark — After BUG-038/040/041/042 fixes (2026-05-24, n=128, 60 frames, GC disabled)
+
+Run via `python tests/bench_slider_animation.py --n 128 --frames 60 --no-gc`.
+
+Covers changes since 2026-05-22: BUG-038/040/041/042 evaluation crash fixes (`evaluator.py`, `recurrence.py`, `dag.py`, `namespace.py`) and renderer in-place color update fix.
+
+**Result: PASS at 37% of 33 ms budget.**
+
+| Component | 2026-05-22 | 2026-05-24 | Δ | Notes |
+|-----------|-----------|-----------|---|-------|
+| DAG cache hit (PERF-001 closed) | 0.00 ms | **0.00 ms** | — | No change |
+| AST pipeline (6 downstream cells) | 1.09 ms | **0.95 ms** | -13% | Within noise |
+| Cell evaluation chain | 5.14 ms | **5.10 ms** | -1% | Stable |
+| `make_surface_mesh` (full, constrained) | 4.09 ms | **3.67 ms** | -10% | Likely noise |
+| ↳ `_clip_mesh_to_mask` (Numba) | 1.16 ms | **1.25 ms** | +8% | Within noise |
+| `execute_recurrence` (200 steps) | 3.32 ms | **2.91 ms** | -12% | Within noise |
+| `make_scatter_mesh` (200-pt path) | 0.80 ms | **0.66 ms** | -18% | Within noise |
+| **Estimated total CPU frame** | **13.34 ms** | **12.34 ms** | **-7.5%** | |
+
+No regressions. Minor improvements throughout are within normal measurement variance.
+
+**Code-review note:** `_cast_float32` in `evaluator.py` (BUG-042) wraps all render-type `np.asarray` casts in `warnings.catch_warnings(record=True)` + `np.isinf()` scan. Measured overhead: ~0.005 ms/cell/frame, ~0.03 ms/frame for 6 cells — negligible at current scale.
+
+---
+
+## Vector-Field Animation Benchmark (2026-05-24, N=4096 arrows, 30 frames, GC disabled)
+
+Run via `python tests/bench_vector_field.py --n-arrows 4096 --frames 30 --no-gc`.
+
+**Result: PASS.** Post-PERF-017 in-place path confirmed at 1.25 ms (3.8% of budget).
+
+| Component | Mean ms | P95 ms | % budget | Notes |
+|-----------|---------|--------|---------|-------|
+| `_arrow_matrix` single call | 0.08 | 0.11 | 0.2% | Per-arrow baseline |
+| Python loop extrapolated N=4096 | ~310 | — | 939% | Old path (not used in app) |
+| `make_arrow_mesh_full` (new mesh) | 15.19 | 16.01 | 46% | First frame / count change |
+| `inplace_buffer_update` (PERF-017) | **1.25** | 1.46 | **3.8%** | Steady-state animation |
+| Vectorized batch speedup vs loop | 226.9× | — | — | matrix_batch vs matrix_loop |
+| In-place speedup vs full rebuild | 13.3× | — | — | PERF-017 confirmed |
+| `anim = frames[T]` eval only | 0.00 | 0.00 | 0% | Near-free numpy index |
+
+Steady-state animation frame (in-place path): ~1.25 ms. Full rebuild (first frame, arrow-count change): ~16 ms.
+
+---
+
 ## Vector-Field Animation Benchmark (2026-05-23, N=4096 arrows, 30 frames, GC disabled)
 
 Run via `python tests/bench_vector_field.py --n-arrows 4096 --frames 30 --no-gc`.
