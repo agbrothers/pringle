@@ -136,29 +136,42 @@ class TestSliderEnterPressed:
         assert len(clist._cells) == count_before + 1
         assert isinstance(clist._cells[clist._cells.index(slider) + 1], CellWidget)
 
-    def test_slider_min_field_enter_creates_cell(self, qapp, grid):
+    def test_slider_min_field_enter_does_not_create_cell(self, qapp, grid):
         clist = self._make_list(qapp, grid)
         slider = clist.add_cell("b = 3")
         count_before = len(clist._cells)
         _press_enter(slider._min_box)
         qapp.processEvents()
-        assert len(clist._cells) == count_before + 1
+        assert len(clist._cells) == count_before
 
-    def test_slider_max_field_enter_creates_cell(self, qapp, grid):
+    def test_slider_max_field_enter_does_not_create_cell(self, qapp, grid):
         clist = self._make_list(qapp, grid)
         slider = clist.add_cell("c = 3")
         count_before = len(clist._cells)
         _press_enter(slider._max_box)
         qapp.processEvents()
-        assert len(clist._cells) == count_before + 1
+        assert len(clist._cells) == count_before
 
-    def test_slider_step_field_enter_creates_cell(self, qapp, grid):
+    def test_slider_step_field_enter_does_not_create_cell(self, qapp, grid):
         clist = self._make_list(qapp, grid)
         slider = clist.add_cell("d = 3")
         count_before = len(clist._cells)
         _press_enter(slider._step_box)
         qapp.processEvents()
-        assert len(clist._cells) == count_before + 1
+        assert len(clist._cells) == count_before
+
+    def test_slider_min_field_enter_commits_value(self, qapp, grid):
+        """Enter in _min_box commits the value (fires committed) but does not add a cell."""
+        clist = self._make_list(qapp, grid)
+        slider = clist.add_cell("e = 3")
+        slider._min_box.setText("2")
+        committed: list[float] = []
+        slider._min_box.committed.connect(committed.append)
+        count_before = len(clist._cells)
+        _press_enter(slider._min_box)
+        qapp.processEvents()
+        assert committed, "committed signal should have fired"
+        assert len(clist._cells) == count_before
 
 
 # ---------------------------------------------------------------------------

@@ -7,6 +7,99 @@ See [17-closed-features.md](17-closed-features.md) for implemented features.
 
 ---
 
+### FEAT-062 — Revert: Enter in slider min/max/step fields should not create a new cell
+**Status:** Closed (implemented 2026-05-24)  
+**Logged:** 2026-05-24  
+**Reverts:** FEAT-051 (partial)
+
+**Description:**  
+FEAT-051 wired all five slider fields — value spinbox, min, max, step, and name — so that pressing Enter creates a new cell below the slider. After UX testing, this behavior is undesirable for the min/max/step fields: users press Enter to commit a numeric value and are surprised when a new empty cell appears. The revert applies only to `_ExprBox` (used by min, max, and step); the value spinbox (`_SpinBox`) and name field (`_NameLineEdit`) retain their Enter-to-new-cell behavior.
+
+**Motivation:**  
+Min, max, and step are auxiliary configuration fields. Users tab or click through them while adjusting slider bounds and do not expect focus to jump to a brand-new cell after editing a range limit. The value spinbox and name field are primary interaction points where the progression to the next cell is more natural.
+
+---
+
+**Changes required:**
+
+**`slider_widget.py` — `_ExprBox.keyPressEvent` (lines ~152–155):**
+
+Remove the `new_cell_requested` emission from the Enter key branch. The Enter handler should only commit the value:
+
+```python
+if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+    self.editingFinished.emit()   # commit value; do NOT emit new_cell_requested
+    return
+```
+
+**`slider_widget.py` — `SliderWidget._build_ui` (lines ~329–330):**
+
+Remove the connections that forward `new_cell_requested` from the three range boxes to `enter_pressed`:
+
+```python
+# Delete this entire block:
+for box in (self._min_box, self._max_box, self._step_box):
+    box.new_cell_requested.connect(lambda: self.enter_pressed.emit(self.cell_id))
+```
+
+**`slider_widget.py` — `_ExprBox` class:**
+
+With no remaining callers, `new_cell_requested = pyqtSignal()` on `_ExprBox` can be removed entirely to keep the class clean.
+
+**No changes needed elsewhere.** `CellListWidget._on_enter_pressed`, `SliderWidget.enter_pressed`, and the connections for `_spinbox` and `_name_edit` are all unaffected.
+
+---
+
+**Tests to add / update:**
+
+- `tests/test_feat051.py` — update the four cases that assert Enter in `_min_box`, `_max_box`, `_step_box`, and any combined range-field test. These should now assert that Enter does **not** emit `enter_pressed` from the slider. The value-spinbox and name-field cases are unchanged.
+- Add a new test: Enter in `_min_box` while the panel has a focused slider commits the value (`_min_box.committed` fires) but does not call `add_cell` and does not change the cell count.
+
+---
+
+### FEAT-061 — Auto-scroll expression panel to reveal newly added cell
+**Status:** Open  
+**Logged:** 2026-05-24
+
+**Description:**  
+When a new cell is added below the currently visible portion of the expression panel — via the add button, Enter, or any other means — the panel should scroll down so the new cell is visible. Currently, `add_cell` calls `self._scroll.ensureWidgetVisible(cell)` (added in FEAT-046), but this call fires before Qt has processed the layout change, so the cell has no geometry yet and the scroll position does not update.
+
+**Root cause:**  
+Qt layout changes (`insertWidget`, `addWidget`) are not applied synchronously. When `ensureWidgetVisible(cell)` is called immediately after inserting a widget into the layout, the cell's geometry is still `QRect(0, 0, 0, 0)` (or the default). Qt cannot compute the correct scroll offset for a widget it has not positioned yet, so the call is effectively a no-op for widgets that would require scrolling.
+
+**Fix:**  
+Defer the `ensureWidgetVisible` call via `QTimer.singleShot(0, ...)` so it runs after the current event loop iteration — by which point Qt has processed the layout event and the cell has a valid geometry.
+
+---
+
+**Implementation (`cell_list.py`):**
+
+Replace the two `ensureWidgetVisible` calls inside `add_cell` that fire after a user-initiated insert (i.e., when `not self._skip_rebuild`):
+
+```python
+# Before (lines ~452 and ~469):
+self._scroll.ensureWidgetVisible(cell)
+
+# After:
+QTimer.singleShot(0, lambda: self._scroll.ensureWidgetVisible(cell))
+```
+
+`QTimer` is already imported in `cell_list.py` (used by other callers). The lambda captures `cell` by closure — safe because the cell is a local in `add_cell` and the timer fires within the same Qt event loop iteration.
+
+Apply the same deferral to the equivalent calls in `add_comment_cell` and `add_folder` if they exhibit the same issue (the same root cause applies wherever `ensureWidgetVisible` is called synchronously after a layout insertion).
+
+**Scope note:** Do not defer the `ensureWidgetVisible` calls that occur during session restore (inside `_skip_rebuild` blocks or the YAML restore loop) — those already defer scroll via `_skip_rebuild` and scroll explicitly to the focused cell at the end of restore. Only the user-triggered insertion paths need the timer.
+
+---
+
+**Tests to add:**
+
+- After calling `add_cell(after_id=last_cell_id)` with the panel at maximum scroll, process events (`app.processEvents()`), then assert `_scroll.verticalScrollBar().value() == _scroll.verticalScrollBar().maximum()` (or that the new cell is within the visible viewport rect).
+- Same test for the add-button path (click the `+` button while scrolled to top with a full panel).
+- Regression: session restore does not scroll to the bottom (the last-focused cell remains in view, not the final cell in the list).
+
+---
+
 ### FEAT-060 — Consolidate Qt styles into a central `theme.qss` stylesheet
 **Status:** Closed (implemented 2026-05-24)
 **Logged:** 2026-05-24

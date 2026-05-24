@@ -81,7 +81,6 @@ def _fmt(v: float) -> str:
 class _ExprBox(QLineEdit):
     """Numeric input that also accepts expression strings resolvable to a scalar."""
     committed = pyqtSignal(float)
-    new_cell_requested = pyqtSignal()
     navigate_up = pyqtSignal()
     navigate_down = pyqtSignal()
     navigate_left = pyqtSignal()   # emitted when Left is pressed at position 0
@@ -150,8 +149,7 @@ class _ExprBox(QLineEdit):
             self.navigate_right.emit()
             return
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            self.editingFinished.emit()   # commit value first
-            self.new_cell_requested.emit()
+            self.editingFinished.emit()   # commit value; do NOT emit new_cell_requested
             return
         super().keyPressEvent(event)
 
@@ -325,9 +323,6 @@ class SliderWidget(QWidget):
         self._step_box = _ExprBox(self._step)
         self._step_box.setFixedWidth(60)
         row2.addWidget(self._step_box)
-
-        for box in (self._min_box, self._max_box, self._step_box):
-            box.new_cell_requested.connect(lambda: self.enter_pressed.emit(self.cell_id))
 
         outer.addLayout(row2)
 

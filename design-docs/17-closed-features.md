@@ -6,6 +6,16 @@ See [15-feature-backlog.md](15-feature-backlog.md) for open features.
 
 ---
 
+### FEAT-062 — Revert: Enter in slider min/max/step fields should not create a new cell
+**Status:** Closed (implemented 2026-05-24)
+
+**Implementation:**
+- **`pringle/slider_widget.py`**: Removed `new_cell_requested = pyqtSignal()` from `_ExprBox`. Changed `_ExprBox.keyPressEvent` Enter branch to emit only `editingFinished` (commits value) — `new_cell_requested` is no longer emitted. Removed the `for box in (self._min_box, self._max_box, self._step_box): box.new_cell_requested.connect(...)` block from `SliderWidget._build_ui`.
+- **`tests/test_feat051.py`**: Renamed and flipped the three min/max/step Enter tests (`_creates_cell` → `_does_not_create_cell`). Added `test_slider_min_field_enter_commits_value` to assert `committed` fires and cell count is unchanged.
+- Value spinbox (`_SpinBox`) and name field (`_NameLineEdit`) Enter-to-new-cell behavior unchanged.
+
+---
+
 ### FEAT-060 — Consolidate Qt styles into a central `theme.qss` stylesheet
 **Status:** Closed (implemented 2026-05-24)
 
