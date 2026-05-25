@@ -28,7 +28,7 @@ from numpy import (
     reshape, ravel, transpose, squeeze,
     # Math
     sum, prod, cumsum, cumprod,
-    min, max, mean, median, std, var,
+    min, max, mean, median, std, var, maximum, minimum,
     diff, gradient, dot, cross, outer,
     # Boolean / masking
     where, select, isnan, isinf, isfinite, logical_and, logical_or, logical_not,
@@ -86,7 +86,7 @@ def build_equation_namespace() -> dict:
         "transpose": transpose, "squeeze": squeeze,
         "sum": sum, "prod": prod, "cumsum": cumsum, "cumprod": cumprod,
         "min": min, "max": max, "mean": mean, "median": median,
-        "std": std, "var": var,
+        "std": std, "var": var, "maximum": maximum, "minimum": minimum, 
         "diff": diff, "gradient": gradient,
         "dot": dot, "cross": cross, "outer": outer,
         "where": where, "select": select,
