@@ -11,8 +11,8 @@ pringle = ["assets/*.png", "*.qss"]
 
 [project]
 name = "pringle"
-version = "0.0.0"
-description = "Interactive graph an surface plotter."
+version = "0.1.0"
+description = "Interactive graph and surface plotter with python expressions."
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
