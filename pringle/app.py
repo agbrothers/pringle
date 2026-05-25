@@ -472,8 +472,10 @@ class PringleWindow(QMainWindow):
     def _on_open(self) -> None:
         if not self._confirm_discard():
             return
+        import importlib.resources
+        examples_dir = str(importlib.resources.files("pringle") / "examples")
         path, _ = QFileDialog.getOpenFileName(
-            self, "Open session", "", "YAML (*.yaml *.yml);;Pringle session (*.pringle)"
+            self, "Open session", examples_dir, "YAML (*.yaml *.yml);;Pringle session (*.pringle)"
         )
         if not path:
             return

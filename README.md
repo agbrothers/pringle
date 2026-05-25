@@ -17,7 +17,7 @@
 ```bash
 pip install pringle
 
-crunch examples/lorenz-vector-field.yml
+crunch pringle/examples/lorenz-vector-field.yml
 ```
 
 ## Why Pringle?
@@ -73,10 +73,10 @@ Requires Python ≥ 3.11.
 crunch path/to/session.yml
 
 # Open a tutorial
-crunch examples/tutorials/01_hello_surface.yml
+crunch pringle/examples/tutorials/01_hello_surface.yml
 
 # Alternative pringle alias
-pringle examples/tutorials/03_animation.yml
+pringle pringle/examples/tutorials/03_animation.yml
 ```
 
 ## Expression Language
@@ -94,20 +94,20 @@ Shapes `(N, 4)` and `(N, 6)` are auto-detected as 2D and 3D vector fields respec
 
 ## Tutorials
 
-Step-by-step sessions in [`examples/tutorials/`](examples/tutorials/):
+Step-by-step sessions in [`pringle/examples/tutorials/`](pringle/examples/tutorials/):
 
 | File | Concept |
 |---|---|
-| [`01_hello_surface.yml`](examples/tutorials/01_hello_surface.yml) | First surface — explicit `z = sin(x) * cos(y)` |
-| [`02_sliders.yml`](examples/tutorials/02_sliders.yml) | Interactive slider parameters |
-| [`03_animation.yml`](examples/tutorials/03_animation.yml) | Animated slider — traveling wave |
-| [`04_parametric.yml`](examples/tutorials/04_parametric.yml) | Parametric surface — sphere via `xyz` |
-| [`05_constraints.yml`](examples/tutorials/05_constraints.yml) | Constraint sub-cells — clipping a surface |
-| [`06_scatter.yml`](examples/tutorials/06_scatter.yml) | Scatter plot — helix point cloud |
-| [`07_vector_field.yml`](examples/tutorials/07_vector_field.yml) | 2D vector field — gradient of a surface |
-| [`08_recurrence.yml`](examples/tutorials/08_recurrence.yml) | Recurrence relation — integrating an ODE |
+| [`01_hello_surface.yml`](pringle/examples/tutorials/01_hello_surface.yml) | First surface — explicit `z = sin(x) * cos(y)` |
+| [`02_sliders.yml`](pringle/examples/tutorials/02_sliders.yml) | Interactive slider parameters |
+| [`03_animation.yml`](pringle/examples/tutorials/03_animation.yml) | Animated slider — traveling wave |
+| [`04_parametric.yml`](pringle/examples/tutorials/04_parametric.yml) | Parametric surface — sphere via `xyz` |
+| [`05_constraints.yml`](pringle/examples/tutorials/05_constraints.yml) | Constraint sub-cells — clipping a surface |
+| [`06_scatter.yml`](pringle/examples/tutorials/06_scatter.yml) | Scatter plot — helix point cloud |
+| [`07_vector_field.yml`](pringle/examples/tutorials/07_vector_field.yml) | 2D vector field — gradient of a surface |
+| [`08_recurrence.yml`](pringle/examples/tutorials/08_recurrence.yml) | Recurrence relation — integrating an ODE |
 
-More complex real-world examples live in [`examples/`](examples/).
+More complex real-world examples live in [`pringle/examples/`](pringle/examples/).
 
 ## Further Reading
 

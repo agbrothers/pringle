@@ -75,7 +75,7 @@ GPU render time can be measured via wgpu timestamp queries (`GPUQuerySet`), but 
 2. Generate a flame graph of the live app with py-spy (requires a display):
    ```bash
    # In one terminal: launch the app with memory.yml
-   python -m pringle examples/memory.yml &
+   python -m pringle pringle/examples/memory.yml &
    APP_PID=$!
 
    # In another: record for 30 seconds while the β slider animates
