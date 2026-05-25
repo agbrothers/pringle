@@ -21,9 +21,9 @@ Then proceed to update any other relevant design-docs and commit the changes via
 2. Write new tests where needed (optional). 
 3. Run full test suite. 
 4. Request user confirmation for UI/UX changes (optional).
-5. Close the GitHub issue with a commit link: `gh issue close <N> --comment "Fixed in ..."`.
-6. Review and update all relevant items in design-docs to reflect changes introduced to close the issue. 
-7. Commit changes.
+5. Review and update all relevant items in design-docs to reflect changes introduced to close the issue. 
+6. Commit changes.
+7. Close the GitHub issue with a commit link: `gh issue close <N> --comment "Fixed in ..."`.
 
 
 **NOTE**: Feel free to pause at any one of these steps to request clarification from the user. They would rather you be safe and ask when you are uncertain rather than waste a lot of time pursuing an incorrect path.
