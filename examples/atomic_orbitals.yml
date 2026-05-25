@@ -1,0 +1,380 @@
+version: 1
+grid:
+  x_min: -3.5
+  x_max: 3.5
+  y_min: -3.5
+  y_max: 3.5
+  z_min: -3.0
+  z_max: 4.0
+  n: 96
+cells:
+- id: sp30000-0000-0000-0000-000000000001
+  style:
+    color:
+    - 0.9
+    - 0.25
+    - 0.2
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# SP3 HYBRID ORBITALS
+
+
+    Four lobes in tetrahedral geometry (109.5° bond angles).
+
+
+    Surface: r = scale × ψ²  where ψ is the angular wave function.
+
+    Each lobe points toward a corner of a tetrahedron.
+
+
+    Grid: u = φ ∈ [0, 2π],  v = elevation ∈ [-π/2, π/2]'
+- id: sp30000-0000-0000-0000-000000000002
+  style:
+    color:
+    - 0.133333
+    - 0.133333
+    - 0.133333
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: scale = 5.0
+  name: scale
+  value: 5.0
+  min_val: 1.0
+  max_val: 20.0
+  step: 0.5
+  is_playing: false
+  anim_mode: pingpong
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+- id: sp30000-0000-0000-0000-000000000003
+  style:
+    color:
+    - 0.9
+    - 0.25
+    - 0.2
+    - 1.0
+    opacity: 0.82
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# ORBITAL 1 — lobe toward (+x +y +z)'
+- id: c46537eb-7e1f-45fe-affd-071a1ef80f2a
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: "psi_1 = 0.5*(0.2821 + 0.4886*(\n    cos(v)*cos(u) + \\\n    cos(v)*sin(u)\
+    \ + \\\n    sin(v)\n))"
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: 832e8287-df3d-4824-9bb0-3b9223414b56
+  style:
+    color:
+    - 0.8470588235294118
+    - 0.2196078431372549
+    - 0.2196078431372549
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: r_1 = scale * psi_1**2
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: sp30000-0000-0000-0000-000000000004
+  style:
+    color:
+    - 0.9
+    - 0.25
+    - 0.2
+    - 1.0
+    opacity: 0.82
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: "\nxyz = array([\n    r_1*cos(v)*cos(u), \n    r_1*cos(v)*sin(u), \n   \
+    \ r_1*sin(v),\n])"
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: sp30000-0000-0000-0000-000000000005
+  style:
+    color:
+    - 0.15
+    - 0.45
+    - 0.95
+    - 1.0
+    opacity: 0.82
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# ORBITAL 2 — lobe toward (+x -y -z)'
+- id: e413e70c-c520-488a-933d-3ac1052fa03b
+  style:
+    color:
+    - 0.14901960784313725
+    - 0.4470588235294118
+    - 0.9490196078431372
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: "psi_2 = 0.5*(0.2821 + 0.4886*(\n    cos(v)*cos(u) - \\\n    cos(v)*sin(u)\
+    \ - \\\n    sin(v)\n))"
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: 6a9e428e-57a6-47ae-9b85-84eceb538473
+  style:
+    color:
+    - 0.14901960784313725
+    - 0.4470588235294118
+    - 0.9490196078431372
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: r_2 = scale * psi_2**2
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: sp30000-0000-0000-0000-000000000006
+  style:
+    color:
+    - 0.15
+    - 0.45
+    - 0.95
+    - 1.0
+    opacity: 0.82
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: "xyz = array([\n    r_2*cos(v)*cos(u), \n    r_2*cos(v)*sin(u), \n    r_2*sin(v)\n\
+    ])"
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: sp30000-0000-0000-0000-000000000007
+  style:
+    color:
+    - 0.95
+    - 0.65
+    - 0.1
+    - 1.0
+    opacity: 0.82
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# ORBITAL 3 — lobe toward (-x +y -z)'
+- id: 73abd8d8-0170-4edf-9e01-7076d7ea061f
+  style:
+    color:
+    - 0.9254901960784314
+    - 0.6431372549019608
+    - 0.0
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: "psi_3 = 0.5*(0.2821 + 0.4886*(\n   -cos(v)*cos(u) + \\\n    cos(v)*sin(u)\
+    \ - \\\n    sin(v)\n))"
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: cca4cbdf-11cd-4eeb-9287-d3623b7faa04
+  style:
+    color:
+    - 0.9254901960784314
+    - 0.6431372549019608
+    - 0.0
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: r_3 = scale * psi_3**2
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: sp30000-0000-0000-0000-000000000008
+  style:
+    color:
+    - 0.9258411526679993
+    - 0.6459906697273254
+    - 0.0
+    - 1.0
+    opacity: 0.82
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: "xyz = array([\n    r_3*cos(v)*cos(u), \n    r_3*cos(v)*sin(u), \n    r_3*sin(v),\n\
+    ])"
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: sp30000-0000-0000-0000-000000000009
+  style:
+    color:
+    - 0.55
+    - 0.2
+    - 0.9
+    - 1.0
+    opacity: 0.82
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# ORBITAL 4 — lobe toward (-x -y +z)'
+- id: 170ea8d1-d6ec-41ef-a382-5df6fc1f68eb
+  style:
+    color:
+    - 0.2
+    - 0.6980392156862745
+    - 0.2980392156862745
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: "psi_4 = 0.5*(0.2821 + 0.4886*(\n   -cos(v)*cos(u) - \\\n    cos(v)*sin(u)\
+    \ + \\\n    sin(v)\n))"
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: d4c60257-6e46-4fd4-be4c-3757674c17ec
+  style:
+    color:
+    - 0.2
+    - 0.6980392156862745
+    - 0.2980392156862745
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: r_4 = scale * psi_4**2
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: sp30000-0000-0000-0000-000000000010
+  style:
+    color:
+    - 0.2
+    - 0.6980392156862745
+    - 0.2980392156862745
+    - 1.0
+    opacity: 0.82
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: "xyz = array([\n    r_4*cos(v)*cos(u), \n    r_4*cos(v)*sin(u), \n    r_4*sin(v)\n\
+    ])"
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+view:
+  show_axes: false
+  show_bbox: true
+  show_crosshair: false
+  show_light_bg: false
+  show_shadow: true
+  shadow_opacity: 0.4
+  camera_position:
+  - 0.9895402068609809
+  - 5.693939475626258
+  - 1.1690265657004073
+  orbit_target:
+  - 0.0
+  - 0.0
+  - 0.0
+  angular_velocity:
+  - -0.29546161067899673
+  - 0.0
