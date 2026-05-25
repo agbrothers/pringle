@@ -311,22 +311,6 @@ class TestSliderInternalNavigation:
         _press(slider._max_box, Qt.Key.Key_Down)
         assert received == [slider.cell_id]
 
-    def test_step_up_focuses_value(self, qapp):
-        slider = self._make_slider(qapp)
-        focused = []
-        orig = slider._spinbox.setFocus
-        slider._spinbox.setFocus = lambda *a: focused.append(True)
-        _press(slider._step_box, Qt.Key.Key_Up)
-        assert focused
-        slider._spinbox.setFocus = orig
-
-    def test_step_down_emits_navigate_down(self, qapp):
-        slider = self._make_slider(qapp)
-        received = []
-        slider.navigate_down_requested.connect(received.append)
-        _press(slider._step_box, Qt.Key.Key_Down)
-        assert received == [slider.cell_id]
-
     def test_min_right_at_end_focuses_max_at_0(self, qapp):
         slider = self._make_slider(qapp)
         slider._min_box.setText("0")
@@ -353,28 +337,6 @@ class TestSliderInternalNavigation:
         _press(slider._max_box, Qt.Key.Key_Left)
         assert focused
         slider._min_box.setFocus = orig_focus
-
-    def test_max_right_at_end_focuses_step_at_0(self, qapp):
-        slider = self._make_slider(qapp)
-        slider._max_box.setText("10")
-        slider._max_box.setCursorPosition(len(slider._max_box.text()))
-        focused = []
-        orig_focus = slider._step_box.setFocus
-        slider._step_box.setFocus = lambda *a: focused.append(True)
-        _press(slider._max_box, Qt.Key.Key_Right)
-        assert focused
-        slider._step_box.setFocus = orig_focus
-
-    def test_step_left_at_0_focuses_max_at_end(self, qapp):
-        slider = self._make_slider(qapp)
-        slider._step_box.setText("0.1")
-        slider._step_box.setCursorPosition(0)
-        focused = []
-        orig_focus = slider._max_box.setFocus
-        slider._max_box.setFocus = lambda *a: focused.append(True)
-        _press(slider._step_box, Qt.Key.Key_Left)
-        assert focused
-        slider._max_box.setFocus = orig_focus
 
     def test_min_left_at_0_is_noop(self, qapp):
         """Left at min position 0 should emit navigate_left but have no effect."""

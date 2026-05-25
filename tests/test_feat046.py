@@ -106,8 +106,7 @@ class TestVisibilityStash:
         """Eye-button state is preserved through a comment round-trip."""
         cell = clist.add_cell(source="w = cos(x)")
         cell_id = cell.cell_id
-        # Turn the eye off
-        cell._eye_btn.setChecked(False)
+        # Turn visibility off (eye button removed; use the method directly)
         cell._on_visibility_toggled(False)
         assert not cell.is_visible_cell()
 

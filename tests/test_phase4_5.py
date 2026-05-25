@@ -66,10 +66,11 @@ class TestCellWidget:
         assert cell._warning_label.isHidden()
 
     def test_style_color(self, qapp):
+        from pringle.cell_widget import ColorSwatchHandle
         style = CellStyle(color=(1.0, 0.0, 0.0, 1.0))
         cell = CellWidget(style=style)
-        dot_ss = cell._color_dot.styleSheet()
-        assert "255,0,0" in dot_ss or "ff0000" in dot_ss.lower()
+        assert isinstance(cell._swatch, ColorSwatchHandle)
+        assert cell._swatch._style.color[:3] == pytest.approx((1.0, 0.0, 0.0))
 
     def test_unique_ids(self, qapp):
         a = CellWidget()
@@ -169,7 +170,6 @@ class TestCellListWidget:
 
         rendered_types.clear()
         # Toggle visibility off
-        cell._eye_btn.setChecked(False)
         cell._on_visibility_toggled(False)
         qapp.processEvents()
 

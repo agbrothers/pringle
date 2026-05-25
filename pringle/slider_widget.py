@@ -25,7 +25,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
 from pringle.style import CellStyle, palette_color
-from pringle.cell_widget import DragHandle
+from pringle.cell_widget import DragHandle, ColorSwatchHandle
 from pringle.preprocess import MAGIC_NAMES, SPATIAL_NAMES
 
 
@@ -285,8 +285,9 @@ class SliderWidget(QWidget):
         self._min: float = min_val
         self._max: float = max_val
         self._step: float = step if step is not None else max(0.001, (max_val - min_val) / 100.0)
-        self._anim_dir: int = 1           # +1 or -1 for bounce
-        self._anim_mode: str = "pingpong"  # "pingpong" | "loop"
+        self._anim_dir: int = 1                # +1 or -1 for bounce
+        self._anim_mode: str = "pingpong"       # "pingpong" | "loop"
+        self._anim_speed_multiplier: float = 1.0  # 0.5, 1.0, or 2.0
 
         self._build_ui()
 
@@ -299,18 +300,20 @@ class SliderWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _build_ui(self):
-        self.setContentsMargins(0, 2, 0, 2)
+        self.setContentsMargins(0, 0, 0, 0)
 
-        # Outer: drag handle strip (left) + content area (right)
+        # Outer: colored swatch strip (left) + content area (right)
         outer_h = QHBoxLayout(self)
         outer_h.setContentsMargins(0, 0, 0, 0)
         outer_h.setSpacing(0)
 
-        self._drag_handle = DragHandle(self)
-        self._drag_handle.drag_started.connect(lambda: self.drag_started.emit(self.cell_id))
-        self._drag_handle.drag_moved.connect(lambda y: self.drag_moved.emit(self.cell_id, y))
-        self._drag_handle.drag_ended.connect(lambda: self.drag_ended.emit(self.cell_id))
-        outer_h.addWidget(self._drag_handle)
+        self._swatch = ColorSwatchHandle(self.style, self)
+        self._swatch.drag_started.connect(lambda: self.drag_started.emit(self.cell_id))
+        self._swatch.drag_moved.connect(lambda y: self.drag_moved.emit(self.cell_id, y))
+        self._swatch.drag_ended.connect(lambda: self.drag_ended.emit(self.cell_id))
+        # Slider swatch click: open style popover
+        self._swatch.style_requested.connect(self._on_style_requested)
+        outer_h.addWidget(self._swatch)
 
         content = QWidget()
         outer = QVBoxLayout(content)
@@ -320,7 +323,7 @@ class SliderWidget(QWidget):
 
         # --- Row 1: name + value spinbox (stretch) + delete ---
         row1 = QHBoxLayout()
-        row1.setContentsMargins(4, 0, 6, 0)
+        row1.setContentsMargins(10, 0, 6, 0)
         row1.setSpacing(6)
         self._row1 = row1
 
@@ -347,23 +350,25 @@ class SliderWidget(QWidget):
         self._spinbox.new_cell_requested.connect(lambda: self.enter_pressed.emit(self.cell_id))
         outer.addLayout(row1)
 
-        # --- Row 2: play + min + slider (stretch) + max + · + step label + step ---
+        # --- Row 2: play + min + slider (stretch) + max + ↺ ---
+        # play_wrap is fixed-width 62 to align min_box left with spinbox above
         row2 = QHBoxLayout()
-        row2.setContentsMargins(4, 0, 6, 0)
+        row2.setContentsMargins(6, 0, 6, 0)
         row2.setSpacing(6)
 
+        play_wrap = QWidget()
+        play_wrap.setFixedWidth(62)
+        play_inner = QHBoxLayout(play_wrap)
+        play_inner.setContentsMargins(0, 0, 0, 0)
+        play_inner.setSpacing(0)
         self._play_btn = QPushButton("▷")
         self._play_btn.setFixedSize(28, 24)
         self._play_btn.setCheckable(True)
         self._play_btn.setToolTip("Animate")
         self._play_btn.clicked.connect(self._on_play_toggled)
-        row2.addWidget(self._play_btn)
-
-        self._mode_btn = QPushButton("↔")
-        self._mode_btn.setFixedSize(28, 24)
-        self._mode_btn.setToolTip("Ping-pong — click to switch to loop")
-        self._mode_btn.clicked.connect(self._on_mode_toggled)
-        row2.addWidget(self._mode_btn)
+        play_inner.addWidget(self._play_btn)
+        play_inner.addStretch()
+        row2.addWidget(play_wrap)
 
         self._min_box = _ExprBox(self._min)
         self._min_box.setFixedWidth(60)
@@ -381,51 +386,37 @@ class SliderWidget(QWidget):
         self._max_box.committed.connect(lambda _: self._on_range_changed())
         row2.addWidget(self._max_box)
 
-        sep = QLabel("·")
-        sep.setObjectName("sep_dot")
-        row2.addWidget(sep)
-
-        step_lbl = QLabel("step")
-        step_lbl.setObjectName("step_lbl")
-        row2.addWidget(step_lbl)
-
-        self._step_box = _ExprBox(self._step)
-        self._step_box.setFixedWidth(60)
-        row2.addWidget(self._step_box)
+        self._controls_btn = QPushButton("↺")
+        self._controls_btn.setObjectName("slider_controls_btn")
+        self._controls_btn.setFixedSize(24, 24)
+        self._controls_btn.setFlat(True)
+        self._controls_btn.setToolTip("Step / speed / direction")
+        self._controls_btn.clicked.connect(self._on_controls_clicked)
+        row2.addWidget(self._controls_btn)
 
         outer.addLayout(row2)
 
-        # Arrow-key cross-cell navigation (FEAT-053)
-        # value → exit up / go to min row
+        # _step_box, _mode_btn kept as attributes for session.py access, not in layout
+        self._step_box = _ExprBox(self._step)
+        self._mode_btn = QPushButton("↔")  # kept for anim_mode API compatibility
+
+        # Arrow-key cross-cell navigation
         self._spinbox.navigate_up.connect(lambda: self.navigate_up_requested.emit(self.cell_id))
         self._spinbox.navigate_down.connect(lambda: self._min_box.setFocus())
-        # min → value / exit down / right to max
         self._min_box.navigate_up.connect(lambda: self._spinbox.setFocus())
         self._min_box.navigate_down.connect(lambda: self.navigate_down_requested.emit(self.cell_id))
         self._min_box.navigate_right.connect(
             lambda: (self._max_box.setFocus(), self._max_box.setCursorPosition(0))
         )
-        # max → value / exit down / left to min / right to step
         self._max_box.navigate_up.connect(lambda: self._spinbox.setFocus())
         self._max_box.navigate_down.connect(lambda: self.navigate_down_requested.emit(self.cell_id))
         self._max_box.navigate_left.connect(
             lambda: (self._min_box.setFocus(),
                      self._min_box.setCursorPosition(len(self._min_box.text())))
         )
-        self._max_box.navigate_right.connect(
-            lambda: (self._step_box.setFocus(), self._step_box.setCursorPosition(0))
-        )
-        # step → value / exit down / left to max  (right at end is no-op: unconnected)
-        self._step_box.navigate_up.connect(lambda: self._spinbox.setFocus())
-        self._step_box.navigate_down.connect(lambda: self.navigate_down_requested.emit(self.cell_id))
-        self._step_box.navigate_left.connect(
-            lambda: (self._max_box.setFocus(),
-                     self._max_box.setCursorPosition(len(self._max_box.text())))
-        )
-        # min navigate_left and step navigate_right are deliberately unconnected (no-op)
 
-        # Cell movement (Cmd+[/]/Up/Down) from any focused field
-        for _field in (self._spinbox, self._min_box, self._max_box, self._step_box):
+        # Cell movement from any focused field
+        for _field in (self._spinbox, self._min_box, self._max_box):
             _field.indent_at.connect(lambda: self.indent_requested.emit(self.cell_id))
             _field.outdent_at.connect(lambda: self.outdent_requested.emit(self.cell_id))
             _field.move_up_at.connect(lambda: self.move_up_requested.emit(self.cell_id))
@@ -481,6 +472,40 @@ class SliderWidget(QWidget):
     def set_name_validator(self, fn: Callable[[str], bool] | None) -> None:
         """Set a callback used to reject names already claimed by sibling sliders."""
         self._validate_name = fn
+
+    def refresh_swatch(self) -> None:
+        self._swatch.set_style(self.style)
+
+    def _on_style_requested(self) -> None:
+        from pringle.style_popover import StylePopoverWidget
+        popover = StylePopoverWidget(self.style, parent=self)
+        popover.style_changed.connect(self._on_style_changed)
+        popover.color_picker_requested.connect(self._open_color_picker)
+        pos = self._swatch.mapToGlobal(self._swatch.rect().bottomLeft())
+        popover.move(pos)
+        popover.show()
+
+    def _on_style_changed(self, new_style) -> None:
+        from dataclasses import replace
+        self.style = replace(new_style)
+        self.refresh_swatch()
+
+    def _open_color_picker(self) -> None:
+        from PyQt6.QtWidgets import QColorDialog
+        from PyQt6.QtGui import QColor
+        from dataclasses import replace
+        original_color = self.style.color
+        r, g, b, _ = original_color
+        dlg = QColorDialog(QColor.fromRgbF(r, g, b), self)
+
+        def _apply(qcolor: QColor) -> None:
+            self._on_style_changed(replace(self.style, color=(
+                qcolor.redF(), qcolor.greenF(), qcolor.blueF(), self.style.color[3],
+            )))
+
+        dlg.currentColorChanged.connect(_apply)
+        if not dlg.exec():
+            self._on_style_changed(replace(self.style, color=original_color))
 
     def set_resolver(self, fn: Callable[[str], float | None]) -> None:
         """Inject namespace resolver into all bound boxes."""
@@ -609,14 +634,22 @@ class SliderWidget(QWidget):
         self._min_box.setStyleSheet(red if self._value < self._min else "")
         self._max_box.setStyleSheet(red if self._value > self._max else "")
 
+    def _on_controls_clicked(self) -> None:
+        from pringle.slider_controls_popover import SliderControlsPopover
+        popover = SliderControlsPopover(self, parent=self)
+        pos = self._controls_btn.mapToGlobal(self._controls_btn.rect().bottomRight())
+        popover.move(pos.x() - popover.sizeHint().width(), pos.y() + 4)
+        popover.show()
+
     def set_anim_mode(self, mode: str) -> None:
         self._anim_mode = mode if mode in ("pingpong", "loop") else "pingpong"
-        if self._anim_mode == "loop":
-            self._mode_btn.setText("⟳")
-            self._mode_btn.setToolTip("Loop — click to switch to ping-pong")
-        else:
-            self._mode_btn.setText("↔")
-            self._mode_btn.setToolTip("Ping-pong — click to switch to loop")
+
+    def set_anim_speed_multiplier(self, multiplier: float) -> None:
+        _VALID = {0.5, 1.0, 2.0}
+        self._anim_speed_multiplier = multiplier if multiplier in _VALID else 1.0
+        # Apply new interval if currently animating
+        interval_ms = int(self._ANIM_INTERVAL_MS / self._anim_speed_multiplier)
+        self._anim_timer.setInterval(interval_ms)
 
     def _on_mode_toggled(self):
         self.set_anim_mode("loop" if self._anim_mode == "pingpong" else "pingpong")
@@ -625,6 +658,8 @@ class SliderWidget(QWidget):
         if checked:
             self._play_btn.setText("‖")
             self._anim_dir = 1
+            interval_ms = int(self._ANIM_INTERVAL_MS / self._anim_speed_multiplier)
+            self._anim_timer.setInterval(interval_ms)
             self._anim_timer.start()
         else:
             self._play_btn.setText("▷")

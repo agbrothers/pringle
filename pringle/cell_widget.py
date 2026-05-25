@@ -2,19 +2,12 @@
 CellWidget — a single expression cell in the equation panel.
 
 Layout (horizontal):
-  [color dot] [QPlainTextEdit] [+sub] [visibility eye] [delete ✕]
-
-Below the text edit (conditionally):
-  [SubCell ...]  — indented sub-cells (constraint / condition / initial_condition / recursion)
-  [error label]            — red, shown on eval error
-  [warning label]          — orange, shown on shape mismatch or undefined variable
+  [ColorSwatchHandle 10px] [QFrame — expression row + sub-cells + labels]
 
 The widget emits:
   content_changed(cell_id)  — debounced 300ms after each keystroke
-  delete_requested(cell_id) — when the ✕ button is clicked or Backspace
-                              on an empty cell
-  enter_pressed(cell_id)    — when Enter is pressed at end of text
-                              (caller inserts a new cell below)
+  delete_requested(cell_id) — ✕ button or Backspace on empty cell
+  enter_pressed(cell_id)    — Enter at end of text
 """
 
 from __future__ import annotations
@@ -25,22 +18,24 @@ from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QMenu,
     QLabel, QPlainTextEdit, QSizePolicy, QFrame,
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QKeyEvent, QFont, QFontMetricsF
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QPoint
+from PyQt6.QtGui import (
+    QKeyEvent, QFont, QFontMetricsF,
+    QPainter, QColor, QLinearGradient, QBrush,
+)
 
 from pringle.style import CellStyle
 
 
 # ---------------------------------------------------------------------------
-# Drag handle — left-edge strip for reordering cells
+# DragHandle — kept for SliderWidget / FolderCellWidget compatibility
 # ---------------------------------------------------------------------------
 
 class DragHandle(QLabel):
-    """14-px strip on the left of every cell. Shows ⠿ grip icon on hover;
-    click-drag emits position signals for CellListWidget to reorder cells."""
+    """14-px strip; click-drag emits position signals for reordering."""
 
     drag_started = pyqtSignal()
-    drag_moved = pyqtSignal(int)   # global Y coordinate
+    drag_moved = pyqtSignal(int)
     drag_ended = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -65,9 +60,103 @@ class DragHandle(QLabel):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and self._dragging:
             self._dragging = False
-            self.setStyleSheet("")  # clear inline style; QSS :hover takes over
+            self.setStyleSheet("")
             self.drag_ended.emit()
         event.accept()
+
+
+# ---------------------------------------------------------------------------
+# ColorSwatchHandle — 10-px colored strip; click → style popover, hold → drag
+# ---------------------------------------------------------------------------
+
+class ColorSwatchHandle(QWidget):
+    """
+    10-px wide left-edge strip for equation cells.
+
+    Short press (< 300 ms): emits style_requested (opens style popover).
+    Long press / hold: emits drag_started / drag_moved / drag_ended for reorder.
+    Color fill: solid CellStyle.color, or vertical colormap gradient when active.
+    """
+
+    drag_started   = pyqtSignal()
+    drag_moved     = pyqtSignal(int)   # global Y
+    drag_ended     = pyqtSignal()
+    style_requested = pyqtSignal()
+
+    _HOLD_MS = 300
+    _MIN_DRAG_PX = 4
+
+    def __init__(self, style: CellStyle, parent=None):
+        super().__init__(parent)
+        self._style = style
+        self.setFixedWidth(10)
+        self.setCursor(Qt.CursorShape.SizeVerCursor)
+        self._is_dragging = False
+        self._press_pos: QPoint | None = None
+        self._hold_timer: QTimer | None = None
+
+    def set_style(self, style: CellStyle) -> None:
+        self._style = style
+        self.update()
+
+    def set_visible(self, visible: bool) -> None:
+        self._cell_visible = visible
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        rect = self.rect()
+
+        if getattr(self, "_cell_visible", True) is False:
+            painter.fillRect(rect, QColor("#222222"))
+            return
+
+        if self._style.colormap:
+            import matplotlib
+            import numpy as np
+            cmap = matplotlib.colormaps[self._style.colormap]
+            if self._style.colormap_reversed:
+                cmap = cmap.reversed()
+            gradient = QLinearGradient(0, 0, 0, rect.height())
+            for t in np.linspace(0, 1, 8):
+                r, g, b, a = cmap(float(t))
+                gradient.setColorAt(float(t), QColor.fromRgbF(r, g, b, a))
+            painter.fillRect(rect, QBrush(gradient))
+        else:
+            r, g, b, a = self._style.color
+            painter.fillRect(rect, QColor.fromRgbF(r, g, b))
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._press_pos = event.globalPosition().toPoint()
+            self._is_dragging = False
+            self._hold_timer = QTimer(self)
+            self._hold_timer.setSingleShot(True)
+            self._hold_timer.timeout.connect(self._begin_drag)
+            self._hold_timer.start(self._HOLD_MS)
+        event.accept()
+
+    def mouseReleaseEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            if self._hold_timer and self._hold_timer.isActive():
+                self._hold_timer.stop()
+                self.style_requested.emit()
+            elif self._is_dragging:
+                self.drag_ended.emit()
+            self._is_dragging = False
+        event.accept()
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._is_dragging and self._press_pos is not None:
+            cur = event.globalPosition().toPoint()
+            if (cur - self._press_pos).manhattanLength() > self._MIN_DRAG_PX:
+                self.drag_moved.emit(cur.y())
+        event.accept()
+
+    def _begin_drag(self) -> None:
+        self._is_dragging = True
+        self.drag_started.emit()
 
 
 # ---------------------------------------------------------------------------
@@ -106,13 +195,15 @@ class SubCell(QWidget):
         self._build_ui()
 
     def _build_ui(self):
+        self.setStyleSheet("SubCell { border-top: 1px dashed #444; }")
         row = QHBoxLayout(self)
-        row.setContentsMargins(28, 1, 6, 1)
+        row.setContentsMargins(4, 2, 6, 2)
         row.setSpacing(4)
 
         icon = QLabel(self._ICONS.get(self._sub_type, "⊂"))
         icon.setObjectName("subcell_icon")
-        icon.setFixedWidth(16)
+        icon.setFixedWidth(10)
+        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         row.addWidget(icon)
 
         self._edit = CellTextEdit(self, allow_newline=True)
@@ -336,37 +427,38 @@ class CellWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _build_ui(self):
-        self.setContentsMargins(0, 2, 0, 2)
+        self.setContentsMargins(0, 0, 0, 0)
 
-        # Outer: drag handle strip (left) + content area (right)
+        # Outer: swatch strip (left) + content area (right)
         outer_h = QHBoxLayout(self)
         outer_h.setContentsMargins(0, 0, 0, 0)
         outer_h.setSpacing(0)
 
-        self._drag_handle = DragHandle(self)
-        self._drag_handle.drag_started.connect(lambda: self.drag_started.emit(self.cell_id))
-        self._drag_handle.drag_moved.connect(lambda y: self.drag_moved.emit(self.cell_id, y))
-        self._drag_handle.drag_ended.connect(lambda: self.drag_ended.emit(self.cell_id))
-        outer_h.addWidget(self._drag_handle)
+        self._swatch = ColorSwatchHandle(self.style, self)
+        self._swatch.drag_started.connect(lambda: self.drag_started.emit(self.cell_id))
+        self._swatch.drag_moved.connect(lambda y: self.drag_moved.emit(self.cell_id, y))
+        self._swatch.drag_ended.connect(lambda: self.drag_ended.emit(self.cell_id))
+        self._swatch.style_requested.connect(self._on_style_requested)
+        outer_h.addWidget(self._swatch)
 
         content = QWidget()
-        outer = QVBoxLayout(content)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(2)
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
         outer_h.addWidget(content, 1)
 
-        # Top row: [dot] [text] [eye] [+sub] [delete ✕]
-        row = QHBoxLayout()
-        row.setContentsMargins(4, 0, 6, 0)
-        row.setSpacing(4)
+        # _outer_frame: dashed border appears when sub-cells are present (Phase 4)
+        self._outer_frame = QFrame()
+        self._outer_frame.setObjectName("cellFrame")
+        outer = QVBoxLayout(self._outer_frame)
+        outer.setContentsMargins(0, 2, 0, 2)
+        outer.setSpacing(2)
+        content_layout.addWidget(self._outer_frame)
 
-        self._color_dot = QPushButton()
-        self._color_dot.setFixedSize(18, 18)
-        self._color_dot.setFlat(True)
-        self._color_dot.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._update_color_dot()
-        self._color_dot.clicked.connect(self._on_color_dot_clicked)
-        row.addWidget(self._color_dot)
+        # Top row: [text] [+sub] [delete ✕]
+        row = QHBoxLayout()
+        row.setContentsMargins(6, 0, 6, 0)
+        row.setSpacing(4)
 
         self._text_edit = CellTextEdit(self)
         self._text_edit.enter_at_end.connect(lambda: self.enter_pressed.emit(self.cell_id))
@@ -379,15 +471,6 @@ class CellWidget(QWidget):
         self._text_edit.move_up_at.connect(lambda: self.move_up_requested.emit(self.cell_id))
         self._text_edit.move_down_at.connect(lambda: self.move_down_requested.emit(self.cell_id))
         row.addWidget(self._text_edit, 1)
-
-        self._eye_btn = QPushButton("👁")
-        self._eye_btn.setFixedSize(24, 24)
-        self._eye_btn.setFlat(True)
-        self._eye_btn.setCheckable(True)
-        self._eye_btn.setChecked(True)
-        self._eye_btn.setToolTip("Toggle visibility")
-        self._eye_btn.clicked.connect(self._on_visibility_toggled)
-        row.addWidget(self._eye_btn)
 
         self._add_sub_btn = QPushButton("+")
         self._add_sub_btn.setFixedSize(24, 24)
@@ -408,7 +491,7 @@ class CellWidget(QWidget):
         # Data row: run arrow + status dot (hidden until data mode is active)
         self._data_row = QWidget()
         data_rl = QHBoxLayout(self._data_row)
-        data_rl.setContentsMargins(4, 0, 6, 2)
+        data_rl.setContentsMargins(6, 0, 6, 2)
         data_rl.setSpacing(4)
 
         self._run_btn = QPushButton("→")
@@ -430,7 +513,7 @@ class CellWidget(QWidget):
         self._sub_container = QWidget()
         self._sub_layout = QVBoxLayout(self._sub_container)
         self._sub_layout.setContentsMargins(0, 0, 0, 0)
-        self._sub_layout.setSpacing(1)
+        self._sub_layout.setSpacing(0)
         outer.addWidget(self._sub_container)
 
         # Error label (hidden until needed)
@@ -449,7 +532,7 @@ class CellWidget(QWidget):
 
         # Preview row: value preview (left) + shape (right)
         preview_row = QHBoxLayout()
-        preview_row.setContentsMargins(28, 0, 6, 0)
+        preview_row.setContentsMargins(6, 0, 6, 0)
         preview_row.setSpacing(0)
 
         self._preview_label = QLabel()
@@ -466,11 +549,11 @@ class CellWidget(QWidget):
 
         outer.addLayout(preview_row)
 
-        # Thin separator line below
+        # Thin separator below the frame
         line = QFrame()
         line.setObjectName("separator")
         line.setFrameShape(QFrame.Shape.HLine)
-        outer.addWidget(line)
+        content_layout.addWidget(line)
 
     # ------------------------------------------------------------------
     # Public API
@@ -549,6 +632,7 @@ class CellWidget(QWidget):
         )
         self._sub_cells.append(sub)
         self._sub_layout.addWidget(sub)
+        self._update_sub_border()
         self._debounce.start()
         return sub
 
@@ -557,7 +641,16 @@ class CellWidget(QWidget):
             self._sub_cells.remove(sub)
         self._sub_layout.removeWidget(sub)
         sub.deleteLater()
+        self._update_sub_border()
         self._debounce.start()
+
+    def _update_sub_border(self) -> None:
+        """Show dashed border on outer frame when sub-cells are present."""
+        has_subs = len(self._sub_cells) > 0
+        self._outer_frame.setStyleSheet(
+            "QFrame#cellFrame { border: 1px dashed #555; border-radius: 4px; margin: 1px; }"
+            if has_subs else ""
+        )
 
     def constraint_exprs(self) -> list[str]:
         return [s.source() for s in self._sub_cells if s.sub_type() == "constraint" and s.source().strip()]
@@ -641,7 +734,10 @@ class CellWidget(QWidget):
 
     def set_style(self, style: CellStyle) -> None:
         self.style = style
-        self._update_color_dot()
+        self.refresh_swatch()
+
+    def refresh_swatch(self) -> None:
+        self._swatch.set_style(self.style)
 
     def is_visible_cell(self) -> bool:
         return self._visible
@@ -662,28 +758,6 @@ class CellWidget(QWidget):
     # Internal
     # ------------------------------------------------------------------
 
-    def _update_color_dot(self):
-        if not self._visible:
-            bg = "#333333"
-        elif self.style.colormap:
-            import matplotlib
-            cmap = matplotlib.colormaps[self.style.colormap]
-            if self.style.colormap_reversed:
-                cmap = cmap.reversed()
-            stops = ", ".join(
-                f"stop:{i/5:.2f} #{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}"
-                for i, (r, g, b, _) in ((i, cmap(i / 5)) for i in range(6))
-            )
-            bg = f"qlineargradient(x1:0, y1:0, x2:1, y2:0, {stops})"
-        else:
-            r, g, b, _ = self.style.color
-            bg = "#{:02x}{:02x}{:02x}".format(int(r*255), int(g*255), int(b*255))
-        self._color_dot.setStyleSheet(
-            f"QPushButton {{ background: {bg}; "
-            f"border-radius: 9px; border: 1px solid rgba(0,0,0,0.15); }}"
-            f"QPushButton:hover {{ border: 1px solid rgba(0,0,0,0.35); }}"
-        )
-
     def _on_add_sub_clicked(self):
         menu = QMenu(self)
         menu.addAction("Add Recursion Rule", lambda: self.add_sub_cell("recursion"))
@@ -702,18 +776,24 @@ class CellWidget(QWidget):
 
     def _on_visibility_toggled(self, checked: bool):
         self._visible = checked
-        opacity = "1.0" if checked else "0.4"
-        self._text_edit.setStyleSheet(f"opacity: {opacity};")
-        self._update_color_dot()
+        opacity = "0.4" if not checked else ""
+        self._text_edit.setStyleSheet(f"opacity: {opacity};" if not checked else "")
+        self._swatch.set_visible(checked)
+        self.refresh_swatch()
         self.visibility_toggled.emit(self.cell_id, checked)
 
-    def _on_color_dot_clicked(self):
+    def _on_style_requested(self):
         from pringle.style_popover import StylePopoverWidget
-        popover = StylePopoverWidget(self.style, parent=self, show_render_mode=self._data_mode,
-                                     show_normalize=self._is_vector_cell)
+        popover = StylePopoverWidget(
+            self.style, parent=self,
+            show_render_mode=self._data_mode,
+            show_normalize=self._is_vector_cell,
+            visible=self._visible,
+        )
         popover.style_changed.connect(self._on_style_changed)
         popover.color_picker_requested.connect(self._open_color_picker)
-        pos = self._color_dot.mapToGlobal(self._color_dot.rect().bottomLeft())
+        popover.visible_toggled.connect(self._on_visibility_toggled)
+        pos = self._swatch.mapToGlobal(self._swatch.rect().bottomLeft())
         popover.move(pos)
         popover.show()
 
@@ -732,11 +812,10 @@ class CellWidget(QWidget):
 
         dlg.currentColorChanged.connect(_apply)
         if not dlg.exec():
-            # Cancelled — restore original
             self._on_style_changed(replace(self.style, color=original_color))
 
     def _on_style_changed(self, new_style):
         from dataclasses import replace
         self.style = replace(new_style)
-        self._update_color_dot()
+        self.refresh_swatch()
         self.style_updated.emit(self.cell_id)

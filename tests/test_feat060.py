@@ -62,13 +62,13 @@ def test_drag_handle_has_no_enter_leave_event(qapp):
 # ---------------------------------------------------------------------------
 
 def test_color_dot_reflects_cell_style_color(qapp):
-    """Color dot setStyleSheet still works after removing static styles."""
+    """ColorSwatchHandle reflects the cell style color."""
+    from pringle.cell_widget import ColorSwatchHandle
     style = CellStyle(color=(1.0, 0.0, 0.0, 1.0))
     cell = CellWidget(style=style)
-    # Trigger color dot update
-    cell._update_color_dot()
-    ss = cell._color_dot.styleSheet()
-    assert "#ff0000" in ss or "ff0000" in ss.lower()
+    assert isinstance(cell._swatch, ColorSwatchHandle)
+    assert cell._swatch._style.color[0] == pytest.approx(1.0)
+    assert cell._swatch._style.color[1] == pytest.approx(0.0)
 
 
 # ---------------------------------------------------------------------------

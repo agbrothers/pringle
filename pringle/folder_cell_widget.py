@@ -92,7 +92,7 @@ class FolderCellWidget(QWidget):
         self._toggle_btn.clicked.connect(self._on_toggle)
         row.addWidget(self._toggle_btn)
 
-        self._name_label = QPushButton(self._name)
+        self._name_label = QPushButton(self._name.upper())
         self._name_label.setObjectName("folder_name")
         self._name_label.setFlat(True)
         self._name_label.setCursor(Qt.CursorShape.IBeamCursor)
@@ -215,7 +215,7 @@ class FolderCellWidget(QWidget):
         self._committing = True
         new_name = self._name_edit.text().strip() or self._name
         self._name = new_name
-        self._name_label.setText(new_name)
+        self._name_label.setText(new_name.upper())
         self._name_label.setVisible(True)
         self._name_edit.setVisible(False)
         self.content_changed.emit(self.cell_id)

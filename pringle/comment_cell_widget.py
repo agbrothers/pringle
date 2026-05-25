@@ -21,7 +21,7 @@ import uuid
 import re
 
 from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QPlainTextEdit, QPushButton, QSizePolicy,
+    QWidget, QHBoxLayout, QVBoxLayout, QPlainTextEdit, QPushButton, QSizePolicy, QFrame,
 )
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QFontMetricsF, QKeyEvent, QTextOption
@@ -173,7 +173,11 @@ class CommentCellWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
-        outer_h = QHBoxLayout(self)
+        outer_v = QVBoxLayout(self)
+        outer_v.setContentsMargins(0, 0, 0, 0)
+        outer_v.setSpacing(0)
+
+        outer_h = QHBoxLayout()
         outer_h.setContentsMargins(0, 2, 4, 2)
         outer_h.setSpacing(0)
 
@@ -200,6 +204,13 @@ class CommentCellWidget(QWidget):
         del_btn.setToolTip("Delete comment")
         del_btn.clicked.connect(lambda: self.delete_requested.emit(self.cell_id))
         outer_h.addWidget(del_btn)
+
+        outer_v.addLayout(outer_h)
+
+        line = QFrame()
+        line.setObjectName("separator")
+        line.setFrameShape(QFrame.Shape.HLine)
+        outer_v.addWidget(line)
 
     # ------------------------------------------------------------------
     # CellWidget-compatible interface

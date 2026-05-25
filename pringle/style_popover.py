@@ -55,13 +55,15 @@ class StylePopoverWidget(QFrame):
 
     style_changed = pyqtSignal(object)      # CellStyle
     color_picker_requested = pyqtSignal()   # swatch clicked — parent opens QColorDialog
+    visible_toggled = pyqtSignal(bool)      # emitted when Visible checkbox changes
 
     def __init__(self, style: CellStyle, parent=None, show_render_mode: bool = False,
-                 show_normalize: bool = False):
+                 show_normalize: bool = False, visible: bool = True):
         super().__init__(parent)
         self._style = replace(style)  # work on a copy
         self._show_render_mode = show_render_mode
         self._show_normalize = show_normalize
+        self._visible = visible
         self.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
         self.setFrameShape(QFrame.Shape.Box)
         self.setLineWidth(1)
@@ -73,6 +75,13 @@ class StylePopoverWidget(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 8, 10, 10)
         layout.setSpacing(6)
+
+        # --- Visible checkbox ---
+        vis_cb = QCheckBox("Visible")
+        vis_cb.setObjectName("visible_cb")
+        vis_cb.setChecked(self._visible)
+        vis_cb.toggled.connect(self.visible_toggled)
+        layout.addWidget(vis_cb)
 
         if self._show_render_mode:
             # Two-column top section: spinboxes left, radio buttons right

@@ -60,8 +60,9 @@ def test_window_creates(qapp):
     from pringle.app import PringleWindow
     win = PringleWindow()
     assert win.windowTitle() == "pringle"
-    # Central widget should be a splitter
-    assert isinstance(win.centralWidget(), QSplitter)
+    # Central widget is a QWidget container holding a header bar and a splitter
+    splitter = win.centralWidget().findChild(QSplitter)
+    assert splitter is not None
     win.close()
 
 
@@ -75,12 +76,14 @@ def test_window_has_viewport(qapp):
 
 def test_splitter_proportions(qapp):
     """Splitter has two panels; viewport is configured wider than left panel."""
+    from PyQt6.QtWidgets import QSplitter
     from pringle.app import PringleWindow
     win = PringleWindow()
     win.resize(1400, 900)
     win.show()
     qapp.processEvents()  # let Qt compute layout
-    sizes = win.centralWidget().sizes()
+    splitter = win.centralWidget().findChild(QSplitter)
+    sizes = splitter.sizes()
     assert len(sizes) == 2
     assert sizes[0] >= 260, f"Left panel too narrow: {sizes[0]}"
     assert sizes[1] > sizes[0], "Viewport should be wider than left panel"

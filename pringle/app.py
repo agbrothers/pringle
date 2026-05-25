@@ -27,6 +27,7 @@ from pathlib import Path
 
 _ICON_PATH = Path(__file__).parent / "assets" / "icon.png"
 from rendercanvas.qt import QRenderWidget
+from pringle.header_bar import PringleHeaderBar
 
 import pygfx as gfx
 from pringle.renderer import PringleRenderer, make_line_mesh, make_scatter_mesh, make_parametric_surface_mesh
@@ -243,15 +244,7 @@ class PringleViewport(QRenderWidget):
 
 
 class _ViewportContainer(QWidget):
-    """
-    Wraps PringleViewport and absolutely-positions a ⚙ button in the top-right
-    corner that stays pinned on resize.  Emits settings_toggled(checked) when clicked.
-    """
-
-    settings_toggled = pyqtSignal(bool)
-
-    _BTN_SIZE = 30
-    _MARGIN = 10
+    """Wraps PringleViewport with no overlay buttons (settings moved to header bar)."""
 
     def __init__(self, viewport: PringleViewport, parent=None):
         super().__init__(parent)
@@ -259,32 +252,6 @@ class _ViewportContainer(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(viewport)
-
-        self._btn = QPushButton("⚙", self)
-        self._btn.setObjectName("settings_btn")
-        self._btn.setFixedSize(self._BTN_SIZE, self._BTN_SIZE)
-        self._btn.setFlat(True)
-        self._btn.setCheckable(True)
-        self._btn.setToolTip("Axis & view settings")
-        self._btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn.clicked.connect(self.settings_toggled)
-        self._reposition_btn()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self._reposition_btn()
-
-    def _reposition_btn(self):
-        self._btn.move(
-            self.width() - self._BTN_SIZE - self._MARGIN,
-            self._MARGIN,
-        )
-        self._btn.raise_()
-
-    def set_btn_checked(self, checked: bool) -> None:
-        self._btn.blockSignals(True)
-        self._btn.setChecked(checked)
-        self._btn.blockSignals(False)
 
 
 class AxisSettingsDialog(QDialog):
@@ -328,11 +295,26 @@ class PringleWindow(QMainWindow):
         self.resize(*self.DEFAULT_SIZE)
         self._grid = grid or make_grid()
 
-        # Central splitter
-        splitter = QSplitter(Qt.Orientation.Horizontal, self)
-        self.setCentralWidget(splitter)
+        # Root widget: header bar on top, horizontal splitter below
+        root = QWidget()
+        root_layout = QVBoxLayout(root)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+        self.setCentralWidget(root)
 
-        # 3D viewport + overlay ⚙ button
+        # Header bar
+        self._header = PringleHeaderBar()
+        self._header.new_requested.connect(self._on_new)
+        self._header.open_requested.connect(self._on_open)
+        self._header.save_requested.connect(self._on_save)
+        self._header.settings_toggled.connect(self._on_settings_toggled)
+        root_layout.addWidget(self._header)
+
+        # Horizontal splitter
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        root_layout.addWidget(splitter, 1)
+
+        # 3D viewport
         self._viewport = PringleViewport()
         cfg = self._grid.config
         z_half = max(abs(cfg.x_min), abs(cfg.x_max), abs(cfg.y_min), abs(cfg.y_max))
@@ -340,7 +322,6 @@ class PringleWindow(QMainWindow):
             cfg.x_min, cfg.x_max, cfg.y_min, cfg.y_max, -z_half, z_half
         )
         self._vp_container = _ViewportContainer(self._viewport)
-        self._vp_container.settings_toggled.connect(self._on_settings_toggled)
 
         # Floating axis settings dialog (non-modal Qt.Tool window)
         self._view_settings = ViewSettingsWidget(config=self._grid.config)
@@ -368,15 +349,15 @@ class PringleWindow(QMainWindow):
         )
 
         self._settings_dialog = AxisSettingsDialog(self._view_settings, parent=self)
-        # When user closes dialog via title-bar X, uncheck the ⚙ button
+        # When user closes dialog via title-bar X, uncheck the header wrench button
         self._settings_dialog.finished.connect(
-            lambda _: self._vp_container.set_btn_checked(False)
+            lambda _: self._header.set_wrench_checked(False)
         )
 
         # Left panel: cell list only (view settings moved to floating dialog)
         left = QWidget()
         left_layout = QVBoxLayout(left)
-        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setContentsMargins(15, 0, 0, 0)
         left_layout.setSpacing(0)
 
         self._cell_list = CellListWidget(
@@ -387,9 +368,6 @@ class PringleWindow(QMainWindow):
         )
         self._cell_list.namespace_rebuilt.connect(self._on_namespace_rebuilt)
         self._cell_list.bounds_override.connect(self._on_bounds_override)
-        self._cell_list.new_file_requested.connect(self._on_new)
-        self._cell_list.open_file_requested.connect(self._on_open)
-        self._cell_list.save_requested.connect(self._on_save)
         left_layout.addWidget(self._cell_list, 1)
 
         splitter.insertWidget(0, left)
@@ -454,9 +432,13 @@ class PringleWindow(QMainWindow):
 
     def _update_title(self) -> None:
         name = Path(self._session_path).name if self._session_path else "untitled"
-        self.setWindowTitle(f"pringle — {name}[*]")  # [*] is Qt's modified placeholder
-        self.setWindowModified(self._modified)         # native dot on macOS close button
-        self._cell_list.set_modified(self._modified)
+        if self._modified:
+            self.setWindowTitle(f"pringle — {name}[*]")
+            self.setWindowModified(True)
+        else:
+            self.setWindowModified(False)
+            self.setWindowTitle(f"pringle — {name}")
+        self._header.set_modified(self._modified)
 
     def _confirm_discard(self) -> bool:
         """Return True if it's safe to discard the current session."""
@@ -774,8 +756,8 @@ class PringleWindow(QMainWindow):
         """Show or hide the floating axis settings dialog."""
         if checked:
             self._settings_dialog.adjustSize()
-            # Position the dialog just below and left-aligned with the ⚙ button
-            btn = self._vp_container._btn
+            # Position below the header wrench button, right-aligned
+            btn = self._header._wrench_btn
             btn_br = btn.mapToGlobal(btn.rect().bottomRight())
             dlg_x = btn_br.x() - self._settings_dialog.width()
             dlg_y = btn_br.y() + 4

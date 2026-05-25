@@ -319,10 +319,14 @@ class CellListWidget(QWidget):
         self._scroll.setWidgetResizable(True)
         self._scroll.setFrameShape(QFrame.Shape.NoFrame)
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # Move vertical scrollbar to the left edge (outside the color swatches)
+        self._scroll.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         outer.addWidget(self._scroll)
 
         self._container = QWidget()
         self._container.setObjectName("cell_container")
+        # Reset content direction so cell layouts are not mirrored
+        self._container.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         self._layout = QVBoxLayout(self._container)
         self._layout.setContentsMargins(0, 4, 0, 4)
         self._layout.setSpacing(0)
@@ -346,21 +350,8 @@ class CellListWidget(QWidget):
         bar = QWidget()
         bar.setObjectName("cell_toolbar")
         row = QHBoxLayout(bar)
-        row.setContentsMargins(4, 2, 4, 2)
+        row.setContentsMargins(8, 30, 8, 4)
         row.setSpacing(0)
-
-        self._new_btn  = QToolButton(); self._new_btn.setText("New")
-        self._open_btn = QToolButton(); self._open_btn.setText("Open")
-        self._save_btn = QToolButton(); self._save_btn.setText("Save")
-        for btn in (self._new_btn, self._open_btn, self._save_btn):
-            btn.setObjectName("toolbar_file_btn")
-            btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-            row.addWidget(btn)
-
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.VLine)
-        sep.setObjectName("toolbar_sep")
-        row.addWidget(sep)
 
         self._add_eq_btn     = QToolButton(); self._add_eq_btn.setText("+ Equation")
         self._add_folder_btn = QToolButton(); self._add_folder_btn.setText("+ Folder")
@@ -371,19 +362,10 @@ class CellListWidget(QWidget):
 
         row.addStretch(1)
 
-        self._new_btn.clicked.connect(self.new_file_requested)
-        self._open_btn.clicked.connect(self.open_file_requested)
-        self._save_btn.clicked.connect(self.save_requested)
         self._add_eq_btn.clicked.connect(lambda: self.add_cell(after_id=self._focused_cell_id()))
         self._add_folder_btn.clicked.connect(lambda: self.add_folder(after_id=self._focused_cell_id()))
 
         return bar
-
-    def set_modified(self, modified: bool) -> None:
-        """Update the Save button appearance to reflect unsaved-changes state."""
-        self._save_btn.setProperty("modified", modified)
-        self._save_btn.style().unpolish(self._save_btn)
-        self._save_btn.style().polish(self._save_btn)
 
     # ------------------------------------------------------------------
     # Folder helpers
@@ -441,11 +423,14 @@ class CellListWidget(QWidget):
     ) -> CellWidget | SliderWidget:
         """Add a new cell, optionally after a given cell_id."""
         self._push_undo()
-        if style is None:
-            style = CellStyle(color=palette_color(self._cell_index))
-        self._cell_index += 1
-
         is_sl, sl_name, sl_val = is_slider_cell(source) if source else (False, "", 0.0)
+
+        if style is None:
+            if is_sl:
+                style = CellStyle(color=(0.13, 0.13, 0.13, 1.0))
+            else:
+                style = CellStyle(color=palette_color(self._cell_index))
+                self._cell_index += 1
 
         if is_sl:
             cell: CellWidget | SliderWidget = SliderWidget(
@@ -1108,7 +1093,8 @@ class CellListWidget(QWidget):
         if not is_sl:
             return
 
-        style = cell.style
+        from dataclasses import replace as _replace
+        style = _replace(cell.style, color=(0.3, 0.3, 0.3, 1.0))
         slider = SliderWidget(
             name=sl_name, value=sl_val, style=style, cell_id=cell_id,
         )
@@ -1219,9 +1205,7 @@ class CellListWidget(QWidget):
         self._layout.replaceWidget(cell, new_cell)
         self._cells[idx] = new_cell
         cell.deleteLater()
-        # Restore eye-button state (only meaningful if source stays as CellWidget).
         if not stashed_visible:
-            new_cell._eye_btn.setChecked(False)
             new_cell._on_visibility_toggled(False)
         new_cell.set_source(raw)
         new_cell.focus()

@@ -116,6 +116,7 @@ def cell_to_dict(cell, folder_id: str | None = None) -> dict:
             base["step_expr"] = cell._step_box.expr()
         base["is_playing"] = cell._play_btn.isChecked()
         base["anim_mode"] = cell._anim_mode
+        base["anim_speed_multiplier"] = cell._anim_speed_multiplier
         base["sub_cells"] = []
 
     else:
@@ -292,6 +293,8 @@ def restore_cell_list(
                 cell._step_box.setText(data["step_expr"])
             if "anim_mode" in data:
                 cell.set_anim_mode(data["anim_mode"])
+            if "anim_speed_multiplier" in data:
+                cell.set_anim_speed_multiplier(float(data["anim_speed_multiplier"]))
             if data.get("is_playing", False):
                 sliders_to_play.append(cell)
 
@@ -299,7 +302,6 @@ def restore_cell_list(
             from pringle.cell_widget import CellWidget
             if isinstance(cell, CellWidget):
                 if not data.get("visible", True):
-                    cell._eye_btn.setChecked(False)
                     cell._on_visibility_toggled(False)
                 for sub_data in data.get("sub_cells", []):
                     sub = cell.add_sub_cell(sub_data.get("type", "constraint"))

@@ -1,119 +1,200 @@
 /* ═══════════════════════════════════════════════════════════════════
-   Pringle — application theme (dark, v1)
+   Pringle — application theme (dark v2, FEAT-065)
    Loaded once at QApplication startup via _load_theme() in app.py.
-
-   Dynamic styles stay in Python (color dot, data-dot state machine,
-   validation borders, transient flash animations).  Everything else
-   lives here.  See design-docs/15-feature-backlog.md FEAT-060.
    ═══════════════════════════════════════════════════════════════════ */
 
-/* ── Drag handle ─────────────────────────────────────────────────── */
+/* ── Global base ─────────────────────────────────────────────────── */
+QMainWindow, QWidget { background: #111111; color: #dddddd; }
+QSplitter { background: #111111; }
+QSplitter::handle { background: #111111; width: 0px; height: 0px; }
+
+/* ── Header bar ──────────────────────────────────────────────────── */
+QWidget#header_bar {
+    background: #111111;
+    border-bottom: 1px solid #1f1f1f;
+}
+QLabel#header_wordmark {
+    color: #ffffff;
+    letter-spacing: 2px;
+    padding-left: 6px;
+    padding-right: 4px;
+}
+QPushButton#header_file_btn {
+    color: #888;
+    font-size: 12px;
+    padding: 4px 12px;
+    background: transparent;
+    border: 1px solid #333;
+    border-radius: 10px;
+    min-width: 40px;
+}
+QPushButton#header_file_btn:hover  { color: #eee; border-color: #666; }
+QPushButton#header_file_btn:pressed { background: #222; }
+QPushButton#header_file_btn[modified="true"]  { color: #ffffff; border-color: #555; }
+QPushButton#header_file_btn[modified="false"] { color: #888;    border-color: #333; }
+
+QPushButton#header_wrench_btn {
+    color: #555;
+    font-size: 32px;
+    background: transparent;
+    border: none;
+    border-radius: 5px;
+}
+QPushButton#header_wrench_btn:hover   { color: #ccc; }
+QPushButton#header_wrench_btn:checked { color: #4a9eff; }
+
+/* ── DragHandle (SliderWidget / FolderCellWidget) ────────────────── */
 DragHandle { color: transparent; font-size: 14px; padding: 0; }
 DragHandle:hover { color: #aaa; }
 
-/* ── Cell text edit (primary, standalone) ────────────────────────── */
+/* ── Cell text edit ──────────────────────────────────────────────── */
 CellTextEdit { border: none; background: transparent; }
 
-/* ── Sub-cell edit (descendant override — higher specificity) ─────── */
+/* ── Sub-cell ────────────────────────────────────────────────────── */
 SubCell CellTextEdit {
-    border: 1px dashed #666;
+    border: 1px dashed #555;
     border-radius: 3px;
     padding: 1px 4px;
     font-size: 12px;
     color: #ddd;
     background: transparent;
 }
-QLabel#subcell_icon { color: #888; font-size: 13px; }
+QLabel#subcell_icon { color: #777; font-size: 11px; }
 
 /* ── Cell widget status / diagnostic labels ──────────────────────── */
-QLabel#error_label   { color: #cc2222; font-size: 11px; padding: 2px 28px; }
-QLabel#warning_label { color: #cc7700; font-size: 11px; padding: 2px 28px; }
-QLabel#preview_label { color: #888; font-size: 11px; }
-QLabel#shape_label   { color: #888; font-size: 11px; }
-QLabel#status_dot    { color: #bbb;  font-size: 12px; }
+QLabel#error_label   { color: #cc2222; font-size: 11px; padding: 2px 6px; }
+QLabel#warning_label { color: #cc7700; font-size: 11px; padding: 2px 6px; }
+QLabel#preview_label { color: #666; font-size: 11px; }
+QLabel#shape_label   { color: #666; font-size: 11px; }
+QLabel#status_dot    { color: #bbb; font-size: 12px; }
 
-/* ── Horizontal separator lines ──────────────────────────────────── */
-QFrame#separator  { color: #2a2a2a; }
-QFrame#folder_sep { color: #333; }
+/* ── Cell + / × buttons ──────────────────────────────────────────── */
+CellWidget QPushButton {
+    color: #444;
+    background: transparent;
+    border: none;
+    font-size: 13px;
+}
+CellWidget QPushButton:hover { color: #bbb; }
 
-/* ── Expression toolbar ───────────────────────────────────────────── */
+/* ── Separator lines ─────────────────────────────────────────────── */
+QFrame#separator  { color: #1f1f1f; max-height: 1px; }
+QFrame#folder_sep { color: #1f1f1f; max-height: 1px; }
+
+/* ── Cell list toolbar ────────────────────────────────────────────── */
 QWidget#cell_toolbar {
-    background: #1a1a1a;
-    border-bottom: 1px solid #2a2a2a;
+    background: #111111;
+    border-bottom: 1px solid #1f1f1f;
 }
-QToolButton#toolbar_file_btn {
-    color: #888;
-    font-size: 12px;
-    padding: 4px 8px;
-    background: transparent;
-    border: none;
-}
-QToolButton#toolbar_file_btn:hover { color: #ccc; }
-QToolButton#toolbar_file_btn[modified="true"]  { color: #ffffff; }
-QToolButton#toolbar_file_btn[modified="false"] { color: #888888; }
 QToolButton#toolbar_add_btn {
-    color: #555;
+    color: #444;
     font-size: 12px;
     padding: 4px 8px;
     background: transparent;
     border: none;
 }
-QToolButton#toolbar_add_btn:hover { color: #ccc; }
-QFrame#toolbar_sep {
-    color: #333;
-    max-width: 1px;
-    margin: 4px 4px;
+QToolButton#toolbar_add_btn:hover { color: #aaa; }
+
+/* ── Cell list scroll area ────────────────────────────────────────── */
+QScrollArea#cell_scroll { background: #111111; border: none; }
+QWidget#cell_container  { background: #111111; }
+QLabel#placeholder      { color: #444; font-size: 13px; padding: 24px; }
+QFrame#drop_indicator   { background: #4a9eff; border: none; }
+
+/* ── Scrollbar — thin minimal overlay style ───────────────────────── */
+QScrollBar:vertical {
+    background: transparent;
+    width: 6px;
+    margin: 0;
+    border: none;
+}
+QScrollBar::handle:vertical {
+    background: #2d2d2d;
+    border-radius: 3px;
+    min-height: 24px;
+}
+QScrollBar::handle:vertical:hover { background: #484848; }
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical     { height: 0; border: none; }
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical     { background: transparent; }
+
+/* ── Slider widget ────────────────────────────────────────────────── */
+SliderWidget QDoubleSpinBox,
+SliderWidget QLineEdit {
+    background: #111111;
+    color: #dddddd;
+    border: none;
+    selection-background-color: #2a4a7a;
 }
 
-/* ── Cell list ────────────────────────────────────────────────────── */
-QScrollArea#cell_scroll { background: #171717; border: none; }
-QWidget#cell_container  { background-color: #171717; }
-QLabel#placeholder      { color: #aaa; font-size: 13px; padding: 24px; }
-QFrame#drop_indicator   { background-color: #4a9eff; border: none; }
+SliderWidget QPushButton {
+    color: #555;
+    background: transparent;
+    border: none;
+    font-size: 13px;
+}
+SliderWidget QPushButton:hover { color: #bbb; }
+QPushButton#slider_controls_btn { color: #444; font-size: 14px; }
+QPushButton#slider_controls_btn:hover { color: #aaa; }
 
-/* ── Slider widget secondary labels ──────────────────────────────── */
-QLabel#sep_dot  { color: #888; padding: 0 2px; }
-QLabel#step_lbl { color: #888; font-size: 10px; }
+/* ── Slider controls popover ──────────────────────────────────────── */
+SliderControlsPopover {
+    background: #1e1e1e;
+    border: 1px solid #555;
+    border-radius: 4px;
+}
+SliderControlsPopover QLabel { color: #ccc; font-size: 12px; }
+SliderControlsPopover QComboBox {
+    background: #2d2d2d;
+    color: #e0e0e0;
+    border: 1px solid #555;
+    border-radius: 3px;
+    padding: 2px 4px;
+    min-width: 70px;
+}
+SliderControlsPopover QComboBox::drop-down { border: none; }
 
 /* ── Folder cell header ───────────────────────────────────────────── */
 QWidget#folder_header {
-    background: #252525;
-    border-top: 1px solid #3a3a3a;
-    border-bottom: 1px solid #3a3a3a;
+    background: #181818;
+    border-top: 1px solid #242424;
+    border-bottom: 1px solid #242424;
 }
-QPushButton#folder_toggle { color: #888; }
+QPushButton#folder_toggle { color: #777; font-size: 10px; }
 QPushButton#folder_toggle:hover { color: #ccc; }
 QPushButton#folder_name {
     font-weight: bold;
-    font-size: 12px;
-    color: #ccc;
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: #888;
     text-align: left;
     padding: 0;
     border: none;
 }
-QPushButton#folder_name:hover { color: #fff; }
+QPushButton#folder_name:hover { color: #ccc; }
 QLineEdit#folder_name_edit {
     font-weight: bold;
-    font-size: 12px;
+    font-size: 11px;
     border: 1px solid #555;
     border-radius: 2px;
     background: #1e1e1e;
     color: #eee;
 }
-QPushButton#folder_del { color: #555; }
+QPushButton#folder_del { color: #444; }
 QPushButton#folder_del:hover { color: #ccc; }
 
 /* ── Comment cell ─────────────────────────────────────────────────── */
-CommentCellWidget { background: #171717; }
+CommentCellWidget { background: #111111; }
 QPlainTextEdit#comment_edit {
     background: transparent;
-    color: #79838E;
+    color: #4a5260;
     font-size: 12px;
     font-family: 'Menlo', 'Consolas', 'Courier New';
     border: none;
     padding: 2px 0;
 }
-QPushButton#comment_del { color: #555; }
+QPushButton#comment_del { color: #444; }
 QPushButton#comment_del:hover { color: #ccc; }
 
 /* ── Style popover ────────────────────────────────────────────────── */
@@ -139,8 +220,9 @@ StylePopoverWidget QDoubleSpinBox {
 }
 StylePopoverWidget QDoubleSpinBox::up-button,
 StylePopoverWidget QDoubleSpinBox::down-button { width: 14px; }
-QRadioButton#render_mode { color: #ccc; font-size: 12px; }
-QCheckBox#normalize_cb   { color: #ccc; font-size: 12px; }
+QRadioButton#render_mode  { color: #ccc; font-size: 12px; }
+QCheckBox#normalize_cb    { color: #ccc; font-size: 12px; }
+QCheckBox#visible_cb      { color: #ccc; font-size: 12px; }
 QPushButton#cmap_swatch {
     border: 2px solid transparent;
     border-radius: 2px;
@@ -160,20 +242,5 @@ QPushButton#rev_btn:checked {
     border-color: #4a7ab0;
 }
 
-/* ── Viewport ⚙ settings button (overlay) ────────────────────────── */
-QPushButton#settings_btn {
-    color: #555;
-    font-size: 16px;
-    background: rgba(255,255,255,0.75);
-    border-radius: 5px;
-    border: 1px solid rgba(0,0,0,0.18);
-}
-QPushButton#settings_btn:hover {
-    background: rgba(255,255,255,0.95);
-    color: #222;
-}
-QPushButton#settings_btn:checked {
-    background: rgba(74,158,255,0.85);
-    color: #fff;
-    border-color: rgba(74,158,255,0.6);
-}
+/* ── View settings dialog ─────────────────────────────────────────── */
+AxisSettingsDialog QWidget { background: #1a1a1a; color: #ccc; }

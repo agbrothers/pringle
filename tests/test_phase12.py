@@ -213,7 +213,7 @@ class TestFolderCellWidget:
         f._name_edit.setText("New")
         f._commit_rename()
         assert f.name == "New"
-        assert f._name_label.text() == "New"
+        assert f._name_label.text() == "NEW"
 
 
 # ---------------------------------------------------------------------------
