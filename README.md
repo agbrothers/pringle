@@ -13,11 +13,11 @@
 </div>
 
 
-### *INSTALL & RUN:*
+### *Install + Run:*
 ```bash
 pip install pringle
 
-crunch pringle/examples/lorenz-vector-field.yml
+crunch 
 ```
 
 ## Why Pringle?
