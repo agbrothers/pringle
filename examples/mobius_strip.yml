@@ -26,10 +26,10 @@ cells:
   source: '# MÖBIUS STRIP — one-sided non-orientable surface'
 - id: a1b2c3d4-0001-0001-0001-000000000002
   style:
-    color:
-    - 0.2
-    - 0.4
-    - 0.9
+    color: &id001
+    - 0.133333
+    - 0.133333
+    - 0.133333
     - 1.0
     opacity: 1.0
     line_width: 0.05
@@ -50,11 +50,7 @@ cells:
   sub_cells: []
 - id: a1b2c3d4-0001-0001-0001-000000000003
   style:
-    color:
-    - 0.2
-    - 0.4
-    - 0.9
-    - 1.0
+    color: *id001
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
@@ -72,6 +68,25 @@ cells:
   is_playing: false
   anim_mode: pingpong
   sub_cells: []
+- id: abf0787e-ce4f-4677-8301-a7680c75e5be
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: s = width * (v / pi - 1)
+  visible: false
+  sub_cells: []
+  rng_seed: 0
 - id: a1b2c3d4-0001-0001-0001-000000000004
   style:
     color:
@@ -87,8 +102,8 @@ cells:
     colormap_reversed: false
     normalize_arrows: false
   type: equation
-  source: "s = width * (v / pi - 1)\nxyz = array([\n    (R + s * cos(u / 2)) * cos(u),\n\
-    \    (R + s * cos(u / 2)) * sin(u),\n    s * sin(u / 2),\n])"
+  source: "xyz = array([\n    (R + s * cos(u / 2)) * cos(u),\n    (R + s * cos(u /\
+    \ 2)) * sin(u),\n    s * sin(u / 2),\n])"
   visible: true
   sub_cells: []
   rng_seed: 0

@@ -27,9 +27,9 @@ cells:
 - id: b2c3d4e5-0002-0002-0002-000000000002
   style:
     color:
-    - 0.2
-    - 0.4
-    - 0.9
+    - 0.133333
+    - 0.133333
+    - 0.133333
     - 1.0
     opacity: 1.0
     line_width: 0.05
@@ -47,6 +47,7 @@ cells:
   step: 0.1
   is_playing: false
   anim_mode: pingpong
+  anim_speed_multiplier: 1.0
   sub_cells: []
 - id: b2c3d4e5-0002-0002-0002-000000000003
   style:
@@ -77,9 +78,9 @@ view:
   show_shadow: true
   shadow_opacity: 0.4
   camera_position:
-  - 6.071484894969073
-  - -9.614263215206371
-  - 9.377157311330745
+  - -7.84756889208495
+  - 8.228769560820718
+  - 9.377157311330743
   orbit_target:
   - 0.0
   - 0.0

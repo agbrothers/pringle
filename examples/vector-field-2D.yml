@@ -27,9 +27,9 @@ cells:
 - id: 64bf0ce3-dd1f-42c6-a1f3-d94ecb30d068
   style:
     color:
-    - 0.22
-    - 0.4
-    - 0.88
+    - 0.133333
+    - 0.133333
+    - 0.133333
     - 1.0
     opacity: 1.0
     line_width: 0.05
@@ -48,25 +48,6 @@ cells:
   is_playing: false
   anim_mode: pingpong
   sub_cells: []
-- id: 086362f2-8841-459f-94e7-72d68a145853
-  style:
-    color:
-    - 0.9
-    - 0.3
-    - 0.65
-    - 1.0
-    opacity: 1.0
-    line_width: 0.05
-    point_size: 0.1
-    scatter_render_mode: circles
-    colormap: null
-    colormap_reversed: false
-    normalize_arrows: false
-  type: equation
-  source: n = x.shape[0]
-  visible: false
-  sub_cells: []
-  rng_seed: 0
 - id: fc8f45e8-2a27-4c64-8652-af247429a81a
   style:
     color:

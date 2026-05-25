@@ -27,7 +27,9 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QFontMetricsF, QKeyEvent, QTextOption
 
 from pringle.style import CellStyle
-from pringle.cell_widget import DragHandle
+from pringle.cell_widget import ColorSwatchHandle
+
+_COMMENT_COLOR = (0.133333, 0.133333, 0.133333, 1.0)  # #222222
 
 # Strip a leading "# " or "#" from source text so the widget text area
 # only contains the comment body.
@@ -181,12 +183,13 @@ class CommentCellWidget(QWidget):
         outer_h.setContentsMargins(0, 2, 4, 2)
         outer_h.setSpacing(0)
 
-        # Drag handle (identical pattern to other cells)
-        self._drag_handle = DragHandle(self)
-        self._drag_handle.drag_started.connect(lambda: self.drag_started.emit(self.cell_id))
-        self._drag_handle.drag_moved.connect(lambda y: self.drag_moved.emit(self.cell_id, y))
-        self._drag_handle.drag_ended.connect(lambda: self.drag_ended.emit(self.cell_id))
-        outer_h.addWidget(self._drag_handle)
+        # Color swatch — fixed #222222, drag to reorder
+        self._swatch = ColorSwatchHandle(CellStyle(color=_COMMENT_COLOR), self)
+        self._swatch.drag_started.connect(lambda: self.drag_started.emit(self.cell_id))
+        self._swatch.drag_moved.connect(lambda y: self.drag_moved.emit(self.cell_id, y))
+        self._swatch.drag_ended.connect(lambda: self.drag_ended.emit(self.cell_id))
+        outer_h.addWidget(self._swatch)
+        outer_h.addSpacing(6)
 
         # Auto-grow text area — "# " prefix is part of the cell text
         self._edit = _CommentEdit()

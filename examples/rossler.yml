@@ -10,10 +10,10 @@ grid:
 cells:
 - id: 07ddb4da-bd41-4584-8331-b242b006be92
   style:
-    color:
-    - 0.6
-    - 0.2
-    - 0.8
+    color: &id001
+    - 0.133333
+    - 0.133333
+    - 0.133333
     - 1.0
     opacity: 1.0
     line_width: 0.05
@@ -34,11 +34,7 @@ cells:
   sub_cells: []
 - id: b746332d-3d4b-40f6-a04e-6839ae31cdf7
   style:
-    color:
-    - 0.9
-    - 0.3
-    - 0.65
-    - 1.0
+    color: *id001
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
@@ -58,11 +54,7 @@ cells:
   sub_cells: []
 - id: 9c31c377-700b-49a1-b462-43130a7e7059
   style:
-    color:
-    - 0.9
-    - 0.3
-    - 0.65
-    - 1.0
+    color: *id001
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
@@ -82,11 +74,7 @@ cells:
   sub_cells: []
 - id: c257cb3e-7d12-4684-9256-1f97298c72fe
   style:
-    color:
-    - 0.5
-    - 0.35
-    - 0.2
-    - 1.0
+    color: *id001
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
@@ -106,11 +94,7 @@ cells:
   sub_cells: []
 - id: 6671d225-caf1-4a9d-9aca-2dfbe791f913
   style:
-    color:
-    - 0.22
-    - 0.4
-    - 0.88
-    - 1.0
+    color: *id001
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
@@ -229,11 +213,7 @@ cells:
   rng_seed: 0
 - id: c71b36ae-bb1d-4673-ba99-62ec21306278
   style:
-    color:
-    - 0.6
-    - 0.2
-    - 0.8
-    - 1.0
+    color: *id001
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1

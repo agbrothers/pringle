@@ -39,15 +39,14 @@ cells:
     colormap_reversed: false
     normalize_arrows: false
   type: slider
-  source: a = 1.1
+  source: a = 0.9
   name: a
-  value: 1.1
+  value: 0.9
   min_val: 0.0
-  max_val: 2.0
+  max_val: 1.0
   step: 0.1
   is_playing: false
   anim_mode: pingpong
-  anim_speed_multiplier: 1.0
   sub_cells: []
 - id: 2e55c290-6be6-4312-943a-7a824a1aabdd
   style:
@@ -60,15 +59,14 @@ cells:
     colormap_reversed: false
     normalize_arrows: false
   type: slider
-  source: b = 0.6000000000000001
+  source: b = 0.6
   name: b
-  value: 0.6000000000000001
+  value: 0.6
   min_val: 0.0
   max_val: 1.0
   step: 0.1
   is_playing: false
   anim_mode: pingpong
-  anim_speed_multiplier: 1.0
   sub_cells: []
 - id: b4efc093-7e64-4c5f-bcf1-36ed8814886b
   style:
@@ -89,7 +87,6 @@ cells:
   step: 0.1
   is_playing: false
   anim_mode: pingpong
-  anim_speed_multiplier: 1.0
   sub_cells: []
 - id: 9f71d8a7-fb95-45ce-8f81-88ee31c41b71
   style:
@@ -110,7 +107,6 @@ cells:
   step: 0.1
   is_playing: false
   anim_mode: pingpong
-  anim_speed_multiplier: 1.0
   sub_cells: []
 - id: 5b321671-2eba-43a4-9a17-bc31806cd2ca
   style:
@@ -131,7 +127,6 @@ cells:
   step: 0.1
   is_playing: false
   anim_mode: pingpong
-  anim_speed_multiplier: 1.0
   sub_cells: []
 - id: b3ebc508-1408-4471-983b-166d38f27234
   style:
@@ -152,7 +147,6 @@ cells:
   step: 0.1
   is_playing: false
   anim_mode: pingpong
-  anim_speed_multiplier: 1.0
   sub_cells: []
 - id: 6e561616-8afb-4ff4-8c62-bf588132d446
   style:
@@ -173,7 +167,6 @@ cells:
   step: 0.1
   is_playing: false
   anim_mode: pingpong
-  anim_speed_multiplier: 1.0
   sub_cells: []
 - id: a0d2076d-0601-4414-a3ef-fd438b3db159
   style:
@@ -194,7 +187,6 @@ cells:
   step: 0.1
   is_playing: false
   anim_mode: pingpong
-  anim_speed_multiplier: 1.0
   sub_cells: []
 - id: 05525706-c51a-420e-8ac2-cc8feb71818b
   style:
@@ -215,15 +207,15 @@ cells:
 - id: 7d590926-9b29-45b6-83c1-cd3d2256bcb9
   style:
     color:
+    - 0.9215686274509803
+    - 0.796078431372549
+    - 0.34509803921568627
     - 1.0
-    - 1.0
-    - 1.0
-    - 1.0
-    opacity: 0.95
+    opacity: 0.5
     line_width: 0.05
     point_size: 0.1
     scatter_render_mode: circles
-    colormap: null
+    colormap: plasma
     colormap_reversed: false
     normalize_arrows: false
   type: equation
@@ -241,13 +233,10 @@ view:
   show_shadow: false
   shadow_opacity: 0.5
   camera_position:
-  - 3.4222754605383616
-  - -4.0134208720482905
-  - -0.06609681868275952
+  - 5.073585723573497
+  - -1.8144351436615063
+  - 3.6780945280028132
   orbit_target:
   - 1.9610950946807861
   - 0.08295682072639465
-  - 0.6354414224624634
-  angular_velocity:
-  - -0.14536988626202263
-  - 0.0
+  - 0.4812525808811188

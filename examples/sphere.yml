@@ -26,10 +26,10 @@ cells:
   source: '# SPHERE — parametric surface via xyz = (3, N, M)'
 - id: 71d265b0-9863-4b92-8505-ff9e704a77c2
   style:
-    color:
-    - 0.5
-    - 0.35
-    - 0.2
+    color: &id001
+    - 0.133333
+    - 0.133333
+    - 0.133333
     - 1.0
     opacity: 1.0
     line_width: 0.05
@@ -47,6 +47,7 @@ cells:
   step: 0.1
   is_playing: false
   anim_mode: pingpong
+  anim_speed_multiplier: 1.0
   sub_cells: []
 - id: d137c762-86bd-4732-85b4-0a7fc4381e6c
   style:
@@ -153,16 +154,12 @@ cells:
     normalize_arrows: false
   type: equation
   source: n = u.shape[0]
-  visible: true
+  visible: false
   sub_cells: []
   rng_seed: 0
 - id: b64be3b7-72c0-45c9-bfa0-a723c010e1d6
   style:
-    color:
-    - 0.9
-    - 0.3
-    - 0.65
-    - 1.0
+    color: *id001
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
@@ -171,23 +168,20 @@ cells:
     colormap_reversed: false
     normalize_arrows: false
   type: slider
-  source: u_ = 30.0
+  source: u_ = 3.0
   name: u_
-  value: 30.0
+  value: 3.0
   min_val: 0.0
-  max_val: 96.0
+  max_val: 95.0
   step: 1.0
-  max_expr: n
-  is_playing: true
-  anim_mode: pingpong
+  max_expr: n-1
+  is_playing: false
+  anim_mode: loop
+  anim_speed_multiplier: 1.0
   sub_cells: []
 - id: 61a84fd0-8ad6-45ab-9e42-d99299cd2aa0
   style:
-    color:
-    - 0.1
-    - 0.65
-    - 0.75
-    - 1.0
+    color: *id001
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
@@ -196,15 +190,16 @@ cells:
     colormap_reversed: false
     normalize_arrows: false
   type: slider
-  source: v_ = 87.0
+  source: v_ = 7.0
   name: v_
-  value: 87.0
+  value: 7.0
   min_val: 0.0
   max_val: 96.0
   step: 1.0
   max_expr: n
   is_playing: true
   anim_mode: pingpong
+  anim_speed_multiplier: 1.0
   sub_cells: []
 - id: 1a89f713-c4eb-4c5c-8116-daab942f1081
   style:
@@ -226,6 +221,44 @@ cells:
   visible: true
   sub_cells: []
   rng_seed: 0
+- id: 00954c83-2687-409e-8eab-a2f548201b3d
+  style:
+    color:
+    - 0.13333333333333333
+    - 0.13333333333333333
+    - 0.13333333333333333
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: x[0,4]
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: 0174603e-8c1f-49db-9074-b4346c6cd695
+  style:
+    color:
+    - 0.13333333333333333
+    - 0.13333333333333333
+    - 0.13333333333333333
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: u[0,0]
+  visible: true
+  sub_cells: []
+  rng_seed: 0
 view:
   show_axes: false
   show_bbox: false
@@ -234,13 +267,13 @@ view:
   show_shadow: true
   shadow_opacity: 0.5
   camera_position:
-  - 4.035209560667567
-  - -7.049783158558246
-  - 3.753998204731808
+  - -7.432395747889808
+  - -4.534819564382379
+  - 2.066341275676634
   orbit_target:
   - 0.0
   - 0.0
   - 0.0
   angular_velocity:
-  - -0.13854781492347443
+  - -0.14536988626202263
   - 0.0

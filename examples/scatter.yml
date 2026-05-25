@@ -48,10 +48,10 @@ cells:
   rng_seed: 0
 - id: 35b4cb39-52d0-472f-b515-53d0c76bc84c
   style:
-    color:
-    - 0.22
-    - 0.4
-    - 0.88
+    color: &id001
+    - 0.133333
+    - 0.133333
+    - 0.133333
     - 1.0
     opacity: 1.0
     line_width: 0.05
@@ -129,11 +129,7 @@ cells:
   rng_seed: 0
 - id: 858612d3-8003-4fab-b8b2-19a646d12b4c
   style:
-    color:
-    - 0.6
-    - 0.2
-    - 0.8
-    - 1.0
+    color: *id001
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1

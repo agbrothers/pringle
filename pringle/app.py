@@ -19,7 +19,7 @@ import PyQt6  # must be imported before rendercanvas.qt  # noqa: F401
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QSplitter,
     QVBoxLayout, QLabel, QFrame, QFileDialog, QMessageBox,
-    QPushButton, QDialog,
+    QPushButton,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QIcon, QKeySequence, QShortcut, QKeyEvent
@@ -254,23 +254,33 @@ class _ViewportContainer(QWidget):
         layout.addWidget(viewport)
 
 
-class AxisSettingsDialog(QDialog):
+class AxisSettingsPopover(QFrame):
     """
-    Non-modal floating tool window containing ViewSettingsWidget.
-    Uses Qt.Tool so it stays above the main window without blocking it.
-    Emitting finished() (via the title-bar close button) is the normal hide path.
+    Frameless floating panel for axis / view settings.
+
+    Same visual language as StylePopoverWidget and SliderControlsPopover:
+    dark background, single-pixel border, no title bar, stays open until
+    the wrench button is toggled off (Tool window — does not auto-dismiss
+    on outside clicks, which would be disruptive while editing bounds).
     """
+
+    hidden = pyqtSignal()
 
     def __init__(self, view_settings, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Axis Settings")
-        self.setWindowFlags(Qt.WindowType.Tool)
-        self.setModal(False)
+        self.setObjectName("AxisSettingsPopover")
+        self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint)
+        self.setFrameShape(QFrame.Shape.Box)
+        self.setLineWidth(1)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(view_settings)
         self.adjustSize()
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        self.hidden.emit()
 
 
 class PringleWindow(QMainWindow):
@@ -348,10 +358,9 @@ class PringleWindow(QMainWindow):
             self._viewport.renderer.set_shadow_opacity
         )
 
-        self._settings_dialog = AxisSettingsDialog(self._view_settings, parent=self)
-        # When user closes dialog via title-bar X, uncheck the header wrench button
-        self._settings_dialog.finished.connect(
-            lambda _: self._header.set_wrench_checked(False)
+        self._settings_dialog = AxisSettingsPopover(self._view_settings, parent=self)
+        self._settings_dialog.hidden.connect(
+            lambda: self._header.set_wrench_checked(False)
         )
 
         # Left panel: cell list only (view settings moved to floating dialog)

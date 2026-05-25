@@ -227,10 +227,10 @@ cells:
   sub_cells: []
 - id: c02f0b7e-b696-45be-abc1-1be6ea03b7e3
   style:
-    color:
-    - 0.6
-    - 0.2
-    - 0.8
+    color: &id001
+    - 0.133333
+    - 0.133333
+    - 0.133333
     - 1.0
     opacity: 1.0
     line_width: 0.05
@@ -692,11 +692,7 @@ cells:
   sub_cells: []
 - id: 4e9d4231-32b8-4dde-863a-2c94428c9111
   style:
-    color:
-    - 0.85
-    - 0.55
-    - 0.05
-    - 1.0
+    color: *id001
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
@@ -860,11 +856,7 @@ cells:
   rng_seed: 0
 - id: c3d6b665-b0e1-4362-a117-20c0af20934a
   style:
-    color:
-    - 0.85
-    - 0.55
-    - 0.05
-    - 1.0
+    color: *id001
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1

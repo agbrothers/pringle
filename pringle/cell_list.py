@@ -1094,7 +1094,7 @@ class CellListWidget(QWidget):
             return
 
         from dataclasses import replace as _replace
-        style = _replace(cell.style, color=(0.3, 0.3, 0.3, 1.0))
+        style = _replace(cell.style, color=(0.13, 0.13, 0.13, 1.0))
         slider = SliderWidget(
             name=sl_name, value=sl_val, style=style, cell_id=cell_id,
         )
