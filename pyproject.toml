@@ -31,10 +31,12 @@ dependencies = [
     "imageio>=2.34",
     "pyyaml>=6.0",
     "networkx>=3.3",
-    "pytest>=8.0",
     "scipy>=1.13",
     "numba>=0.59",
 ]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
 
 [project.scripts]
 pringle = "pringle.app:launch"
