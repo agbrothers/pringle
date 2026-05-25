@@ -1,0 +1,224 @@
+version: 1
+grid:
+  x_min: -3.0
+  x_max: 3.0
+  y_min: -3.0
+  y_max: 3.0
+  z_min: -0.5
+  z_max: 5.5
+  n: 64
+cells:
+- id: 08000001-0000-4000-8000-000000000001
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: "# TUTORIAL 08 — Recurrence Relations\n\n  Use an equation cell with a recursion\
+    \ sub-cell\n  to integrate an ODE.\n\n  path[n] = path[n-1] + dt * deriv(path[n-1])\n\
+    \n  Initial_condition sets path[0]. The result is \n  an (N, 3) point array."
+- id: 08000001-0000-4000-8000-000000000002
+  style:
+    color:
+    - 0.55
+    - 0.55
+    - 0.55
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: folder
+  name: PARAMETERS
+  collapsed: false
+  visible: true
+  sub_cells: []
+- id: 08000001-0000-4000-8000-000000000003
+  style:
+    color:
+    - 0.133333
+    - 0.133333
+    - 0.133333
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 08000001-0000-4000-8000-000000000002
+  type: slider
+  source: k = 1000.0
+  name: k
+  value: 1000.0
+  min_val: 50.0
+  max_val: 2000.0
+  step: 50.0
+  is_playing: false
+  anim_mode: pingpong
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+- id: 08000001-0000-4000-8000-000000000004
+  style:
+    color:
+    - 0.133333
+    - 0.133333
+    - 0.133333
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 08000001-0000-4000-8000-000000000002
+  type: slider
+  source: dt = 0.045
+  name: dt
+  value: 0.045
+  min_val: 0.001
+  max_val: 0.1
+  step: 0.001
+  is_playing: false
+  anim_mode: pingpong
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+- id: 08000001-0000-4000-8000-000000000005
+  style:
+    color:
+    - 0.133333
+    - 0.133333
+    - 0.133333
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 08000001-0000-4000-8000-000000000002
+  type: slider
+  source: rise = 0.1
+  name: rise
+  value: 0.1
+  min_val: 0.0
+  max_val: 0.1
+  step: 0.005
+  is_playing: false
+  anim_mode: pingpong
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+- id: 08000001-0000-4000-8000-000000000006
+  style:
+    color:
+    - 0.55
+    - 0.55
+    - 0.55
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: folder
+  name: SPIRAL ODE
+  collapsed: false
+  visible: true
+  sub_cells: []
+- id: 08000001-0000-4000-8000-000000000007
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: "# dv/dt = [-v[1], v[0], rise] — clockwise \n  rotation with upward drift\n\
+    \n  v is the current position [x, y, z]."
+  folder_id: 08000001-0000-4000-8000-000000000006
+- id: 08000001-0000-4000-8000-000000000008
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 08000001-0000-4000-8000-000000000006
+  type: equation
+  source: deriv(v) = array([-v[1], v[0], rise])
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 08000001-0000-4000-8000-000000000009
+  style:
+    color:
+    - 0.85
+    - 0.55
+    - 0.05
+    - 1.0
+    opacity: 1.0
+    line_width: 0.3
+    point_size: 0.08
+    scatter_render_mode: circles
+    colormap: inferno
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 08000001-0000-4000-8000-000000000006
+  type: equation
+  source: path = zeros((k, 3))
+  visible: true
+  sub_cells:
+  - type: initial_condition
+    source: path[0] = array([1.0, 0.0, 0.0])
+  - type: recursion
+    source: path[n] = path[n-1] + dt * deriv(path[n-1])
+  rng_seed: 0
+view:
+  show_axes: false
+  show_bbox: true
+  show_crosshair: false
+  show_light_bg: false
+  show_shadow: true
+  shadow_opacity: 0.5
+  camera_position:
+  - -10.115790470956458
+  - -1.8468638927550798
+  - 5.051446042805159
+  orbit_target:
+  - 0.0
+  - 0.0
+  - 2.5
+  angular_velocity:
+  - 0.07363416940323197
+  - 0.0

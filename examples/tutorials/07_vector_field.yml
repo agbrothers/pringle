@@ -1,0 +1,200 @@
+version: 1
+grid:
+  x_min: -4.0
+  x_max: 4.0
+  y_min: -4.0
+  y_max: 4.0
+  z_min: -4.0
+  z_max: 4.0
+  n: 24
+cells:
+- id: 07000001-0000-4000-8000-000000000001
+  style:
+    color:
+    - 0.5
+    - 0.35
+    - 0.2
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: "# TUTORIAL 07 — Vector Field\n\n  Arrays of shape (4, N, N) are rendered\
+    \ as \n  2D vector fields (arrows).\n\n  Columns 0-1 are tail positions, columns\
+    \ \n  2-3 are head positions.\n\n  Use normalize_arrows: true to show \n  direction\
+    \ only."
+- id: 07000001-0000-4000-8000-000000000002
+  style:
+    color:
+    - 0.133333
+    - 0.133333
+    - 0.133333
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: scale = 0.30000000000000004
+  name: scale
+  value: 0.30000000000000004
+  min_val: 0.0
+  max_val: 1.0
+  step: 0.05
+  is_playing: false
+  anim_mode: pingpong
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+- id: 07000001-0000-4000-8000-000000000003
+  style:
+    color:
+    - 0.5
+    - 0.35
+    - 0.2
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: "# Gradient of f(x,y) = sin(x)*cos(y): \n  \n  df/dx = cos(x)*cos(y)\n\n\
+    \  df/dy = -sin(x)*sin(y)"
+- id: 07000001-0000-4000-8000-000000000007
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 0.6
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: inferno
+    colormap_reversed: true
+    normalize_arrows: false
+  type: equation
+  source: z = sin(x) * cos(y)
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: 07000001-0000-4000-8000-000000000004
+  style:
+    color:
+    - 0.5
+    - 0.35
+    - 0.2
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: dx = cos(x) * cos(y)
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 07000001-0000-4000-8000-000000000005
+  style:
+    color:
+    - 0.5
+    - 0.35
+    - 0.2
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: dy = -sin(x) * sin(y)
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 7f8d00d2-7882-42af-913b-8be9a55c5d70
+  style:
+    color:
+    - 0.1
+    - 0.65
+    - 0.75
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: grid = stack((x, y))
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 513b1eb2-851d-4428-b68d-3331912bb1d7
+  style:
+    color:
+    - 0.9
+    - 0.3
+    - 0.65
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: grad = stack((dx, dy))
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 07000001-0000-4000-8000-000000000006
+  style:
+    color:
+    - 0.9825589656829834
+    - 0.9938353300094604
+    - 1.0
+    - 1.0
+    opacity: 0.85
+    line_width: 0.04
+    point_size: 0.04
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: true
+  type: equation
+  source: field = vstack((grid, grid + scale * grad))
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+view:
+  show_axes: false
+  show_bbox: false
+  show_crosshair: true
+  show_light_bg: false
+  show_shadow: false
+  shadow_opacity: 0.5
+  camera_position:
+  - 0.14581710406366838
+  - -2.212903559983503
+  - 11.383511757361934
+  orbit_target:
+  - 0.0
+  - 0.0
+  - 0.0

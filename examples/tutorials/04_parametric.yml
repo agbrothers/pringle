@@ -1,0 +1,116 @@
+version: 1
+grid:
+  x_min: -2.0
+  x_max: 2.0
+  y_min: -2.0
+  y_max: 2.0
+  z_min: -2.0
+  z_max: 2.0
+  n: 64
+cells:
+- id: 04000001-0000-4000-8000-000000000001
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: "# TUTORIAL 04 — Parametric Surface\n\n  Assign to xyz to render a parametric\
+    \ surface.\n  u and v are injected as grid arrays, just like \n  x and y for surfaces.\n\
+    \n  xyz must have shape (3, N, M) — one row per spatial axis."
+- id: 04000001-0000-4000-8000-000000000002
+  style:
+    color:
+    - 0.133333
+    - 0.133333
+    - 0.133333
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: r = 1.0
+  name: r
+  value: 1.0
+  min_val: 0.2
+  max_val: 2.0
+  step: 0.05
+  is_playing: false
+  anim_mode: pingpong
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+- id: 04000001-0000-4000-8000-000000000003
+  style:
+    color:
+    - 0.133333
+    - 0.133333
+    - 0.133333
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: squish = 1.0
+  name: squish
+  value: 1.0
+  min_val: 0.2
+  max_val: 2.0
+  step: 0.05
+  is_playing: false
+  anim_mode: pingpong
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+- id: 04000001-0000-4000-8000-000000000004
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: plasma
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: "xyz = array([\n    r * sin(v) * cos(u),\n    r * sin(v) * sin(u),\n   \
+    \ squish * r * cos(v),\n])"
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+view:
+  show_axes: false
+  show_bbox: true
+  show_crosshair: false
+  show_light_bg: false
+  show_shadow: true
+  shadow_opacity: 1.0
+  camera_position:
+  - 5.794294541264543
+  - -1.9173290716701834
+  - 3.000000000000001
+  orbit_target:
+  - 0.0
+  - 0.0
+  - 0.0
+  angular_velocity:
+  - 0.07206745765411887
+  - 0.0

@@ -1,0 +1,98 @@
+version: 1
+grid:
+  x_min: -5.0
+  x_max: 5.0
+  y_min: -5.0
+  y_max: 5.0
+  z_min: -2.0
+  z_max: 2.0
+  n: 64
+cells:
+- id: 01000001-0000-4000-8000-000000000001
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: "# TUTORIAL 01 — Hello Surface\n\n  Assigning to z renders an explicit surface\
+    \ \n  over the (x, y) evaluation grid.\n\n  x and y are numpy arrays — any numpy\
+    \ \n  expression works."
+- id: 01000001-0000-4000-8000-000000000002
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: viridis
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: z = sin(x) * cos(y)
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: 9c1b5457-f379-4460-a9a7-cdfbc860682f
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: "# Click on the color bar to open the style panel.\n\n  Drag the color bar\
+    \ to rearrange the cells. "
+- id: 3394bbd7-cbae-499d-b9c4-7287ad7cccac
+  style:
+    color:
+    - 0.85
+    - 0.55
+    - 0.05
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: "# Click on the settings icon in the top right to\n  customize the viewport. "
+view:
+  show_axes: true
+  show_bbox: true
+  show_crosshair: false
+  show_light_bg: false
+  show_shadow: false
+  shadow_opacity: 0.4
+  camera_position:
+  - -14.16049764893437
+  - 0.7217553762200473
+  - 7.480599943281619
+  orbit_target:
+  - 0.0
+  - 0.0
+  - 0.0
+  angular_velocity:
+  - 0.07206745765411887
+  - 0.0
