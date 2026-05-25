@@ -5,23 +5,19 @@
 
 <br/>
 <div style="text-align: center;">
-    <video 
-        src="pringle/assets/demo.mp4" 
-        width="85%"
-        style="max-width:100%; height:auto;" 
-        autoplay
-        loop
-        muted
-        playsinline
-        controls>
-    </video>
+    <img 
+        src="pringle/assets/demo.png" 
+        width="100%"
+        style="max-width:100%; height:auto; border-radius: 15px;">
+    </img>
 </div>
-<br/><br/>
 
+
+### *INSTALL & RUN:*
 ```bash
 pip install pringle
 
-crunch examples/lorenz-particles.yml
+crunch examples/lorenz-vector-field.yml
 ```
 
 ## Why Pringle?
