@@ -19,6 +19,7 @@ The widget emits:
 
 from __future__ import annotations
 
+import math
 import uuid
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QMenu,
@@ -194,21 +195,23 @@ class CellTextEdit(QPlainTextEdit):
         self._adjust_height()
 
     def _on_document_size_changed(self, new_size) -> None:
-        line_count = max(1, int(new_size.height()))
+        # ceil + 2px: prevents a 1-2px sub-pixel shortfall that triggers
+        # ensureCursorVisible to scroll when the cursor is on the last line.
+        line_count = max(1, math.ceil(new_size.height()))
         line_h = self.fontMetrics().lineSpacing()
         dm = int(self.document().documentMargin())
         m = self.contentsMargins()
-        h = line_count * line_h + 2 * dm + m.top() + m.bottom()
+        h = line_count * line_h + 2 * dm + m.top() + m.bottom() + 2
         self.setFixedHeight(max(h, 32))
         self.updateGeometry()
 
     def _adjust_height(self) -> None:
         """Initial sizing before documentSizeChanged has fired."""
-        line_count = max(1, int(self.document().size().height()))
+        line_count = max(1, math.ceil(self.document().size().height()))
         line_h = self.fontMetrics().lineSpacing()
         dm = int(self.document().documentMargin())
         m = self.contentsMargins()
-        h = line_count * line_h + 2 * dm + m.top() + m.bottom()
+        h = line_count * line_h + 2 * dm + m.top() + m.bottom() + 2
         self.setFixedHeight(max(h, 32))
 
     def resizeEvent(self, event) -> None:
