@@ -182,7 +182,6 @@ Selecting "Add Constraint" appends a constraint sub-cell below the primary cell,
 | `Ctrl+O` | Open session (file dialog) |
 | `Ctrl+N` | New empty session |
 | `Ctrl+Enter` / `Cmd+Enter` | Add new folder cell below focused cell (in the expression panel); force re-evaluate focused cell when focus is on the viewport |
-| `F` | Toggle first-person fly mode in viewport |
 | `Ctrl+[` / `Ctrl+]` | Collapse / expand focused folder cell |
 | `Cmd+]` / `Ctrl+]` | Indent cell into the folder directly above it (equation, slider, comment cells; no-op on folder cells and when no folder is adjacent above) |
 | `Cmd+[` / `Ctrl+[` | Outdent cell out of its current folder, placing it below the folder's last member (no-op when cell is not in a folder) |

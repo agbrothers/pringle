@@ -1,10 +1,27 @@
-# Pringle
+# <img src="pringle/assets/icon-alpha.png" width="9%" />  ***P R I N G  L E***
 
-**Interactive 3D scientific visualization for Python.** Define surfaces, vector fields, scatter plots, and dynamical system trajectories using real Python/numpy expressions — then explore them live with sliders and animation.
+
+**Interactive 3D plotting for Python.** Define surfaces, vector fields, scatter plots, and dynamical system trajectories using real Python/numpy expressions — then explore them live with sliders and animation.
+
+<br/>
+<div style="text-align: center;">
+    <video 
+        src="pringle/assets/demo.mp4" 
+        width="85%"
+        style="max-width:100%; height:auto;" 
+        autoplay
+        loop
+        muted
+        playsinline
+        controls>
+    </video>
+</div>
+<br/><br/>
 
 ```bash
 pip install pringle
-crunch examples/torus.yml
+
+crunch examples/lorenz-particles.yml
 ```
 
 ## Why Pringle?
@@ -17,9 +34,11 @@ crunch examples/torus.yml
 
 **Animate anything** — press ▷ on any slider and it loops over its range automatically. Camera orbit and pan stay fluid even while the scene is re-evaluating.
 
-**GPU-accelerated rendering** — powered by [pygfx](https://github.com/pygfx/pygfx) + [wgpu-py](https://github.com/pygfx/wgpu-py). Smooth Phong shading, order-independent transparency, and drop shadows — not matplotlib's software renderer.
+**Version-controlled sessions** — plot sessions are stored in human-readable YAML files. `git diff` shows exactly what changed; send a single `.yml` file to share a visualization with a collaborator.
 
-**Version-controlled sessions** — sessions are human-readable YAML files. `git diff` shows exactly what changed; send a single `.yml` file to share a visualization with a collaborator.
+**LLM Compatibility** — human readable session files + python-native expressions mean large language models are able to generate sophisticated pringle plots on the fly. 
+
+**GPU-accelerated rendering** — powered by [pygfx](https://github.com/pygfx/pygfx) + [wgpu-py](https://github.com/pygfx/wgpu-py). Smooth Phong shading, order-independent transparency, and drop shadows — not matplotlib's software renderer.
 
 **Vector fields** — native 2D and 3D arrow rendering, auto-detected from array shapes `(N, 4)` and `(N, 6)`.
 
@@ -61,7 +80,7 @@ crunch path/to/session.yml
 crunch examples/tutorials/01_hello_surface.yml
 
 # Alternative pringle alias
-pringle examples/tutorials/01_hello_surface.yml
+pringle examples/tutorials/03_animation.yml
 ```
 
 ## Expression Language
