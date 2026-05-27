@@ -210,8 +210,11 @@ class PringleViewport(QRenderWidget):
     def update_arrows(
         self, cell_id: str,
         arrows, color, opacity, normalize=False, size=0.1,
+        colormap=None, colormap_reversed=False, vertex_colors=None,
     ) -> None:
-        is_new = self._pr.update_arrows(cell_id, arrows, color, opacity, normalize, size)
+        is_new = self._pr.update_arrows(cell_id, arrows, color, opacity, normalize, size,
+                                        colormap=colormap, colormap_reversed=colormap_reversed,
+                                        vertex_colors=vertex_colors)
         if is_new and cell_id not in self._seen_cell_ids:
             self._seen_cell_ids.add(cell_id)
             self._pr.fit_camera()
@@ -711,7 +714,8 @@ class PringleWindow(QMainWindow):
                 if len(pts) >= 2:
                     arrows = np.concatenate([pts[:-1], pts[1:]], axis=1)  # (N-1, 6)
                     vp.update_arrows(cell_id, arrows, color=style.color, opacity=style.opacity,
-                                     normalize=style.normalize_arrows, size=style.point_size)
+                                     normalize=style.normalize_arrows, size=style.point_size,
+                                     colormap=cmap, colormap_reversed=cmap_rev)
                 else:
                     vp.remove_object(cell_id)
             else:
@@ -754,20 +758,31 @@ class PringleWindow(QMainWindow):
                     tails = data[:, :-1, :].reshape(-1, 3)
                     heads = data[:, 1:, :].reshape(-1, 3)
                     arrows = np.concatenate([tails, heads], axis=1)
-                    vp.update_arrows(cell_id, arrows, color=style.color, opacity=style.opacity,
-                                     normalize=style.normalize_arrows, size=style.point_size)
+                    if cmap is not None:
+                        # Each of k batches of (N-1) arrows independently spans 0→1
+                        idx_arrow = np.linspace(0.0, 1.0, N - 1, dtype=np.float32)
+                        arrow_colors = _apply_colormap(idx_arrow, cmap, cmap_rev)  # (N-1, 4)
+                        arrow_vc = np.tile(arrow_colors, (k, 1))                   # (k*(N-1), 4)
+                        vp.update_arrows(cell_id, arrows, color=style.color, opacity=style.opacity,
+                                         normalize=style.normalize_arrows, size=style.point_size,
+                                         vertex_colors=arrow_vc)
+                    else:
+                        vp.update_arrows(cell_id, arrows, color=style.color, opacity=style.opacity,
+                                         normalize=style.normalize_arrows, size=style.point_size)
                 else:
                     vp.remove_object(cell_id)
 
             else:  # circles or spheres
                 pts = data.reshape(-1, 3)  # (k*N, 3)
-                if cmap is not None and mode != "spheres":
+                if cmap is not None:
+                    # Each of k batches of N points independently spans 0→1
                     idx_line = np.linspace(0.0, 1.0, N, dtype=np.float32)
                     line_colors = _apply_colormap(idx_line, cmap, cmap_rev)  # (N, 4)
-                    vertex_colors = np.tile(line_colors, (k, 1))             # (k*N, 4)
+                    batch_vc = np.tile(line_colors, (k, 1))                  # (k*N, 4)
                     scatter = make_scatter_mesh(pts, color=style.color, opacity=style.opacity,
-                                               size=style.point_size, as_spheres=False,
-                                               vertex_colors=vertex_colors)
+                                               size=style.point_size,
+                                               as_spheres=(mode == "spheres"),
+                                               vertex_colors=batch_vc)
                 else:
                     scatter = make_scatter_mesh(pts, color=style.color, opacity=style.opacity,
                                                size=style.point_size,
@@ -784,7 +799,8 @@ class PringleWindow(QMainWindow):
                     data[:, 2:], np.zeros(len(data), dtype=np.float32),
                 ])
             vp.update_arrows(cell_id, data, color=style.color, opacity=style.opacity,
-                             normalize=style.normalize_arrows, size=style.point_size)
+                             normalize=style.normalize_arrows, size=style.point_size,
+                             colormap=cmap, colormap_reversed=cmap_rev)
 
         else:
             # No renderable output (comment, slider, error, or hidden) — clear

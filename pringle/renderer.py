@@ -376,6 +376,51 @@ def _apply_colormap(
     return cmap(norm).astype(np.float32)
 
 
+def _merge_colored_mesh(
+    base_geo: gfx.Geometry,
+    transforms: np.ndarray,   # (N, 4, 4) row-major model matrices
+    colors: np.ndarray,       # (N, 4) RGBA per instance
+    opacity: float = 1.0,
+) -> gfx.Mesh:
+    """Build a single merged Mesh from N transformed instances of base_geo with per-instance colors.
+
+    Replaces InstancedMesh when per-instance colormap support is needed, since pygfx's
+    InstancedMesh instance_buffer only carries transform matrices (no color slot).
+    """
+    base_pos = base_geo.positions.data   # (V, 3)
+    base_nor = base_geo.normals.data     # (V, 3)
+    base_idx = base_geo.indices.data     # (F, 3)
+    N, V, F = len(transforms), len(base_pos), len(base_idx)
+
+    R3 = transforms[:, :3, :3]   # (N, 3, 3) upper-left for position transform
+    t3 = transforms[:, :3, 3]    # (N, 3) translation
+
+    all_pos = (np.einsum('nij,vj->nvi', R3, base_pos) + t3[:, None, :]).reshape(N * V, 3)
+
+    # Normals transform by inverse-transpose of upper-left 3x3
+    R3_inv_T = np.linalg.inv(R3).transpose(0, 2, 1)
+    all_nor = np.einsum('nij,vj->nvi', R3_inv_T, base_nor).reshape(N * V, 3)
+    nlen = np.linalg.norm(all_nor, axis=-1, keepdims=True)
+    all_nor /= np.maximum(nlen, 1e-10)
+
+    all_col = np.repeat(colors, V, axis=0)  # (N*V, 4) — each instance's color repeated V times
+
+    offsets = np.arange(N, dtype=np.int32)[:, None, None] * V
+    all_idx = (base_idx[None] + offsets).reshape(N * F, 3)
+
+    geo = gfx.Geometry(
+        positions=all_pos.astype(np.float32),
+        normals=all_nor.astype(np.float32),
+        colors=all_col.astype(np.float32),
+        indices=all_idx.astype(np.int32),
+    )
+    mat = gfx.MeshPhongMaterial(color_mode="vertex", side="front")
+    if opacity < 1.0:
+        mat.opacity = opacity
+        mat.alpha_mode = "weighted_blend"
+    return gfx.Mesh(geo, mat)
+
+
 def _build_unit_arrow_geometry(
     shaft_r: float = 0.3,
     head_r: float = 0.9,
@@ -501,7 +546,10 @@ def make_arrow_mesh(
     opacity: float = 1.0,
     normalize: bool = False,
     size: float = 0.1,
-) -> gfx.InstancedMesh:
+    colormap: str | None = None,
+    colormap_reversed: bool = False,
+    vertex_colors: np.ndarray | None = None,  # (N, 4) pre-computed per-arrow RGBA
+) -> gfx.InstancedMesh | gfx.Mesh:
     """
     Build a pygfx InstancedMesh of 3D arrows from an (N, 6) array of tail+head pairs.
 
@@ -509,6 +557,8 @@ def make_arrow_mesh(
     vector field direction is visually dominant over magnitude.
     size controls the shaft/head radius in world units (maps to style.point_size).
     The unit geometry has shaft_r=0.3 and head_r=0.9, so size=0.1 gives shaft_r=0.03.
+    colormap applies per-arrow colors using index mapping (0→1 over all N arrows).
+    vertex_colors overrides colormap with caller-supplied (N, 4) per-arrow RGBA.
     """
     global _ARROW_GEO
     if _ARROW_GEO is None:
@@ -523,12 +573,20 @@ def make_arrow_mesh(
         dirs = (heads - tails) / np.maximum(mags, 1e-10)
         heads = tails + dirs * mean_mag
 
+    Ms = _arrow_matrices_batch(tails, heads, size=size)
+
+    if vertex_colors is not None:
+        return _merge_colored_mesh(_ARROW_GEO, Ms, vertex_colors, opacity)
+    if colormap is not None:
+        idx_vals = np.linspace(0.0, 1.0, len(arrows), dtype=np.float32)
+        colors_inst = _apply_colormap(idx_vals, colormap, colormap_reversed)
+        return _merge_colored_mesh(_ARROW_GEO, Ms, colors_inst, opacity)
+
     mat = gfx.MeshPhongMaterial(color=color, side="front")
     if opacity < 1.0:
         mat.opacity = opacity
         mat.alpha_mode = "weighted_blend"
     mesh = gfx.InstancedMesh(_ARROW_GEO, mat, len(arrows))
-    Ms = _arrow_matrices_batch(tails, heads, size=size)
     mesh.instance_buffer.data["matrix"][:] = Ms.transpose(0, 2, 1)  # pygfx stores column-major
     mesh.instance_buffer.update_full()
     return mesh
@@ -715,6 +773,20 @@ def make_scatter_mesh(
             width_segments=16,
             height_segments=16,
         )
+        if vertex_colors is not None or colormap is not None:
+            if vertex_colors is not None:
+                colors_inst = vertex_colors
+            else:
+                idx_vals = np.linspace(0.0, 1.0, len(pts), dtype=np.float32)
+                colors_inst = _apply_colormap(idx_vals, colormap, colormap_reversed)
+            # Build per-instance translation matrices (spheres are symmetric — no rotation needed)
+            Ms = np.zeros((len(pts), 4, 4), dtype=np.float32)
+            Ms[:, 0, 0] = 1.0
+            Ms[:, 1, 1] = 1.0
+            Ms[:, 2, 2] = 1.0
+            Ms[:, 3, 3] = 1.0
+            Ms[:, :3, 3] = pts
+            return _merge_colored_mesh(sphere_geo, Ms, colors_inst, opacity)
         mat = gfx.MeshPhongMaterial(color=color, side="front")
         if opacity < 1.0:
             mat.opacity = opacity
@@ -1274,13 +1346,16 @@ class PringleRenderer:
         opacity: float,
         normalize: bool = False,
         size: float = 0.1,
+        colormap: str | None = None,
+        colormap_reversed: bool = False,
+        vertex_colors: np.ndarray | None = None,  # (N, 4) pre-computed per-arrow RGBA
     ) -> bool:
         """Add or update an arrow cell. Returns True if the cell is new (caller should fit camera).
 
-        When N is unchanged from the previous frame, writes the new matrix batch
+        When N is unchanged and no per-instance colors are active, writes the new matrix batch
         directly into the existing InstancedMesh.instance_buffer (no pygfx object
         rebuild, no full GPU buffer re-upload). Falls back to a full rebuild on
-        N change or first frame.
+        N change, first frame, or when colormap/vertex_colors active (merged Mesh has no instance_buffer).
         """
         arrows = np.asarray(arrows, dtype=np.float32)
         tails = arrows[:, :3]
@@ -1293,23 +1368,29 @@ class PringleRenderer:
             heads = tails + dirs * mean_mag
 
         N = len(arrows)
-        if cell_id in self._arrow_mesh and self._arrow_count.get(cell_id) == N:
+        existing = self._arrow_mesh.get(cell_id)
+        if (colormap is None
+                and vertex_colors is None
+                and existing is not None
+                and isinstance(existing, gfx.InstancedMesh)
+                and self._arrow_count.get(cell_id) == N):
             Ms = _arrow_matrices_batch(tails, heads, size=size)
-            ib = self._arrow_mesh[cell_id].instance_buffer
+            ib = existing.instance_buffer
             ib.data["matrix"][:] = Ms.transpose(0, 2, 1)  # pygfx stores column-major
             ib.update_full()
-            mesh = self._arrow_mesh[cell_id]
             if opacity < 1.0:
-                mesh.material.opacity = opacity
-                mesh.material.alpha_mode = "weighted_blend"
+                existing.material.opacity = opacity
+                existing.material.alpha_mode = "weighted_blend"
             else:
-                mesh.material.opacity = 1.0
+                existing.material.opacity = 1.0
             return False
 
-        # Full rebuild (first frame or N changed)
+        # Full rebuild (first frame, N changed, colormap active, or mode switch)
         norm_arrows = np.concatenate([tails, heads], axis=1)
         mesh = make_arrow_mesh(norm_arrows, color=color, opacity=opacity,
-                               normalize=False, size=size)
+                               normalize=False, size=size,
+                               colormap=colormap, colormap_reversed=colormap_reversed,
+                               vertex_colors=vertex_colors)
         is_new = self.add_object(cell_id, mesh)
         self._arrow_mesh[cell_id]  = mesh
         self._arrow_count[cell_id] = N

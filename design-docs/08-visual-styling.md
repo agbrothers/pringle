@@ -29,8 +29,8 @@ Style properties are stored as rendering metadata on the cell — separate from 
 | Color | ✓ | ✓ | ✓ | ✓ | RGBA; hex input + color swatch |
 | Opacity | ✓ | ✓ | ✓ | ✓ | |
 | Size | — | ✓ | ✓ | — | Single control sets both `line_width` and `point_size` (world-space units) |
-| Colormap | ✓ | ✓ | ✓ | — | Named matplotlib colormap; overrides flat color when selected |
-| Colormap reversed | ✓ | ✓ | ✓ | — | ⇄ toggle next to swatch row |
+| Colormap | ✓ | ✓ | ✓ | ✓ | Named matplotlib colormap; overrides flat color when selected |
+| Colormap reversed | ✓ | ✓ | ✓ | ✓ | ⇄ toggle next to swatch row |
 | Render mode | — | — | ✓ | — | Mutually exclusive radio: Circles / Line / Spheres |
 | Normalize arrows | — | — | — | ✓ | Pin all arrows to equal length |
 | Line style | — | ✓ | — | — | Solid / dashed / dotted (future) |
@@ -96,6 +96,10 @@ material.opacity = new_opacity
 - Material properties map 1:1 to what the style panel controls — very clean binding
 - Line width works correctly (lines rendered as world-space quads, not GL lines)
 - Transparency is handled via WBOIT — no manual sorting needed
+
+### Colormap on InstancedMesh (spheres and arrows)
+
+pygfx's `InstancedMesh.instance_buffer` stores only transformation matrices — there is no per-instance color slot. To support colormap on spheres and arrows, `_merge_colored_mesh` builds a single merged `gfx.Mesh` instead: all N instance geometries are concatenated into one, with each instance's V vertices all sharing the same RGBA color from the colormap. `MeshPhongMaterial(color_mode="vertex")` then applies the per-vertex colors. When no colormap is selected, spheres and arrows continue to use the fast `InstancedMesh` path (single draw call, no geometry concatenation).
 
 ## Display Mode: Wireframe Overlay
 
