@@ -86,7 +86,13 @@ def _detect_magic(local_ns: dict, grid: Grid, user_stores: set[str]) -> tuple[st
         if isinstance(val, np.ndarray):
             return "surface_y", val
     if "points" in user_stores:
-        return "scatter", local_ns.get("points")
+        val = local_ns.get("points")
+        if isinstance(val, np.ndarray) and val.ndim == 3:
+            if val.shape[2] == 3:
+                return "scatter_batch", val
+            if val.shape[2] == 2:
+                return "scatter_batch_2d", val
+        return "scatter", val
 
     # Fallback: any user-assigned variable whose shape looks plottable
     for name in user_stores:
@@ -130,6 +136,11 @@ def _detect_shape(val: Any) -> tuple[str | None, Any]:
         return "vectors", val.reshape(6, -1).T
     if val.ndim == 3 and val.shape[0] == 4:
         return "vectors_2d", val.reshape(4, -1).T
+    # Batch scatter: (k, N, 3) or (k, N, 2) — comes after all vector checks
+    if val.ndim == 3 and val.shape[2] == 3:
+        return "scatter_batch", val
+    if val.ndim == 3 and val.shape[2] == 2:
+        return "scatter_batch_2d", val
     return None, None
 
 
@@ -333,6 +344,13 @@ def validate_shape(render_type: str, data: Any, grid: Grid) -> str | None:
         if data.shape[1] not in (2, 3):
             return f"points must have 2 or 3 columns, got {data.shape[1]}"
 
+    elif render_type in ("scatter_batch", "scatter_batch_2d"):
+        expected_cols = 3 if render_type == "scatter_batch" else 2
+        if not isinstance(data, np.ndarray) or data.ndim != 3:
+            return f"Expected (k, N, {expected_cols}) array, got {getattr(data, 'shape', '?')}"
+        if data.shape[2] != expected_cols:
+            return f"Batch scatter must have {expected_cols} columns, got {data.shape[2]}"
+
     return None
 
 
@@ -470,7 +488,8 @@ def run_cell(
     render_type, data = _detect_magic(local_ns, grid, user_stores)
     # Scatter/vector detected via shape (not explicit `points = ...`) → data-array mode
     result.from_shape_inference = (
-        render_type in ("scatter", "scatter_2d", "vectors", "vectors_2d")
+        render_type in ("scatter", "scatter_2d", "vectors", "vectors_2d",
+                        "scatter_batch", "scatter_batch_2d")
         and "points" not in user_stores
     )
 
@@ -588,7 +607,7 @@ def run_cell(
             result.error = f"Curve data must be numeric (got {type(data).__name__})"
             return result
 
-    elif render_type in ("scatter", "scatter_2d"):
+    elif render_type in ("scatter", "scatter_2d", "scatter_batch", "scatter_batch_2d"):
         try:
             data, _overflow_warn = _cast_float32(data)
         except (TypeError, ValueError):

@@ -643,6 +643,7 @@ def make_line_mesh(
     thickness: float = 0.05,
     colormap: str | None = None,
     colormap_reversed: bool = False,
+    vertex_colors: np.ndarray | None = None,
 ) -> gfx.Line:
     """
     Build a pygfx Line from an (N, 3) or (N, 2) array of points.
@@ -661,13 +662,16 @@ def make_line_mesh(
         mat.opacity = 0.0
         return gfx.Line(geo, mat)
 
-    if colormap is not None:
-        valid = ~np.any(np.isnan(pts), axis=1)
-        n_valid = int(valid.sum())
-        colors = np.zeros((len(pts), 4), dtype=np.float32)
-        if n_valid > 0:
-            idx_vals = np.linspace(0.0, 1.0, n_valid, dtype=np.float32)
-            colors[valid] = _apply_colormap(idx_vals, colormap, colormap_reversed)
+    if vertex_colors is not None or colormap is not None:
+        if vertex_colors is not None:
+            colors = vertex_colors
+        else:
+            valid = ~np.any(np.isnan(pts), axis=1)
+            n_valid = int(valid.sum())
+            colors = np.zeros((len(pts), 4), dtype=np.float32)
+            if n_valid > 0:
+                idx_vals = np.linspace(0.0, 1.0, n_valid, dtype=np.float32)
+                colors[valid] = _apply_colormap(idx_vals, colormap, colormap_reversed)
         geo = gfx.Geometry(positions=pts, colors=colors)
         mat = gfx.LineMaterial(color_mode="vertex", thickness=thickness, thickness_space="world")
     else:
@@ -687,6 +691,7 @@ def make_scatter_mesh(
     as_spheres: bool = False,
     colormap: str | None = None,
     colormap_reversed: bool = False,
+    vertex_colors: np.ndarray | None = None,
 ) -> gfx.Points | gfx.InstancedMesh:
     """
     Build a pygfx Points object from an (N, 3) or (N, 2) array.
@@ -719,9 +724,12 @@ def make_scatter_mesh(
             mesh.set_matrix_at(i, la.mat_from_translation(pos))
         return mesh
 
-    if colormap is not None:
-        idx_vals = np.linspace(0.0, 1.0, len(pts), dtype=np.float32)
-        colors = _apply_colormap(idx_vals, colormap, colormap_reversed)
+    if vertex_colors is not None or colormap is not None:
+        if vertex_colors is not None:
+            colors = vertex_colors
+        else:
+            idx_vals = np.linspace(0.0, 1.0, len(pts), dtype=np.float32)
+            colors = _apply_colormap(idx_vals, colormap, colormap_reversed)
         geo = gfx.Geometry(positions=pts, colors=colors)
         mat = gfx.PointsMaterial(color_mode="vertex", size=size, size_space="world")
     else:

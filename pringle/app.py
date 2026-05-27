@@ -30,7 +30,10 @@ from rendercanvas.qt import QRenderWidget
 from pringle.header_bar import PringleHeaderBar
 
 import pygfx as gfx
-from pringle.renderer import PringleRenderer, make_line_mesh, make_scatter_mesh, make_parametric_surface_mesh
+from pringle.renderer import (
+    PringleRenderer, make_line_mesh, make_scatter_mesh, make_parametric_surface_mesh,
+    _apply_colormap,
+)
 from pringle.grid import GridConfig, Grid, make_grid
 from pringle.evaluator import run_cell, CellResult
 from pringle.style import CellStyle
@@ -716,6 +719,60 @@ class PringleWindow(QMainWindow):
                                             size=style.point_size,
                                             as_spheres=(mode == "spheres"),
                                             colormap=cmap, colormap_reversed=cmap_rev)
+                vp.add_object(cell_id, scatter)
+
+        elif result.render_type in ("scatter_batch", "scatter_batch_2d"):
+            data = result.data  # (k, N, 2) or (k, N, 3), already float32
+            k, N, cols = data.shape
+            if cols == 2:
+                data = np.concatenate([data, np.zeros((k, N, 1), dtype=np.float32)], axis=2)
+
+            mode = style.scatter_render_mode
+            if mode == "line":
+                sep = np.full((k, 1, 3), np.nan, dtype=np.float32)
+                padded = np.concatenate([data, sep], axis=1)   # (k, N+1, 3)
+                pts = padded.reshape(-1, 3)[:-1]               # (k*(N+1)-1, 3)
+                if cmap is not None:
+                    idx_line = np.linspace(0.0, 1.0, N, dtype=np.float32)
+                    line_colors = _apply_colormap(idx_line, cmap, cmap_rev)         # (N, 4)
+                    tiled = np.tile(line_colors, (k, 1)).reshape(k, N, 4)           # (k, N, 4)
+                    nan_row = np.zeros((k, 1, 4), dtype=np.float32)
+                    vertex_colors = np.concatenate(
+                        [tiled, nan_row], axis=1
+                    ).reshape(-1, 4)[:-1]                                           # (k*(N+1)-1, 4)
+                    line = make_line_mesh(pts, color=style.color, opacity=style.opacity,
+                                         thickness=style.line_width,
+                                         vertex_colors=vertex_colors)
+                else:
+                    line = make_line_mesh(pts, color=style.color, opacity=style.opacity,
+                                         thickness=style.line_width)
+                vp.add_object(cell_id, line)
+
+            elif mode == "arrows":
+                if N >= 2:
+                    # Fully vectorized: build all k*(N-1) arrows without a Python loop
+                    tails = data[:, :-1, :].reshape(-1, 3)
+                    heads = data[:, 1:, :].reshape(-1, 3)
+                    arrows = np.concatenate([tails, heads], axis=1)
+                    vp.update_arrows(cell_id, arrows, color=style.color, opacity=style.opacity,
+                                     normalize=style.normalize_arrows, size=style.point_size)
+                else:
+                    vp.remove_object(cell_id)
+
+            else:  # circles or spheres
+                pts = data.reshape(-1, 3)  # (k*N, 3)
+                if cmap is not None and mode != "spheres":
+                    idx_line = np.linspace(0.0, 1.0, N, dtype=np.float32)
+                    line_colors = _apply_colormap(idx_line, cmap, cmap_rev)  # (N, 4)
+                    vertex_colors = np.tile(line_colors, (k, 1))             # (k*N, 4)
+                    scatter = make_scatter_mesh(pts, color=style.color, opacity=style.opacity,
+                                               size=style.point_size, as_spheres=False,
+                                               vertex_colors=vertex_colors)
+                else:
+                    scatter = make_scatter_mesh(pts, color=style.color, opacity=style.opacity,
+                                               size=style.point_size,
+                                               as_spheres=(mode == "spheres"),
+                                               colormap=cmap, colormap_reversed=cmap_rev)
                 vp.add_object(cell_id, scatter)
 
         elif result.render_type in ("vectors", "vectors_2d"):

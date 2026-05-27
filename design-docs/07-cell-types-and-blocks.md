@@ -29,9 +29,23 @@ Output type is determined by which magic name is assigned. These take priority o
 | `points` | Scatter plot | `(N, 3)` or `(N, 2)` float | `points = d` |
 | `vectors` | Vector field | `(N, 6)` float — tail+head pairs | via shape inference (see below) |
 
+
+The last dimension of an array determines what plotting options to use. The data in the last dimension is viewed as follows:
+
+```
+|  SHAPE: (N, 2)     |  SHAPE: (N, 3)      |  SHAPE: (N, 4)        |  SHAPE: (N, 6)          |
+|             |      |             |       |             |         |             |           |
+|             v      |             v       |             v         |             v           |
+|           [0 1]    |         [0  1  2]   |       [0  1 | 2  3]   |    [0  1  2 | 3  4  5]  |
+|            x y     |          x  y  z    |        x  y | x  y    |     x  y  z | x  y  z   |
+|                    |                     |        tail | head    |       tail  |  head     |
+|             •      |             •       |         ------->      |         ------->        |
+|         2D POINTS  |         3D POINTS   |        2D VECTORS     |        3D VECTORS       |
+```
+
 ---
 
-## `f(x,y) = expr` Function Cells
+## Function Cells  -  `f(x,y) = expr` 
 
 A cell whose content matches `name(args) = expr` is a function definition cell. Preprocessing converts it to a lambda before AST parsing. After execution, the function is added to the shared namespace for all other cells.
 
@@ -88,6 +102,12 @@ A cell whose content is a bare expression (no assignment) is auto-detected and p
 |---|---|---|
 | `(N, 6)` | Vectors (3D tail+head pairs) | shape |
 | `(N, 4)` | Vectors 2D (2D tail+head pairs, z=0) | shape |
+| `(k, N, 6)` | Vectors (channels-last, flattened) | shape |
+| `(k, N, 4)` | Vectors 2D (channels-last, flattened) | shape |
+| `(6, N, M)` | Vectors (channels-first, flattened) | shape |
+| `(4, N, M)` | Vectors 2D (channels-first, flattened) | shape |
+| `(k, N, 3)` | Batch 3D scatter (`k` lines of `N` points) | shape |
+| `(k, N, 2)` | Batch 2D scatter (`k` lines of `N` points) | shape |
 | `(N, 3)` | 3D scatter | shape e.g. `(100, 3)` |
 | `(N, 2)` | 2D scatter | shape |
 | `(3,)` | Single 3D point (scatter) | element values + shape `(1, 3)` |
@@ -244,6 +264,6 @@ Shape validation runs after every cell execution. Mismatches display as yellow i
 | `z` | `(N, M)` matching x.shape | Scalar returned; forgot that x, y are 2D grids |
 | `y` | `(N,)` matching grid | 2D array returned instead of 1D |
 | `xyz` | `(3, N)` or `(3, N, M)` | Wrong axis: `(N, 3)` instead of `(3, N)` — Pringle transposes if unambiguous |
-| `points` | `(N, 2)` or `(N, 3)` | Wrong column count |
+| `points` | `(N, 2)`, `(N, 3)`, `(k, N, 2)`, or `(k, N, 3)` | Wrong column count or wrong ndim |
 
 NaN and Inf are not errors — they are filtered at the renderer (degenerate triangles skipped).

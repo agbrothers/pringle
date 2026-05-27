@@ -966,7 +966,8 @@ class CellListWidget(QWidget):
         if not cell.has_recursion_sub_cell():
             should_be_data = (
                 result.from_shape_inference
-                and result.render_type in ("scatter", "scatter_2d")
+                and result.render_type in ("scatter", "scatter_2d",
+                                           "scatter_batch", "scatter_batch_2d")
             )
             if should_be_data != cell.is_data_mode():
                 cell.set_data_mode(should_be_data)
