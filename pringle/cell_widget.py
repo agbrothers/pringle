@@ -799,6 +799,10 @@ class CellWidget(QWidget):
         popover.color_picker_requested.connect(self._open_color_picker)
         popover.visible_toggled.connect(self._on_visibility_toggled)
         pos = self._swatch.mapToGlobal(self._swatch.rect().bottomLeft())
+        hint_h = popover.sizeHint().height()
+        if pos.y() + hint_h > self._swatch.screen().availableGeometry().bottom():
+            pos = self._swatch.mapToGlobal(self._swatch.rect().topLeft())
+            pos.setY(pos.y() - hint_h)
         popover.move(pos)
         popover.show()
 
