@@ -549,7 +549,7 @@ def make_arrow_mesh(
     colormap: str | None = None,
     colormap_reversed: bool = False,
     vertex_colors: np.ndarray | None = None,  # (N, 4) pre-computed per-arrow RGBA
-) -> gfx.InstancedMesh | gfx.Mesh:
+) -> gfx.InstancedMesh | gfx.Mesh | None:
     """
     Build a pygfx InstancedMesh of 3D arrows from an (N, 6) array of tail+head pairs.
 
@@ -575,12 +575,19 @@ def make_arrow_mesh(
 
     Ms = _arrow_matrices_batch(tails, heads, size=size)
 
-    if vertex_colors is not None:
-        return _merge_colored_mesh(_ARROW_GEO, Ms, vertex_colors, opacity)
-    if colormap is not None:
+    if vertex_colors is not None or colormap is not None:
+        # Zero-scale matrices from degenerate arrows are singular — filter them
+        # before calling _merge_colored_mesh which inverts the 3x3 rotation block.
+        mags = np.linalg.norm(heads - tails, axis=1)
+        valid = mags > 1e-10
+        if not np.any(valid):
+            return None
+        Ms_valid = Ms[valid]
+        if vertex_colors is not None:
+            return _merge_colored_mesh(_ARROW_GEO, Ms_valid, vertex_colors[valid], opacity)
         idx_vals = np.linspace(0.0, 1.0, len(arrows), dtype=np.float32)
         colors_inst = _apply_colormap(idx_vals, colormap, colormap_reversed)
-        return _merge_colored_mesh(_ARROW_GEO, Ms, colors_inst, opacity)
+        return _merge_colored_mesh(_ARROW_GEO, Ms_valid, colors_inst[valid], opacity)
 
     mat = gfx.MeshPhongMaterial(color=color, side="front")
     if opacity < 1.0:
@@ -1391,6 +1398,9 @@ class PringleRenderer:
                                normalize=False, size=size,
                                colormap=colormap, colormap_reversed=colormap_reversed,
                                vertex_colors=vertex_colors)
+        if mesh is None:
+            self.remove_object(cell_id)
+            return False
         is_new = self.add_object(cell_id, mesh)
         self._arrow_mesh[cell_id]  = mesh
         self._arrow_count[cell_id] = N
