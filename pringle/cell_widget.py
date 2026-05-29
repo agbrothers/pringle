@@ -429,10 +429,15 @@ class CellWidget(QWidget):
     def _build_ui(self):
         self.setContentsMargins(0, 0, 0, 0)
 
+        top_v = QVBoxLayout(self)
+        top_v.setContentsMargins(0, 0, 0, 0)
+        top_v.setSpacing(0)
+
         # Outer: swatch strip (left) + content area (right)
-        outer_h = QHBoxLayout(self)
+        outer_h = QHBoxLayout()
         outer_h.setContentsMargins(0, 0, 0, 0)
         outer_h.setSpacing(0)
+        top_v.addLayout(outer_h)
 
         self._swatch = ColorSwatchHandle(self.style, self)
         self._swatch.drag_started.connect(lambda: self.drag_started.emit(self.cell_id))
@@ -549,11 +554,11 @@ class CellWidget(QWidget):
 
         outer.addLayout(preview_row)
 
-        # Thin separator below the frame
+        # Thin separator below the frame (outside outer_h so the swatch doesn't cover it)
         line = QFrame()
         line.setObjectName("separator")
         line.setFrameShape(QFrame.Shape.HLine)
-        content_layout.addWidget(line)
+        top_v.addWidget(line)
 
     # ------------------------------------------------------------------
     # Public API
