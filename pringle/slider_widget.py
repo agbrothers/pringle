@@ -55,6 +55,10 @@ class _SpinBox(QDoubleSpinBox):
         super().__init__(*args, **kwargs)
         self.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         self.setDecimals(6)
+        # QDoubleSpinBox defaults to WheelFocus, which means a scroll event gives
+        # it focus before wheelEvent runs, making hasFocus() always True.
+        # StrongFocus restricts focus acquisition to click/tab only.
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
     def textFromValue(self, v: float) -> str:
         if v == int(v) and abs(v) < 1e15:
@@ -91,6 +95,22 @@ class _SpinBox(QDoubleSpinBox):
             self.new_cell_requested.emit()
             return
         super().keyPressEvent(event)
+
+    def wheelEvent(self, event) -> None:
+        if self.hasFocus():
+            super().wheelEvent(event)
+        else:
+            event.ignore()
+
+
+class _Slider(QSlider):
+    """QSlider that only responds to wheel events when it has keyboard focus."""
+
+    def wheelEvent(self, event) -> None:
+        if self.hasFocus():
+            super().wheelEvent(event)
+        else:
+            event.ignore()
 
 
 def _fmt(v: float) -> str:
@@ -375,7 +395,7 @@ class SliderWidget(QWidget):
         self._min_box.committed.connect(lambda _: self._on_range_changed())
         row2.addWidget(self._min_box)
 
-        self._slider = QSlider(Qt.Orientation.Horizontal)
+        self._slider = _Slider(Qt.Orientation.Horizontal)
         self._slider.setRange(0, 1000)
         self._slider.setValue(self._float_to_int(self._value))
         self._slider.valueChanged.connect(self._on_slider_moved)
