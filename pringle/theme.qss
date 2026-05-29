@@ -30,8 +30,19 @@ QPushButton#header_file_btn {
 }
 QPushButton#header_file_btn:hover  { color: #eee; border-color: #666; }
 QPushButton#header_file_btn:pressed { background: #222; }
-QPushButton#header_file_btn[modified="true"]  { color: #ffffff; border-color: #555; }
+QPushButton#header_file_btn[modified="true"]  { color: #E9A15F; border-color: #E9A15F; }
 QPushButton#header_file_btn[modified="false"] { color: #888;    border-color: #333; }
+
+QPushButton#header_screenshot_btn {
+    color: #888;
+    font-size: 14px;
+    padding: 4px 6px;
+    background: transparent;
+    border: 1px solid #333;
+    border-radius: 10px;
+}
+QPushButton#header_screenshot_btn:hover   { color: #eee; border-color: #666; }
+QPushButton#header_screenshot_btn:pressed { background: #222; }
 
 QPushButton#header_wrench_btn {
     color: #555;

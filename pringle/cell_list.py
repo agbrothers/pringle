@@ -219,6 +219,8 @@ class CellListWidget(QWidget):
     eval_requested = pyqtSignal(object)
     # Emitted after _rebuild_namespace completes and slider bounds are re-resolved.
     namespace_rebuilt = pyqtSignal()
+    # Emitted on any user change that should mark the session as modified.
+    session_dirtied = pyqtSignal()
     # Emitted when a cell writes to cfg (e.g. cfg.x_max = t); carries new bounds (FEAT-057).
     bounds_override = pyqtSignal(float, float, float, float, float, float)
     # Toolbar file-management signals forwarded to app.py
@@ -896,6 +898,7 @@ class CellListWidget(QWidget):
                 cell.set_resolver(_resolver)   # keep resolver current for future user edits
                 cell.re_resolve(_resolver)     # re-evaluate any stored expressions
         self.namespace_rebuilt.emit()
+        self.session_dirtied.emit()
 
     def _eval_cell(self, cell: CellWidget, shared: dict) -> CellResult:
         """Evaluate one cell against the current shared namespace + grid."""
@@ -1011,6 +1014,7 @@ class CellListWidget(QWidget):
         last = getattr(cell, "_last_result", None)
         if last is not None and last.render_type and self._is_render_visible(cell):
             self._on_cell_result(cell_id, last, cell.style)
+        self.session_dirtied.emit()
 
     def _on_folder_collapse_changed(self, folder_id: str, collapsed: bool) -> None:
         """Hide or show all member cells when a folder is collapsed/expanded."""

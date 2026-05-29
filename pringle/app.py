@@ -323,6 +323,7 @@ class PringleWindow(QMainWindow):
         self._header.new_requested.connect(self._on_new)
         self._header.open_requested.connect(self._on_open)
         self._header.save_requested.connect(self._on_save)
+        self._header.screenshot_requested.connect(self._save_image)
         self._header.settings_toggled.connect(self._on_settings_toggled)
         root_layout.addWidget(self._header)
 
@@ -382,6 +383,7 @@ class PringleWindow(QMainWindow):
             eval_threaded=True,
         )
         self._cell_list.namespace_rebuilt.connect(self._on_namespace_rebuilt)
+        self._cell_list.session_dirtied.connect(self._mark_modified)
         self._cell_list.bounds_override.connect(self._on_bounds_override)
         left_layout.addWidget(self._cell_list, 1)
 
@@ -459,12 +461,59 @@ class PringleWindow(QMainWindow):
         """Return True if it's safe to discard the current session."""
         if not self._modified:
             return True
-        btn = QMessageBox.question(
-            self, "Unsaved changes",
-            "You have unsaved changes. Discard them?",
-            QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
+
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Unsaved changes")
+        dlg.setWindowFlags(
+            dlg.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
         )
-        return btn == QMessageBox.StandardButton.Discard
+
+        vbox = QVBoxLayout(dlg)
+        vbox.setSpacing(16)
+        vbox.setContentsMargins(20, 16, 20, 16)
+        vbox.addWidget(QLabel("You have unsaved changes."))
+
+        hbox = QHBoxLayout()
+        hbox.setSpacing(8)
+        hbox.addStretch()
+
+        _pill = (
+            "QPushButton {{"
+            " color: {c}; font-size: 12px; padding: 4px 12px;"
+            " background: transparent; border: 1px solid {b}; border-radius: 10px;"
+            "}}"
+            "QPushButton:hover {{ color: #eee; border-color: #666; }}"
+            "QPushButton:pressed {{ background: #222; }}"
+        )
+
+        save_btn = QPushButton("Save")
+        save_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        save_btn.setStyleSheet(_pill.format(c="#E9A15F", b="#E9A15F"))
+
+        discard_btn = QPushButton("Discard")
+        discard_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        discard_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        discard_btn.setStyleSheet(_pill.format(c="#888", b="#333"))
+
+        hbox.addWidget(discard_btn)
+        hbox.addWidget(save_btn)
+        vbox.addLayout(hbox)
+
+        result: list[str] = []
+        save_btn.clicked.connect(lambda: (result.append("save"), dlg.accept()))
+        discard_btn.clicked.connect(lambda: (result.append("discard"), dlg.accept()))
+
+        dlg.exec()
+
+        if not result:
+            return False          # dismissed / Escape → cancel
+        if result[0] == "discard":
+            return True
+        self._on_save()
+        return not self._modified  # True only if save completed (not cancelled)
 
     def _on_new(self) -> None:
         if not self._confirm_discard():
@@ -551,6 +600,18 @@ class PringleWindow(QMainWindow):
         )
         if path:
             self._write_session(path)
+
+    def _save_image(self) -> None:
+        from PIL import Image
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Image", "pringle_screenshot.png", "PNG Images (*.png)"
+        )
+        if not path:
+            return
+        if not path.lower().endswith(".png"):
+            path += ".png"
+        rgba = self._viewport.renderer.snapshot()
+        Image.fromarray(rgba, "RGBA").save(path)
 
     def _on_undo(self) -> None:
         from PyQt6.QtWidgets import QPlainTextEdit, QLineEdit
@@ -943,8 +1004,16 @@ def launch(argv=None) -> int:
     win = PringleWindow(grid=make_grid(GridConfig(n=64)))
     win.show()
 
-    # Seed the session with a demo cell
+    # Seed the session with a demo cell, then clear the modified flag so the
+    # default state doesn't prompt the user to save on first open/new/quit.
+    # Stop debounce timers first — add_cell arms them, and they would re-dirty
+    # the session ~300 ms later if left running.
     win.cell_list.add_cell("z = sin(x) * cos(y)")
+    for _cell in win.cell_list._cells:
+        if hasattr(_cell, "_debounce"):
+            _cell._debounce.stop()
+    win._modified = False
+    win._update_title()
 
     return app.exec()
 

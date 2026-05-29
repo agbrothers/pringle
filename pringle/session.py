@@ -349,6 +349,12 @@ def restore_cell_list(
     # Single rebuild now that all cells have their final IDs
     cell_list._rebuild_namespace()
 
+    # Stop debounce timers that setPlainText started during cell creation.
+    # Without this they fire ~300ms after load and mark the session modified.
+    for cell in cell_list._cells:
+        if hasattr(cell, "_debounce"):
+            cell._debounce.stop()
+
     # Start sliders that were playing when saved
     for cell in sliders_to_play:
         cell._play_btn.setChecked(True)

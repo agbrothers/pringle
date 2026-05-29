@@ -42,6 +42,8 @@ The crosshair makes the orbit pivot visible during WASD panning and mouse orbiti
 
 ## View Settings (Axis Settings Dialog)
 
+The header bar (`PringleHeaderBar`) spans the full window width above the left/right splitter. Its layout (left to right): logo · **PRINGLE** wordmark · **New** · **Open** · **Save** · **📷** (screenshot) · stretch · **⚙** (view settings). All buttons use a pill style (`border-radius: 10px`). The **Save** button text and border turn `#E9A15F` when the session has unsaved changes. The **📷** button saves a PNG snapshot of the current canvas frame; its border flashes `#E9A15F` briefly on click. Dismissing the header buttons is done via the ⚙ toggle.
+
 Clicking the ⚙ gear icon in the top-right corner of the viewport opens a floating non-modal **Axis Settings dialog** (`AxisSettingsDialog`). It is not embedded in the left panel or below the viewport. Clicking ⚙ again or the dialog's X button closes it.
 
 ### Axis Bounds
@@ -181,6 +183,7 @@ Selecting "Add Constraint" appends a constraint sub-cell below the primary cell,
 | `Ctrl+Shift+S` | Save As (open file dialog) |
 | `Ctrl+O` | Open session (file dialog) |
 | `Ctrl+N` | New empty session |
+| 📷 toolbar button | Save current canvas frame as PNG (native save dialog, defaults to `pringle_screenshot.png`) |
 | `Ctrl+Enter` / `Cmd+Enter` | Add new folder cell below focused cell (in the expression panel); force re-evaluate focused cell when focus is on the viewport |
 | `Ctrl+[` / `Ctrl+]` | Collapse / expand focused folder cell |
 | `Cmd+]` / `Ctrl+]` | Indent cell into the folder directly above it (equation, slider, comment cells; no-op on folder cells and when no folder is adjacent above) |
@@ -257,7 +260,7 @@ These are the areas not captured elsewhere that v1 should address before shippin
 | **Error display** | Red text below the cell showing the Python exception message (truncated to one line; expandable) |
 | **New cell button** | "+" button at the bottom of the cell list to add a new empty cell |
 | **Session title** | Editable title in the window title bar; defaults to filename |
-| **Unsaved changes indicator** | Asterisk (*) in title bar when session has unsaved changes |
+| **Unsaved changes indicator** | Save button text and border turn `#E9A15F` (orange) when the session has unsaved changes; `[*]` appended to window title. `CellListWidget` emits `session_dirtied` on any structural change (cell add/remove/edit via `_rebuild_namespace`) or style change (`_on_equation_cell_style_updated`); `PringleWindow._mark_modified` connects to this signal. Debounce timers are cancelled after session load/init so the flag is never set spuriously on open. |
 | **Empty session state** | A placeholder message in empty panels: "Press + to add an expression" |
 | **Grid regeneration on bound change** | Changing axis bounds re-evaluates all spatial cells — show a brief loading indicator if >200ms |
 | **Slider value display** | Show current numeric value next to the drag handle; double-click to type an exact value |

@@ -2,7 +2,7 @@
 PringleHeaderBar — full-width window header bar.
 
 Layout (left to right):
-  [logo] [PRINGLE] [New] [Open] [Save]  ... stretch ...  [⚙ wrench]
+  [logo] [PRINGLE] [New] [Open] [Save] [📷]  ... stretch ...  [⚙ wrench]
 
 The header spans the full window width above the left/right splitter.
 File buttons trigger signals that PringleWindow connects to its session handlers.
@@ -13,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QSizePolicy
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QPixmap, QFont
 
 _LOGO_PATH = Path(__file__).parent / "assets" / "icon-alpha.png"
@@ -22,10 +22,11 @@ _LOGO_PATH = Path(__file__).parent / "assets" / "icon-alpha.png"
 class PringleHeaderBar(QWidget):
     """Full-width header containing logo, file buttons, and settings toggle."""
 
-    new_requested      = pyqtSignal()
-    open_requested     = pyqtSignal()
-    save_requested     = pyqtSignal()
-    settings_toggled   = pyqtSignal(bool)   # checked state
+    new_requested        = pyqtSignal()
+    open_requested       = pyqtSignal()
+    save_requested       = pyqtSignal()
+    screenshot_requested = pyqtSignal()
+    settings_toggled     = pyqtSignal(bool)   # checked state
 
     _HEIGHT = 48
 
@@ -79,6 +80,17 @@ class PringleHeaderBar(QWidget):
         self._open_btn.clicked.connect(self.open_requested)
         self._save_btn.clicked.connect(self.save_requested)
 
+        # Screenshot button
+        self._screenshot_btn = QPushButton("📷")
+        self._screenshot_btn.setObjectName("header_screenshot_btn")
+        self._screenshot_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._screenshot_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._screenshot_btn.setToolTip("Save canvas image (PNG)")
+        self._screenshot_btn.clicked.connect(self.screenshot_requested)
+        self._screenshot_btn.clicked.connect(self._flash_screenshot)
+        row.addWidget(self._screenshot_btn)
+        row.addSpacing(4)
+
         row.addStretch(1)
 
         # Wrench / settings button
@@ -91,6 +103,12 @@ class PringleHeaderBar(QWidget):
         self._wrench_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._wrench_btn.clicked.connect(self.settings_toggled)
         row.addWidget(self._wrench_btn)
+
+    def _flash_screenshot(self) -> None:
+        self._screenshot_btn.setStyleSheet(
+            "QPushButton#header_screenshot_btn { border-color: #E9A15F; }"
+        )
+        QTimer.singleShot(250, lambda: self._screenshot_btn.setStyleSheet(""))
 
     def set_wrench_checked(self, checked: bool) -> None:
         self._wrench_btn.blockSignals(True)
