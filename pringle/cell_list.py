@@ -835,7 +835,6 @@ class CellListWidget(QWidget):
         from pringle.dag import topo_order, undefined_names
         from pringle.folder_cell_widget import FolderCellWidget
         from pringle.comment_cell_widget import CommentCellWidget
-        import networkx as nx
 
         t0 = time.monotonic()
         evaluable = [
@@ -905,7 +904,10 @@ class CellListWidget(QWidget):
             ))
             new_hashes[cell.cell_id] = src_hash
             self_changed = prev_hashes.get(cell.cell_id) != src_hash
-            ancestor_changed = bool(set(nx.ancestors(dag, cell.cell_id)) & changed_ids)
+            # Direct-predecessor check is O(E) total and equivalent to full-ancestor
+            # reachability: we walk in topological order and changed_ids accumulates
+            # transitively, so a changed ancestor always surfaces via a direct parent.
+            ancestor_changed = any(p in changed_ids for p in dag.predecessors(cell.cell_id))
 
             # Skip expensive data-mode cells when nothing upstream changed.
             if cell.is_data_mode() and not self_changed and not ancestor_changed:

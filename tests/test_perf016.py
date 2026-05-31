@@ -142,28 +142,29 @@ class TestDataModeSkip:
         assert "pts" in cl._shared_ns, "Exported 'pts' missing from shared after skip"
 
     def test_grid_resolution_change_invalidates_data_mode_cells(self, cl):
-        """Changing grid resolution must invalidate data-mode cells that use x/y
-        magic variables (e.g. `grid = array([x, y]).reshape(2, -1)`).
+        """Changing grid resolution must invalidate data-mode cells that read the
+        x/y magic variables directly. Such cells have no DAG ancestor for the grid
+        (x/y are injected, not cell-defined), so without the grid-config guard they
+        would be skipped and served stale, wrong-resolution data.
         Regression for the PERF-016 skip gate ignoring external grid changes."""
         from pringle.grid import GridConfig, make_grid
 
-        # Cell that exports a grid-derived array via x/y magic variables
-        grid_cell = cl.add_cell(source="g = array([x, y]).reshape(2, -1)")
-        assert grid_cell.is_data_mode()  # (2, N) array → data mode
+        # (N, 2) scatter array built from x/y → genuinely data-mode, reads grid vars
+        grid_cell = cl.add_cell(source="pts = stack([x.ravel(), y.ravel()], axis=1)")
+        assert grid_cell.is_data_mode()  # (N, 2) scatter → data mode
 
-        # Capture the shape after the initial eval
-        first_shape = cl._shared_ns.get("g").shape if "g" in cl._shared_ns else None
+        first_shape = cl._shared_ns.get("pts").shape if "pts" in cl._shared_ns else None
         assert first_shape is not None
 
         # Change grid resolution — must invalidate the skip gate
-        new_grid = make_grid(GridConfig(n=32))
-        cl._grid = new_grid
+        cl._grid = make_grid(GridConfig(n=32))
 
         count = _eval_count(cl, grid_cell)
         assert count == 1, "Grid resolution change must force data-mode cell to re-evaluate"
 
-        new_shape = cl._shared_ns.get("g").shape
+        new_shape = cl._shared_ns.get("pts").shape
         assert new_shape != first_shape, "Exported array shape must update after grid change"
+        assert new_shape == (32 * 32, 2)
 
     def test_downstream_data_cell_reevals_when_upstream_changes(self, cl):
         """If a data-mode cell IS re-evaluated, downstream data-mode cells
