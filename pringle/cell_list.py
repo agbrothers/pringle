@@ -274,6 +274,12 @@ class CellListWidget(QWidget):
         self._dag_cache: object = None  # nx.DiGraph | None
         self._dag_source_key: dict[str, str] = {}
 
+        # Dirty tracking (PERF-016): skip data-mode cells whose source and
+        # upstream dependencies haven't changed since the last rebuild.
+        # Hash includes _rng_seed so → button re-evals without extra bookkeeping.
+        self._source_hashes: dict[str, int] = {}  # cell_id → hash((source, rng_seed))
+        self._last_grid_hash: int = -1  # invalidates skip gate when grid config changes
+
         if eval_threaded:
             self._eval_worker = _EvalWorker()
             self._eval_thread = QThread()
@@ -829,6 +835,7 @@ class CellListWidget(QWidget):
         from pringle.dag import topo_order, undefined_names
         from pringle.folder_cell_widget import FolderCellWidget
         from pringle.comment_cell_widget import CommentCellWidget
+        import networkx as nx
 
         t0 = time.monotonic()
         evaluable = [
@@ -852,23 +859,70 @@ class CellListWidget(QWidget):
         shared["cfg"] = cfg
         _cfg_before = (cfg.x_min, cfg.x_max, cfg.y_min, cfg.y_max, cfg.z_min, cfg.z_max)
 
+        # PERF-016: upstream-dirty tracking — skip data-mode cells whose source
+        # and ancestors haven't changed since the last rebuild.
+        # If the grid config changed (resolution or bounds), treat all cells as
+        # dirty so cells using x/y magic variables (e.g. `grid = array([x,y])`)
+        # are not served stale results.
+        grid_hash = hash((
+            grid_cfg.n,
+            grid_cfg.x_min, grid_cfg.x_max,
+            grid_cfg.y_min, grid_cfg.y_max,
+            grid_cfg.z_min, grid_cfg.z_max,
+            grid_cfg.u_min, grid_cfg.v_min,
+        ))
+        grid_changed = grid_hash != self._last_grid_hash
+        changed_ids: set[str] = set()
+        prev_hashes = {} if grid_changed else self._source_hashes
+        new_hashes: dict[str, int] = {}
+
         for cell in ordered_cells:
             if isinstance(cell, SliderWidget):
-                shared[cell.name] = _ns_value(cell.value)
+                new_val = _ns_value(cell.value)
+                shared[cell.name] = new_val
+                if self._shared_ns.get(cell.name) != new_val:
+                    changed_ids.add(cell.cell_id)
                 continue
 
             if cell.cell_id in cyclic_ids:
                 cell.clear_diagnostics()
                 cell.set_error("Circular dependency detected")
                 self._on_cell_result(cell.cell_id, CellResult(), cell.style)
+                changed_ids.add(cell.cell_id)
                 continue
 
             # Per-cell RNG: inject a fresh RandomState seeded by _rng_seed so draws
             # are reproducible on every rebuild without mutating global np.random state.
             shared["random"] = np.random.RandomState(getattr(cell, "_rng_seed", 0))
 
+            src_hash = hash((
+                cell.source(),
+                tuple(cell.constraint_exprs()),
+                tuple(cell.condition_exprs()),
+                cell.recurrence_expr(),
+                tuple(cell.initial_condition_exprs()),
+                getattr(cell, "_rng_seed", 0),
+            ))
+            new_hashes[cell.cell_id] = src_hash
+            self_changed = prev_hashes.get(cell.cell_id) != src_hash
+            ancestor_changed = bool(set(nx.ancestors(dag, cell.cell_id)) & changed_ids)
+
+            # Skip expensive data-mode cells when nothing upstream changed.
+            if cell.is_data_mode() and not self_changed and not ancestor_changed:
+                last = getattr(cell, "_last_result", None)
+                if last is not None:
+                    shared.update(last.exports)
+                    if self._is_render_visible(cell):
+                        self._on_cell_result(cell.cell_id, last, cell.style)
+                    else:
+                        self._on_cell_result(cell.cell_id, CellResult(), cell.style)
+                    continue
+
             result = self._eval_cell(cell, shared)
             cell._last_result = result
+
+            if self_changed or ancestor_changed:
+                changed_ids.add(cell.cell_id)
 
             # Augment with undefined-name warning if eval succeeded
             if not result.error and cell.cell_id in undef:
@@ -883,6 +937,8 @@ class CellListWidget(QWidget):
             else:
                 self._on_cell_result(cell.cell_id, CellResult(), cell.style)
 
+        self._source_hashes = new_hashes
+        self._last_grid_hash = grid_hash
         shared.pop("random", None)
         self._shared_ns = shared
         self.last_eval_ms = (time.monotonic() - t0) * 1000
