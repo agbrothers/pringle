@@ -342,6 +342,19 @@ class TestRoundTrip:
 # ---------------------------------------------------------------------------
 
 class TestPringleWindowSession:
+    @pytest.fixture(autouse=True)
+    def _auto_discard(self, monkeypatch):
+        """Keep the modal 'Unsaved changes' dialog from blocking headless runs.
+
+        `_on_new` / `_on_open` call `_confirm_discard`, which runs `QDialog.exec()`
+        — a modal that blocks the event loop until a button is clicked. On a
+        modified session this hangs the suite waiting for input that never comes.
+        No test drives that dialog, so patch it to proceed as if "Discard" was
+        chosen.
+        """
+        from pringle.app import PringleWindow
+        monkeypatch.setattr(PringleWindow, "_confirm_discard", lambda self: True)
+
     def test_initial_title_is_untitled(self, qapp, grid):
         from pringle.app import PringleWindow
         win = PringleWindow(grid=grid)
