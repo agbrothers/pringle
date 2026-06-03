@@ -249,6 +249,8 @@ class CellListWidget(QWidget):
         self.last_eval_ms: float = 0.0
         self._drag_cell_id: str | None = None
         self._drag_target_idx: int = 0
+        # Active-cell highlight (FEAT-148): the cell whose field holds focus.
+        self._active_cell: QWidget | None = None
 
         # Folder membership: cell_id → folder_id (None = top level)
         self._cell_folder: dict[str, str | None] = {}
@@ -295,6 +297,9 @@ class CellListWidget(QWidget):
             self._eval_thread = None
 
         self._build_ui()
+
+        # Track focus app-wide so the active cell repaints with a #222222 band.
+        QApplication.instance().focusChanged.connect(self._on_focus_changed)
 
     def shutdown(self) -> None:
         """Stop the eval thread gracefully. Must be called before Qt destroys widgets."""
@@ -615,6 +620,8 @@ class CellListWidget(QWidget):
         else:
             self._cell_folder.pop(cell_id, None)
         self._cells.pop(idx)
+        if cell is self._active_cell:
+            self._active_cell = None  # don't poke a deleted widget (FEAT-148)
         self._layout.removeWidget(cell)
         cell.deleteLater()
         # Focus the cell above (or below if first)
@@ -678,16 +685,68 @@ class CellListWidget(QWidget):
     # Copy / paste
     # ------------------------------------------------------------------
 
-    def _focused_cell_id(self) -> str | None:
-        """Return the cell_id of the cell that currently contains keyboard focus, or None."""
-        cell_map = {id(c): c.cell_id for c in self._cells}
-        w = QApplication.focusWidget()
+    def _owning_cell(self, w: "QWidget | None") -> "QWidget | None":
+        """Walk up from w to the top-level cell widget that contains it, or None.
+
+        Resolves through pop-ups/dialogs too: the style popover, colour picker,
+        and slider controls are parented to their cell, so a focus widget inside
+        them still maps back to the owning cell (FEAT-148 sticky highlight).
+        """
+        cells = {id(c) for c in self._cells}
         while w is not None:
-            cid = cell_map.get(id(w))
-            if cid is not None:
-                return cid
+            if id(w) in cells:
+                return w
             w = w.parent() if hasattr(w, "parent") else None
         return None
+
+    def _focused_cell_id(self) -> str | None:
+        """Return the cell_id of the cell that currently contains keyboard focus, or None."""
+        cell = self._owning_cell(QApplication.focusWidget())
+        return cell.cell_id if cell is not None else None
+
+    # ------------------------------------------------------------------
+    # Active-cell highlight (FEAT-148)
+    # ------------------------------------------------------------------
+
+    def _active_cell_for(self, focus_widget, popup_widget):
+        """The cell that should be highlighted.
+
+        Normally the cell owning the focus widget. While focus has moved into a
+        pop-up/dialog the cell opened (style popover, colour picker, slider
+        controls), fall back to the cell owning that pop-up so the highlight
+        stays put until the popover closes; otherwise (focus left the panel for
+        the viewport, header, or another app) returns None and clears.
+        """
+        cell = self._owning_cell(focus_widget)
+        if cell is None and popup_widget is not None:
+            cell = self._owning_cell(popup_widget)
+        return cell
+
+    def _on_focus_changed(self, old, new) -> None:
+        popup = QApplication.activePopupWidget() or QApplication.activeModalWidget()
+        self._set_active_cell(self._active_cell_for(new, popup))
+
+    def _set_active_cell(self, cell) -> None:
+        if cell is self._active_cell:
+            return
+        if self._active_cell is not None:
+            self._mark_active(self._active_cell, False)
+        self._active_cell = cell
+        if cell is not None:
+            self._mark_active(cell, True)
+
+    @staticmethod
+    def _mark_active(cell, on: bool) -> None:
+        cell.setProperty("active", on)
+        # cell.style is the CellStyle dataclass attribute, which shadows
+        # QWidget.style(); reach the QStyle through the class to re-polish.
+        # Re-polish the body subtree too: descendant rules keyed on the cell's
+        # [active] property (CellWidget[active="true"] #cell_content ...) only
+        # re-resolve when each affected widget is re-polished, not just the root.
+        qstyle = QWidget.style(cell)
+        for w in (cell, *cell.findChildren(QWidget)):
+            qstyle.unpolish(w)
+            qstyle.polish(w)
 
     def copy_focused_cell(self) -> bool:
         """Copy the source of the currently focused cell to the clipboard.

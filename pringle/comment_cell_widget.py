@@ -156,6 +156,7 @@ class CommentCellWidget(QWidget):
         parent=None,
     ):
         super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)  # FEAT-148
         self.cell_id: str = cell_id or str(uuid.uuid4())
         self.style: CellStyle = style or CellStyle()
         self._build_ui()
@@ -179,7 +180,11 @@ class CommentCellWidget(QWidget):
         outer_v.setContentsMargins(0, 0, 0, 0)
         outer_v.setSpacing(0)
 
-        outer_h = QHBoxLayout()
+        # Body lives in a #cell_content container so the active-cell band
+        # (FEAT-148) paints inside the folder indent — see theme.qss.
+        content = QWidget()
+        content.setObjectName("cell_content")
+        outer_h = QHBoxLayout(content)
         outer_h.setContentsMargins(0, 2, 4, 2)
         outer_h.setSpacing(0)
 
@@ -208,7 +213,7 @@ class CommentCellWidget(QWidget):
         del_btn.clicked.connect(lambda: self.delete_requested.emit(self.cell_id))
         outer_h.addWidget(del_btn)
 
-        outer_v.addLayout(outer_h)
+        outer_v.addWidget(content)
 
         line = QFrame()
         line.setObjectName("separator")

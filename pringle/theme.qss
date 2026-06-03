@@ -58,6 +58,25 @@ QPushButton#header_wrench_btn:checked { color: #4a9eff; }
 DragHandle { color: transparent; font-size: 14px; padding: 0; }
 DragHandle:hover { color: #aaa; }
 
+/* ── Active cell highlight (FEAT-148) ─────────────────────────────── */
+/* The focused cell's body turns #222222. Every cell type paints its band from a
+   #cell_content container that sits INSIDE the cell's folder indent (a contents
+   margin on the root) — so the highlight stops at the swatch and never bleeds
+   into the indent strip, which stays panel-coloured. The recolor is scoped
+   under #cell_content so it cannot leak into the cell's pop-ups (style popover,
+   colour picker), which are parented to the cell root — a sibling of
+   #cell_content. The swatch/drag-handle column keeps its own colour. */
+CellWidget[active="true"] #cell_content,
+CellWidget[active="true"] #cell_content QWidget,
+SliderWidget[active="true"] #cell_content,
+SliderWidget[active="true"] #cell_content QWidget,
+FolderCellWidget[active="true"] #cell_content,
+FolderCellWidget[active="true"] #cell_content QWidget,
+CommentCellWidget[active="true"] #cell_content,
+CommentCellWidget[active="true"] #cell_content QWidget { background: #222222; }
+
+FolderCellWidget[active="true"] DragHandle { background: #222222; }
+
 /* ── Cell text edit ──────────────────────────────────────────────── */
 CellTextEdit { border: none; background: transparent; }
 
@@ -120,8 +139,9 @@ QScrollBar:vertical {
     border: none;
 }
 QScrollBar::handle:vertical {
-    background: #2d2d2d;
-    border-radius: 3px;
+    /* background: #161616; */
+    background: #111111;
+    border-radius: 2px;
     min-height: 24px;
 }
 QScrollBar::handle:vertical:hover { background: #484848; }

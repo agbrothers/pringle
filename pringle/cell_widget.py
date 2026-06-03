@@ -405,6 +405,9 @@ class CellWidget(QWidget):
 
     def __init__(self, cell_id: str | None = None, style: CellStyle | None = None, parent=None):
         super().__init__(parent)
+        # Paint the stylesheet background on the root so the active-cell
+        # highlight (FEAT-148) covers the whole cell band, swatch included.
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.cell_id: str = cell_id or str(uuid.uuid4())
         self.style: CellStyle = style or CellStyle()
         self._visible: bool = True
@@ -447,6 +450,7 @@ class CellWidget(QWidget):
         outer_h.addWidget(self._swatch)
 
         content = QWidget()
+        content.setObjectName("cell_content")  # active-cell band target (FEAT-148)
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(0)

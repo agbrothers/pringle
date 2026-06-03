@@ -108,10 +108,14 @@ Optional: a numeric input controlling the spacing between grid lines. Defaults t
 ### Selection and Focus
 
 - **Click anywhere on a cell** → selects the cell; keyboard focus moves to that cell's text input
-- Focused cell has a visible border highlight
 - One cell is always focused (the most recently clicked or created)
 - **Tab** → moves focus to the next cell below; **Shift+Tab** → moves focus up
 - **Escape** → deselects (removes focus from all cells); focus returns to the viewport
+
+**Active-cell highlight (FEAT-148).** The cell whose subtree holds keyboard focus paints its body band `#222222` (vs the `#111111` panel); all four cell types participate (equation/data, slider, folder header, comment). `CellListWidget` connects to the app-wide `QApplication.focusChanged` signal and toggles a dynamic `active` Qt property on the owning cell (`_on_focus_changed` → `_owning_cell` → `_set_active_cell`/`_mark_active`, which re-polishes the cell **and its subtree** so descendant QSS rules re-resolve). Behavior:
+- **One active cell at a time**; focus moving between cells moves the highlight.
+- **Clear-on-blur with sticky popovers**: the highlight clears when focus leaves the panel (viewport, header, another app), but persists while the cell's *own* pop-up/dialog is open (style popover, colour picker, slider controls) — those are parented to the cell, so `_active_cell_for` resolves the active cell from `QApplication.activePopupWidget()`/`activeModalWidget()` when no field holds focus.
+- **Implementation note**: the band is painted by each cell's `#cell_content` container (named in every cell widget's `_build_ui`), scoped in `theme.qss` as `<CellType>[active="true"] #cell_content[, … QWidget]`. It is *not* painted on the cell root — a QSS `background` fills the whole widget rect ignoring the folder indent (a `contentsMargins`), so painting on the root would bleed `#222222` into the indent strip. Scoping under `#cell_content` keeps the indent strip panel-coloured and prevents the recolor from leaking into the (root-parented) pop-ups. The swatch/drag-handle column keeps its own colour. Active state is transient UI only — never persisted to the session YAML.
 
 ### Text Editing Within a Cell
 

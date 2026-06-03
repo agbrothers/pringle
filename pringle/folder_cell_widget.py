@@ -49,6 +49,7 @@ class FolderCellWidget(QWidget):
         parent=None,
     ):
         super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)  # FEAT-148
         self.cell_id: str = cell_id or str(uuid.uuid4())
         self.style: CellStyle = style or CellStyle(color=(0.55, 0.55, 0.55, 1.0))
         self._name: str = name
@@ -72,6 +73,7 @@ class FolderCellWidget(QWidget):
         outer_h.addWidget(self._drag_handle)
 
         content = QWidget()
+        content.setObjectName("cell_content")  # active-cell band target (FEAT-148)
         outer = QVBoxLayout(content)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
