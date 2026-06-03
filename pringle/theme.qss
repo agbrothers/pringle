@@ -8,7 +8,7 @@
    for tunable colours: pringle.theme.load_stylesheet() substitutes each @name
    token below at load time, and tests read the same values via
    pringle.theme.theme_var(). To retune a colour, edit it here only. */
-/* @var active-cell-bg: #222222; */
+/* @var active-cell-bg: #181818; */
 
 /* ── Global base ─────────────────────────────────────────────────── */
 QMainWindow, QWidget { background: #111111; color: #dddddd; }

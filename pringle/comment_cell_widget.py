@@ -29,7 +29,7 @@ from PyQt6.QtGui import QFontMetricsF, QKeyEvent, QTextOption
 from pringle.style import CellStyle
 from pringle.cell_widget import ColorSwatchHandle
 
-_COMMENT_COLOR = (0.133333, 0.133333, 0.133333, 1.0)  # #222222
+_COMMENT_COLOR = (0.133333, 0.133333, 0.133333, 1.0) 
 
 # Strip a leading "# " or "#" from source text so the widget text area
 # only contains the comment body.
