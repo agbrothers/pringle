@@ -3,6 +3,13 @@
    Loaded once at QApplication startup via _load_theme() in app.py.
    ═══════════════════════════════════════════════════════════════════ */
 
+/* ── Theme variables ─────────────────────────────────────────────────
+   QSS has no native variables. These @var lines are the single source of truth
+   for tunable colours: pringle.theme.load_stylesheet() substitutes each @name
+   token below at load time, and tests read the same values via
+   pringle.theme.theme_var(). To retune a colour, edit it here only. */
+/* @var active-cell-bg: #222222; */
+
 /* ── Global base ─────────────────────────────────────────────────── */
 QMainWindow, QWidget { background: #111111; color: #dddddd; }
 QSplitter { background: #111111; }
@@ -59,12 +66,12 @@ DragHandle { color: transparent; font-size: 14px; padding: 0; }
 DragHandle:hover { color: #aaa; }
 
 /* ── Active cell highlight (FEAT-148) ─────────────────────────────── */
-/* The focused cell's body turns #222222. Every cell type paints its band from a
-   #cell_content container that sits INSIDE the cell's folder indent (a contents
-   margin on the root) — so the highlight stops at the swatch and never bleeds
-   into the indent strip, which stays panel-coloured. The recolor is scoped
-   under #cell_content so it cannot leak into the cell's pop-ups (style popover,
-   colour picker), which are parented to the cell root — a sibling of
+/* The focused cell's body turns @active-cell-bg. Every cell type paints its
+   band from a #cell_content container that sits INSIDE the cell's folder indent
+   (a contents margin on the root) — so the highlight stops at the swatch and
+   never bleeds into the indent strip, which stays panel-coloured. The recolor is
+   scoped under #cell_content so it cannot leak into the cell's pop-ups (style
+   popover, colour picker), which are parented to the cell root — a sibling of
    #cell_content. The swatch/drag-handle column keeps its own colour. */
 CellWidget[active="true"] #cell_content,
 CellWidget[active="true"] #cell_content QWidget,
@@ -73,9 +80,9 @@ SliderWidget[active="true"] #cell_content QWidget,
 FolderCellWidget[active="true"] #cell_content,
 FolderCellWidget[active="true"] #cell_content QWidget,
 CommentCellWidget[active="true"] #cell_content,
-CommentCellWidget[active="true"] #cell_content QWidget { background: #222222; }
+CommentCellWidget[active="true"] #cell_content QWidget { background: @active-cell-bg; }
 
-FolderCellWidget[active="true"] DragHandle { background: #222222; }
+FolderCellWidget[active="true"] DragHandle { background: @active-cell-bg; }
 
 /* ── Cell text edit ──────────────────────────────────────────────── */
 CellTextEdit { border: none; background: transparent; }

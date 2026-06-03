@@ -298,7 +298,8 @@ class CellListWidget(QWidget):
 
         self._build_ui()
 
-        # Track focus app-wide so the active cell repaints with a #222222 band.
+        # Track focus app-wide so the active cell repaints with the active band
+        # (theme.qss @active-cell-bg).
         QApplication.instance().focusChanged.connect(self._on_focus_changed)
 
     def shutdown(self) -> None:

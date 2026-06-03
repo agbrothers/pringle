@@ -988,10 +988,9 @@ class PringleWindow(QMainWindow):
 
 
 def _load_theme(app: QApplication) -> None:
-    """Load theme.qss from the package and apply it as the application stylesheet."""
-    from importlib.resources import files
-    qss = files("pringle").joinpath("theme.qss").read_text(encoding="utf-8")
-    app.setStyleSheet(qss)
+    """Load theme.qss (with @var substitution) and apply it as the application stylesheet."""
+    from pringle.theme import load_stylesheet
+    app.setStyleSheet(load_stylesheet())
 
 
 def launch(argv=None) -> int:

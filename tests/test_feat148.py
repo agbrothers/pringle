@@ -1,5 +1,6 @@
 """
-FEAT-148 tests: highlight the active (focused) cell with a #222222 background.
+FEAT-148 tests: highlight the active (focused) cell with the active-cell band
+colour (theme.qss @active-cell-bg).
 
 The CellListWidget tracks app-wide focus and toggles a dynamic ``active``
 property on the cell that owns the focus widget, so theme.qss can paint it.
@@ -21,6 +22,7 @@ from PyQt6.QtWidgets import QApplication, QWidget
 from PyQt6.QtCore import Qt
 
 from pringle.grid import GridConfig, make_grid
+from pringle.theme import load_stylesheet, theme_var
 
 
 @pytest.fixture(scope="module")
@@ -150,10 +152,16 @@ def test_remove_active_cell_clears_reference(cell_list):
 
 
 # ---------------------------------------------------------------------------
-# Render regression: the body subtree must actually repaint #222222, not just
-# carry the property. The descendant rule (CellWidget[active] #cell_content ...)
-# only repaints if the whole subtree is re-polished — guards against that bug.
+# Render regression: the body subtree must actually repaint the active colour,
+# not just carry the property. The descendant rule (CellWidget[active]
+# #cell_content ...) only repaints if the whole subtree is re-polished — guards
+# against that bug. The expected colour is read from theme.qss (@active-cell-bg)
+# so retuning it in one place keeps these tests in sync.
 # ---------------------------------------------------------------------------
+
+ACTIVE_BG = theme_var("active-cell-bg")
+PANEL_BG = "#111111"  # global base; cells fall back to this when inactive
+
 
 def _body_pixel(cell):
     """Background colour painted in the cell's content (text) area."""
@@ -164,32 +172,28 @@ def _body_pixel(cell):
 
 
 def test_active_cell_body_actually_repaints(qapp, grid):
-    from pathlib import Path
-    import pringle
     from pringle.cell_list import CellListWidget
 
     prev_qss = qapp.styleSheet()
-    qapp.setStyleSheet((Path(pringle.__file__).parent / "theme.qss").read_text())
+    qapp.setStyleSheet(load_stylesheet())
     try:
         cl = CellListWidget(on_cell_result=_noop_result, grid=grid)
         cell = cl.add_cell("z = x")
         cl._set_active_cell(None)
-        assert _body_pixel(cell) == "#111111"
+        assert _body_pixel(cell) == PANEL_BG
         cl._on_focus_changed(None, cell.primary_focus_widget())
-        assert _body_pixel(cell) == "#222222"
+        assert _body_pixel(cell) == ACTIVE_BG
     finally:
         qapp.setStyleSheet(prev_qss)  # don't pollute the shared QApplication
 
 
 def test_indented_active_cell_does_not_bleed(qapp, grid):
     """An active cell inside a folder keeps its 16px indent strip panel-coloured;
-    the #222222 band must start at the swatch, not the panel's left edge."""
-    from pathlib import Path
-    import pringle
+    the active band must start at the swatch, not the panel's left edge."""
     from pringle.cell_list import CellListWidget
 
     prev_qss = qapp.styleSheet()
-    qapp.setStyleSheet((Path(pringle.__file__).parent / "theme.qss").read_text())
+    qapp.setStyleSheet(load_stylesheet())
     try:
         cl = CellListWidget(on_cell_result=_noop_result, grid=grid)
         cell = cl.add_cell("z = x")
@@ -199,7 +203,7 @@ def test_indented_active_cell_does_not_bleed(qapp, grid):
         cell.ensurePolished()
         img = cell.grab().toImage()
         ymid = img.height() // 2
-        assert img.pixelColor(4, ymid).name() == "#111111"          # indent strip
-        assert img.pixelColor(img.width() - 30, ymid).name() == "#222222"  # body band
+        assert img.pixelColor(4, ymid).name() == PANEL_BG            # indent strip
+        assert img.pixelColor(img.width() - 30, ymid).name() == ACTIVE_BG  # body band
     finally:
         qapp.setStyleSheet(prev_qss)
