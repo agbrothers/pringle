@@ -1212,6 +1212,7 @@ class CellListWidget(QWidget):
         if not cell.source().startswith("#"):
             return
 
+        folder_id = self._cell_folder.get(cell_id)
         source = cell.source()
         style = cell.style
         comment = CommentCellWidget(source=source, style=style, cell_id=cell_id)
@@ -1232,6 +1233,7 @@ class CellListWidget(QWidget):
         self._layout.replaceWidget(cell, comment)
         self._cells[idx] = comment
         cell.deleteLater()
+        self._assign_folder(comment, folder_id)
         comment.focus()
         QTimer.singleShot(0, lambda w=comment: self._scroll.ensureWidgetVisible(w))
 
