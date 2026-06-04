@@ -75,6 +75,23 @@ def preprocess_func_def(line: str) -> str:
 
 ---
 
+## `def` Function Cells — Deferred Evaluation
+
+Cells whose stripped source begins with `def ` are **deferred-eval cells**: text changes do not start the debounce timer. Instead, evaluation fires when the cell loses keyboard focus (focus-out). The distinction from `lambda` cells is intentional:
+
+| Style | Eval trigger | Best for |
+|---|---|---|
+| `f = lambda x: x**2` | 300 ms debounce on each keystroke | Simple, fast expressions where live feedback is valuable |
+| `def f(x):\n    return x**2` | Focus-out only | Multi-line or computationally heavy functions applied to large arrays |
+
+**Implementation:** `CellWidget._on_text_changed` detects the `def ` prefix via `source().lstrip().startswith("def ")` and calls `set_def_mode(True/False)` to swap the signal connections:
+- Enabling: stop the debounce timer; connect `focus_lost → _emit_changed`.
+- Disabling: disconnect `focus_lost → _emit_changed`; the debounce path is restored automatically (textChanged → `_on_text_changed` is always connected; the method just skips `_debounce.start()` while `_def_mode` is True).
+
+The mode transition is dynamic: deleting the `def ` prefix on an existing def-mode cell immediately restores eager eval. `_def_mode` and `_data_mode` are orthogonal flags; in practice `def` cells never enter data mode (they export a callable, not an array).
+
+---
+
 ## Magic Variable Scoping
 
 Magic variable names (`z`, `y`, `xyz`, `points`, `vectors`) are **local to the cell's execution and consumed by the renderer only**. They are never exported to the shared namespace.

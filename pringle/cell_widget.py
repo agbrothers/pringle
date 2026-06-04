@@ -423,6 +423,7 @@ class CellWidget(QWidget):
         self._visible: bool = True
         self._sub_cells: list[SubCell] = []
         self._data_mode: bool = False
+        self._def_mode: bool = False
         self._is_vector_cell: bool = False
         self._debounce_connected: bool = True  # textChanged → debounce connected
         self._rng_seed: int = 0  # increments on each → press; seeds per-cell RandomState
@@ -745,6 +746,20 @@ class CellWidget(QWidget):
     def is_data_mode(self) -> bool:
         return self._data_mode
 
+    def set_def_mode(self, enabled: bool) -> None:
+        """Switch between deferred (focus-out) and eager (debounced) evaluation for def-function cells."""
+        if self._def_mode == enabled:
+            return
+        self._def_mode = enabled
+        if enabled:
+            self._debounce.stop()
+            self._text_edit.focus_lost.connect(self._emit_changed)
+        else:
+            self._text_edit.focus_lost.disconnect(self._emit_changed)
+
+    def is_def_mode(self) -> bool:
+        return self._def_mode
+
     def set_vector_cell(self, enabled: bool) -> None:
         self._is_vector_cell = enabled
 
@@ -788,7 +803,11 @@ class CellWidget(QWidget):
         ))
 
     def _on_text_changed(self):
-        self._debounce.start()
+        should_defer = self.source().lstrip().startswith("def ")
+        if should_defer != self._def_mode:
+            self.set_def_mode(should_defer)
+        if not self._def_mode:
+            self._debounce.start()
 
     def _emit_changed(self):
         self.content_changed.emit(self.cell_id)
