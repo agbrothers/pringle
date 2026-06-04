@@ -1233,7 +1233,7 @@ class CellListWidget(QWidget):
         self._cells[idx] = comment
         cell.deleteLater()
         comment.focus()
-        self._scroll.ensureWidgetVisible(comment)
+        QTimer.singleShot(0, lambda w=comment: self._scroll.ensureWidgetVisible(w))
 
     def _maybe_morph_to_slider(self, cell_id: str) -> None:
         """
@@ -1327,7 +1327,7 @@ class CellListWidget(QWidget):
         # Reapply folder indent and collapsed-visibility to the new widget.
         self._assign_folder(comment, folder_id)
         comment.focus()
-        self._scroll.ensureWidgetVisible(comment)
+        QTimer.singleShot(0, lambda w=comment: self._scroll.ensureWidgetVisible(w))
         self._rebuild_namespace()
 
     def _morph_comment_to_equation(self, cell_id: str) -> None:
@@ -1367,7 +1367,7 @@ class CellListWidget(QWidget):
             new_cell._on_visibility_toggled(False)
         new_cell.set_source(raw)
         new_cell.focus()
-        self._scroll.ensureWidgetVisible(new_cell)
+        QTimer.singleShot(0, lambda w=new_cell: self._scroll.ensureWidgetVisible(w))
         # Recovered source may be a slider assignment; run the standard morph check.
         self._maybe_morph_to_slider(cell_id)
         # Reapply folder indent and collapsed-visibility to whatever is now at this slot.
