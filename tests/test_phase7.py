@@ -151,7 +151,18 @@ class TestTopoOrder:
         dag = build_dag([c1, c2])
         ordered, cyclic = topo_order(dag, [c1, c2])
         assert cyclic == set()
-        assert len(ordered) == 2
+        assert [c.cell_id for c in ordered] == ["c1", "c2"]
+
+    def test_independent_cells_visual_order_reversed_input(self):
+        # Cells with no DAG edges must preserve visual order even when nx.topological_sort
+        # would return them in reversed order (its DFS post-order reversal bug).
+        c1 = StubCell("c1", "z = sin(x)")
+        c2 = StubCell("c2", "z = cos(x)")
+        c3 = StubCell("c3", "z = tan(x)")
+        dag = build_dag([c1, c2, c3])
+        ordered, cyclic = topo_order(dag, [c1, c2, c3])
+        assert cyclic == set()
+        assert [c.cell_id for c in ordered] == ["c1", "c2", "c3"]
 
     def test_dependency_before_dependent(self):
         # c2 depends on c1 (c1 defines 'val'; c2 uses 'val')

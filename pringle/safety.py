@@ -100,6 +100,25 @@ def get_cfg_writes(source: str) -> set[str]:
     return writes
 
 
+def get_camera_writes(source: str) -> set[str]:
+    """Return camera attribute names that source assigns to (e.g. 'camera.x = 5' → {'x'})."""
+    try:
+        tree = ast.parse(source, mode="exec")
+    except SyntaxError:
+        return set()
+    writes: set[str] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Attribute)
+            and isinstance(node.targets[0].value, ast.Name)
+            and node.targets[0].value.id == "camera"
+        ):
+            writes.add(node.targets[0].attr)
+    return writes
+
+
 def get_param_names(source: str) -> set[str]:
     """Return all parameter names declared by def/lambda signatures in source.
 

@@ -31,6 +31,14 @@ class AxisConfig:
     x_min: float; x_max: float
     y_min: float; y_max: float
     z_min: float; z_max: float
+
+
+@dataclass
+class CameraState:
+    """Camera position/target injected as `camera` into the expression namespace (FEAT-159)."""
+    x: float; y: float; z: float
+    target_x: float; target_y: float; target_z: float
+    roll: float = 0.0  # degrees; rotates around the view axis (-180 to 180)
 import numpy as np
 
 from PyQt6.QtWidgets import (
@@ -223,6 +231,8 @@ class CellListWidget(QWidget):
     session_dirtied = pyqtSignal()
     # Emitted when a cell writes to cfg (e.g. cfg.x_max = t); carries new bounds (FEAT-057).
     bounds_override = pyqtSignal(float, float, float, float, float, float)
+    # Emitted when a cell writes to camera; carries (x,y,z,tx,ty,tz,roll_deg) (FEAT-159).
+    camera_override = pyqtSignal(float, float, float, float, float, float, float)
     # Toolbar file-management signals forwarded to app.py
     new_file_requested  = pyqtSignal()
     open_file_requested = pyqtSignal()
@@ -281,6 +291,13 @@ class CellListWidget(QWidget):
         # Hash includes _rng_seed so → button re-evals without extra bookkeeping.
         self._source_hashes: dict[str, int] = {}  # cell_id → hash((source, rng_seed))
         self._last_grid_hash: int = -1  # invalidates skip gate when grid config changes
+
+        # Camera provider for the `camera` namespace object (FEAT-159).
+        # Set by app.py to a callable returning (x, y, z, tx, ty, tz); None → zeros.
+        # roll is not readable from the live camera so it always reads as 0.0.
+        self._camera_provider: Callable[[], tuple[float, ...]] | None = None
+        # Snapshot of camera state (7-tuple incl. roll) at the start of an animation eval pass.
+        self._anim_camera_before: tuple[float, ...] = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
         if eval_threaded:
             self._eval_worker = _EvalWorker()
@@ -879,7 +896,11 @@ class CellListWidget(QWidget):
     # Evaluation
     # ------------------------------------------------------------------
 
-    def _rebuild_namespace(self) -> None:
+    def _rebuild_namespace(
+        self,
+        _suppress_camera_override: bool = False,
+        _suppress_session_dirty: bool = False,
+    ) -> None:
         """
         Re-evaluate all cells in dependency (topological) order.
 
@@ -917,6 +938,12 @@ class CellListWidget(QWidget):
         )
         shared["cfg"] = cfg
         _cfg_before = (cfg.x_min, cfg.x_max, cfg.y_min, cfg.y_max, cfg.z_min, cfg.z_max)
+
+        # Inject camera position/target; cells may read or write it (FEAT-159).
+        _cam_vals = self._camera_provider() if self._camera_provider else (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        camera = CameraState(*_cam_vals)  # roll defaults to 0.0
+        shared["camera"] = camera
+        _camera_before = (camera.x, camera.y, camera.z, camera.target_x, camera.target_y, camera.target_z, camera.roll)
 
         # PERF-016: upstream-dirty tracking — skip data-mode cells whose source
         # and ancestors haven't changed since the last rebuild.
@@ -1010,13 +1037,21 @@ class CellListWidget(QWidget):
         if _cfg_before != _cfg_after:
             self.bounds_override.emit(*_cfg_after)
 
+        # Emit camera_override if any cell wrote to camera during this eval pass (FEAT-159).
+        # Suppressed for poll-triggered rebuilds during animation to prevent stale-t overrides
+        # from racing against the animation tick and snapping the roll (see _on_camera_poll).
+        _camera_after = (camera.x, camera.y, camera.z, camera.target_x, camera.target_y, camera.target_z, camera.roll)
+        if _camera_before != _camera_after and not _suppress_camera_override:
+            self.camera_override.emit(*_camera_after)
+
         _resolver = _make_resolver(self._shared_ns)
         for cell in self._cells:
             if isinstance(cell, SliderWidget):
                 cell.set_resolver(_resolver)   # keep resolver current for future user edits
                 cell.re_resolve(_resolver)     # re-evaluate any stored expressions
         self.namespace_rebuilt.emit()
-        self.session_dirtied.emit()
+        if not _suppress_session_dirty:
+            self.session_dirtied.emit()
 
     def _eval_cell(self, cell: CellWidget, shared: dict) -> CellResult:
         """Evaluate one cell against the current shared namespace + grid."""
@@ -1434,6 +1469,14 @@ class CellListWidget(QWidget):
             z_min=float(grid_cfg.z_min), z_max=float(grid_cfg.z_max),
         )
 
+        # Give this eval pass a fresh camera state (FEAT-159).
+        _cam_vals = self._camera_provider() if self._camera_provider else (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        _anim_cam = CameraState(*_cam_vals)  # roll defaults to 0.0
+        shared["camera"] = _anim_cam
+        self._anim_camera_before = (_anim_cam.x, _anim_cam.y, _anim_cam.z,
+                                    _anim_cam.target_x, _anim_cam.target_y, _anim_cam.target_z,
+                                    _anim_cam.roll)
+
         # Snapshot all cell state on the main thread (Qt widget reads are not thread-safe).
         specs: list[_CellSpec] = []
         for cell in descendants:
@@ -1502,6 +1545,13 @@ class CellListWidget(QWidget):
                 _after = (cfg.x_min, cfg.x_max, cfg.y_min, cfg.y_max, cfg.z_min, cfg.z_max)
                 if _before != _after:
                     self.bounds_override.emit(*_after)
+
+            # Emit camera_override if a cell wrote to camera during this eval pass (FEAT-159).
+            camera = new_shared.get("camera")
+            if camera is not None:
+                _after = (camera.x, camera.y, camera.z, camera.target_x, camera.target_y, camera.target_z, camera.roll)
+                if self._anim_camera_before != _after:
+                    self.camera_override.emit(*_after)
 
         # Process any tick that arrived while the worker was busy.
         if self._pending_eval is not None:

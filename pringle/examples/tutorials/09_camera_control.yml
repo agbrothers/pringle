@@ -1,0 +1,350 @@
+version: 1
+grid:
+  x_min: -6.0
+  x_max: 6.0
+  y_min: -6.0
+  y_max: 6.0
+  z_min: -2.0
+  z_max: 2.0
+  n: 64
+cells:
+- id: 09000001-0000-4000-8000-000000000001
+  style:
+    color:
+    - 0.9
+    - 0.5
+    - 0.1
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: "# TUTORIAL 09 — Camera Control\n\n  The `camera` object gives you programmatic\
+    \ control\n  over the camera position and look-at target.\n\n  Fields:\n    camera.x\
+    \  camera.y  camera.z\n    camera.target_x  camera.target_y  camera.target_z\n\
+    \n  Write to any field to move the camera on each\n  eval pass. Animate the slider\
+    \ below to fly around\n  the surface — press ▷ on the `t` slider to start.\n\n\
+    \  Comment out the camera cell to return to manual\n  orbit/pan controls."
+- id: 09000001-0000-4000-8000-000000000003
+  style:
+    color:
+    - 0.9
+    - 0.5
+    - 0.1
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: plasma
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: z = sin(sqrt(x**2 + y**2))
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: ff567ae3-8de5-4355-903d-c242892b025b
+  style:
+    color:
+    - 0.85
+    - 0.55
+    - 0.05
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# LIVE CAMERA STATE'
+- id: 8ac5c9ea-517d-4efe-9ce6-a67c5956477b
+  style:
+    color:
+    - 0.9
+    - 0.3
+    - 0.65
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: array([camera.x, camera.y, camera.z])
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 5ab287c5-4100-4a74-9f47-91c5132f3d61
+  style:
+    color:
+    - 0.9
+    - 0.3
+    - 0.65
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: array([camera.target_x, camera.target_y, camera.target_z])
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 7eefe091-0c33-4329-8f05-c36c62685e26
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: "# CAMERA CONTROL\n  \n  Fly-through: orbits at `radius` and bobs \n  up\
+    \ and down.\n\n  Comment out the cell below to restore \n  manual camera controls."
+- id: 813f3c17-4047-49fa-babe-409696b133b2
+  style:
+    color:
+    - 0.6775920987129211
+    - 0.575692355632782
+    - 0.8652170300483704
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# CAMERA POSITION'
+- id: f1ea56fe-effd-4971-a37e-94e140ae2173
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: 'camera.x = radius * cos(t)
+
+    camera.y = radius * sin(t)
+
+    camera.z = 1 - cos(2*t)'
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: bc7c8e08-724e-4262-aa54-c34a464dc578
+  style:
+    color:
+    - 0.85
+    - 0.55
+    - 0.05
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# CAMERA DIRECTION'
+- id: c1b3c295-4321-46ee-bde3-c829eab57052
+  style:
+    color:
+    - 0.2
+    - 0.7
+    - 0.3
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: 'camera.target_x = radius * cos(t+dt)
+
+    camera.target_y = radius * sin(t+dt)
+
+    camera.target_z = camera.z - cos(2*t+dt)'
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: bd739f39-c03a-4c0d-99d8-88677f8f6570
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# CAMERA ROLL IN DEGREES     '
+- id: f825852f-5c90-4195-abc8-8f08688c0a1f
+  style:
+    color:
+    - 0.85
+    - 0.55
+    - 0.05
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: equation
+  source: camera.roll = roll * sin(2*t)
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: 09000001-0000-4000-8000-000000000002
+  style:
+    color:
+    - 0.133333
+    - 0.133333
+    - 0.133333
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: t = 3.720000000000003
+  name: t
+  value: 3.720000000000003
+  min_val: 0.0
+  max_val: 6.283185307179586
+  step: 0.008
+  max_expr: 2*pi
+  is_playing: true
+  anim_mode: loop
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+- id: cad9a8a5-05d0-4224-aa3e-18418eb95cb5
+  style:
+    color:
+    - 0.13
+    - 0.13
+    - 0.13
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: dt = 1.6
+  name: dt
+  value: 1.6
+  min_val: 0.01
+  max_val: 5.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+- id: 0e52f0ad-b343-4f1a-8e7e-c32348a8d49d
+  style:
+    color:
+    - 0.13
+    - 0.13
+    - 0.13
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: roll = -15.0
+  name: roll
+  value: -15.0
+  min_val: -180.0
+  max_val: 180.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+- id: 10caf409-e9b8-413f-b932-0f5e3df1182a
+  style:
+    color:
+    - 0.13
+    - 0.13
+    - 0.13
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: slider
+  source: radius = 5.0
+  name: radius
+  value: 5.0
+  min_val: 0.0
+  max_val: 12.0
+  step: 0.24
+  is_playing: false
+  anim_mode: pingpong
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+view:
+  show_axes: true
+  show_bbox: true
+  show_crosshair: true
+  show_light_bg: false
+  show_shadow: false
+  shadow_opacity: 0.4
+  camera_position:
+  - -4.186672004869393
+  - -2.733455235346447
+  - 0.597742201891432
+  orbit_target:
+  - 2.8545384407043457
+  - -4.105071067810059
+  - 1.5100276470184326

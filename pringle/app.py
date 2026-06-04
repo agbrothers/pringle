@@ -389,6 +389,16 @@ class PringleWindow(QMainWindow):
         self._cell_list.namespace_rebuilt.connect(self._on_namespace_rebuilt)
         self._cell_list.session_dirtied.connect(self._mark_modified)
         self._cell_list.bounds_override.connect(self._on_bounds_override)
+        self._cell_list.camera_override.connect(self._on_camera_override)
+
+        def _camera_provider() -> tuple:
+            pr = self._viewport._pr
+            pos = pr._camera.local.position
+            tgt = pr._controller.target
+            return (float(pos[0]), float(pos[1]), float(pos[2]),
+                    float(tgt[0]), float(tgt[1]), float(tgt[2]))
+        self._cell_list._camera_provider = _camera_provider
+
         left_layout.addWidget(self._cell_list, 1)
 
         splitter.insertWidget(0, left)
@@ -404,6 +414,14 @@ class PringleWindow(QMainWindow):
         # Session state
         self._session_path: str | None = None
         self._modified = False
+
+        # Camera-position poll: triggers a namespace rebuild when the camera moves so
+        # that cells reading camera.* (e.g. `v = camera.x`) display live values (FEAT-159).
+        self._last_camera_pos: tuple | None = None
+        self._camera_poll_timer = QTimer(self)
+        self._camera_poll_timer.setInterval(100)  # 10 fps — responsive without flooding rebuilds
+        self._camera_poll_timer.timeout.connect(self._on_camera_poll)
+        self._camera_poll_timer.start()
 
         self._setup_shortcuts()
 
@@ -884,6 +902,71 @@ class PringleWindow(QMainWindow):
         """Cell wrote to cfg — update spinboxes and rebuild the grid (FEAT-057)."""
         self._view_settings.set_bounds(x_min, x_max, y_min, y_max, z_min, z_max)
         self._on_bounds_changed(x_min, x_max, y_min, y_max, z_min, z_max)
+
+    def _on_camera_override(
+        self,
+        x: float, y: float, z: float,
+        tx: float, ty: float, tz: float,
+        roll: float = 0.0,
+    ) -> None:
+        """Cell wrote to camera — reposition the viewport camera (FEAT-159)."""
+        import numpy as np
+        pr = self._viewport._pr
+        cam = pr._camera
+
+        # Set controller target FIRST — its setter calls camera.look_at() internally,
+        # which would undo any roll we apply.  By doing this first our rolled look_at
+        # below becomes the last orientation write and therefore takes effect (FEAT-159).
+        pr._controller.target = (tx, ty, tz)
+
+        cam.local.position = (x, y, z)
+
+        # Compute a rolled reference_up so look_at produces the requested roll angle.
+        if roll != 0.0:
+            d = np.array([tx - x, ty - y, tz - z], float)
+            d_len = np.linalg.norm(d)
+            if d_len > 1e-9:
+                d /= d_len
+                world_up = np.array([0., 0., 1.])
+                if abs(np.dot(d, world_up)) > 0.999:
+                    world_up = np.array([0., 1., 0.])
+                right = np.cross(d, world_up); right /= np.linalg.norm(right)
+                base_up = np.cross(right, d)
+                r = np.radians(roll)
+                cam.local.reference_up = np.cos(r) * base_up + np.sin(r) * right
+
+        cam.look_at(np.array([tx, ty, tz], float))
+        # Restore default reference_up so camera presets and subsequent look_at calls
+        # use the standard world-Z up (rotation from look_at above is already committed).
+        cam.local.reference_up = (0., 0., 1.)
+
+        # Clear orbit coast velocity so residual inertia from a manual orbit can't
+        # keep nudging the camera and triggering repeated poll rebuilds (FEAT-159).
+        pr._orbit_handler._coast_velocity = None
+
+    def _on_camera_poll(self) -> None:
+        """Detect camera movement and rebuild namespace so camera.* cells show live values (FEAT-159)."""
+        from pringle.slider_widget import SliderWidget
+        pr = self._viewport._pr
+        pos = tuple(float(v) for v in pr._camera.local.position)
+        tgt = tuple(float(v) for v in pr._controller.target)
+        now = pos + tgt
+        if now != self._last_camera_pos:
+            self._last_camera_pos = now
+            if not self._cell_list._eval_busy:
+                # During animation, the tick path owns camera updates.  A poll-triggered
+                # full rebuild uses the last *committed* slider value (one tick stale),
+                # which would emit a camera_override with a slightly wrong roll — visibly
+                # snapping against the smooth animation.  Suppress the override while any
+                # slider is playing; the rebuild still runs so camera.* preview cells update.
+                any_playing = any(
+                    isinstance(c, SliderWidget) and c._anim_timer.isActive()
+                    for c in self._cell_list._cells
+                )
+                self._cell_list._rebuild_namespace(
+                    _suppress_camera_override=any_playing,
+                    _suppress_session_dirty=True,
+                )
 
     def _on_bounds_changed(
         self,

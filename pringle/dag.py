@@ -14,7 +14,12 @@ undefined_names(cells)       → {cell_id: [name, ...]} for truly missing names
 
 from __future__ import annotations
 
+import heapq
 import networkx as nx
+
+# Set to False to revert to nx.topological_sort-based ordering (fast but returns
+# equal-rank nodes in reversed visual order — breaks multi-cell camera.* patterns).
+USE_KAHN_SORT: bool = False
 
 from pringle.safety import get_store_names, get_free_names
 from pringle.preprocess import SPATIAL_NAMES
@@ -32,7 +37,7 @@ def _always_defined() -> set[str]:
             set(build_equation_namespace().keys())
             | SPATIAL_NAMES
             | {"True", "False", "None"}
-            | {"cfg"}  # axis bounds config object injected by CellListWidget (FEAT-057)
+            | {"cfg", "camera"}  # axis bounds config and camera state (FEAT-057 / FEAT-159)
         )
     return _ALWAYS_DEFINED
 
@@ -128,14 +133,55 @@ def build_dag(cells: list) -> nx.DiGraph:
 # Ordering and analysis
 # ---------------------------------------------------------------------------
 
+def _kahn_visual_order(dag: nx.DiGraph, cells: list) -> tuple[list, bool]:
+    """
+    Kahn's topological sort with visual position (index in `cells`) as tiebreaker.
+
+    Returns (ordered_cells, had_cycle).  Cells at the same topological level are
+    yielded top-to-bottom in panel order, which matters for cells that mutate a
+    shared object (e.g. `camera.*`) without formal DAG edges between them.
+    nx.topological_sort uses reverse DFS post-order and returns equal-rank nodes in
+    reversed visual order — wrong for these cases.
+    """
+    id_to_cell = {c.cell_id: c for c in cells}
+    position = {c.cell_id: i for i, c in enumerate(cells)}
+
+    in_deg: dict[str, int] = dict(dag.in_degree())
+    heap: list = [(position.get(cid, len(cells)), cid)
+                  for cid, d in in_deg.items() if d == 0]
+    heapq.heapify(heap)
+
+    ordered: list = []
+    while heap:
+        _, cid = heapq.heappop(heap)
+        if cid in id_to_cell:
+            ordered.append(id_to_cell[cid])
+        for _, child in dag.out_edges(cid):
+            in_deg[child] -= 1
+            if in_deg[child] == 0:
+                heapq.heappush(heap, (position.get(child, len(cells)), child))
+
+    had_cycle = len(ordered) < len(id_to_cell)
+    return ordered, had_cycle
+
+
 def topo_order(dag: nx.DiGraph, cells: list) -> tuple[list, set[str]]:
     """
     Return (cells_in_topological_order, cyclic_cell_ids).
 
-    If no cycles: cells are in dependency-first order.
+    If no cycles: cells are in dependency-first order, with visual (panel) order
+    as tiebreaker for cells at the same topological level (when USE_KAHN_SORT).
     If cycles exist: cells are returned in original visual order and the
     cyclic cell_ids are returned so callers can flag them.
     """
+    if USE_KAHN_SORT:
+        ordered, had_cycle = _kahn_visual_order(dag, cells)
+        if had_cycle:
+            cycles = list(nx.simple_cycles(dag))
+            cyclic_ids: set[str] = {cid for cycle in cycles for cid in cycle}
+            return list(cells), cyclic_ids
+        return ordered, set()
+
     try:
         sorted_ids = list(nx.topological_sort(dag))
         id_to_cell = {c.cell_id: c for c in cells}
@@ -157,6 +203,14 @@ def downstream_of(dag: nx.DiGraph, cell_id: str, cells: list) -> list:
     descendant_ids = nx.descendants(dag, cell_id)
     if not descendant_ids:
         return []
+    if USE_KAHN_SORT:
+        # Kahn's on the subgraph with visual-position tiebreaker; avoids the
+        # set-iteration-order issue of dag.subgraph(set) + nx.topological_sort.
+        sub_cells = [c for c in cells if c.cell_id in descendant_ids]
+        sub = dag.subgraph(descendant_ids)
+        ordered, _ = _kahn_visual_order(sub, sub_cells)
+        return ordered
+
     id_to_cell = {c.cell_id: c for c in cells}
     sub = dag.subgraph(descendant_ids)
     try:

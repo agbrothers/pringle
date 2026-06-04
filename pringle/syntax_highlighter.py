@@ -15,7 +15,7 @@ import pringle.syntax_theme as _theme
 # Token sets — built once at module load
 # ---------------------------------------------------------------------------
 
-_MAGIC_NAMES: frozenset[str] = MAGIC_NAMES | SPATIAL_NAMES | {"n", "cfg"}
+_MAGIC_NAMES: frozenset[str] = MAGIC_NAMES | SPATIAL_NAMES | {"n", "cfg", "camera"}
 _FUNC_NAMES: frozenset[str] = (
     frozenset(build_equation_namespace().keys()) - _MAGIC_NAMES - {"__builtins__"}
 )
