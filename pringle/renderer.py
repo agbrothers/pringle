@@ -767,6 +767,13 @@ def make_scatter_mesh(
     if pts.shape[1] == 2:
         pts = np.column_stack([pts, np.zeros(len(pts), dtype=np.float32)])
 
+    # Drop non-finite points before GPU upload (BUG-074 / BUG-002/007/009 pattern).
+    finite_mask = np.all(np.isfinite(pts), axis=1)
+    if not finite_mask.all():
+        pts = pts[finite_mask]
+        if vertex_colors is not None:
+            vertex_colors = vertex_colors[finite_mask]
+
     if len(pts) == 0:
         pts = np.zeros((1, 3), dtype=np.float32)
         geo = gfx.Geometry(positions=pts)

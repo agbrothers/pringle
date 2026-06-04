@@ -19,8 +19,8 @@ import uuid
 from typing import Callable
 import numpy as np
 from PyQt6.QtWidgets import (
-    QAbstractSpinBox, QWidget, QHBoxLayout, QLabel, QLineEdit, QSlider, QDoubleSpinBox,
-    QPushButton, QFrame, QVBoxLayout, QSizePolicy,
+    QAbstractSpinBox, QApplication, QWidget, QHBoxLayout, QLabel, QLineEdit, QSlider,
+    QDoubleSpinBox, QPushButton, QFrame, QVBoxLayout, QSizePolicy,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
@@ -704,6 +704,9 @@ class SliderWidget(QWidget):
             self._anim_timer.stop()
 
     def _anim_tick(self):
+        # Skip animation step while a modal dialog holds the event loop (BUG-074).
+        if QApplication.activeModalWidget() is not None:
+            return
         step = self._step_box.value()
         new_val = self._value + self._anim_dir * step
         if self._anim_mode == "loop":

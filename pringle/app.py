@@ -97,6 +97,10 @@ class PringleViewport(QRenderWidget):
         self._draw_timer.start()
 
     def _tick(self) -> None:
+        # Skip render while a modal dialog (e.g. QColorDialog) holds the event loop —
+        # mutating the wgpu scene graph concurrently with a draw causes use-after-free crashes.
+        if QApplication.activeModalWidget() is not None:
+            return
         now = _time.perf_counter()
         dt = now - self._last_tick_time
         self._last_tick_time = now
