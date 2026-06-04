@@ -312,7 +312,7 @@ def test_cell_text_edit_emits_indent_signal(qapp):
     event = QKeyEvent(
         QEvent.Type.KeyPress,
         Qt.Key.Key_BracketRight,
-        Qt.KeyboardModifier.ControlModifier,
+        Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier,
     )
     cell._text_edit.keyPressEvent(event)
     assert received == [cell.cell_id]
@@ -331,7 +331,7 @@ def test_cell_text_edit_emits_outdent_signal(qapp):
     event = QKeyEvent(
         QEvent.Type.KeyPress,
         Qt.Key.Key_BracketLeft,
-        Qt.KeyboardModifier.ControlModifier,
+        Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier,
     )
     cell._text_edit.keyPressEvent(event)
     assert received == [cell.cell_id]

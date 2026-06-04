@@ -69,12 +69,14 @@ class _SpinBox(QDoubleSpinBox):
     def keyPressEvent(self, event) -> None:
         key = event.key()
         mod = event.modifiers()
-        ctrl = Qt.KeyboardModifier.ControlModifier
-        alt = Qt.KeyboardModifier.AltModifier
+        ctrl  = Qt.KeyboardModifier.ControlModifier
+        shift = Qt.KeyboardModifier.ShiftModifier
+        alt   = Qt.KeyboardModifier.AltModifier
         if mod == ctrl:
             if key == Qt.Key.Key_Slash:
                 self.toggle_comment_requested.emit()
                 return
+        if mod == (ctrl | shift):
             if key == Qt.Key.Key_BracketRight:
                 self.indent_at.emit()
                 return
@@ -188,12 +190,14 @@ class _ExprBox(QLineEdit):
     def keyPressEvent(self, event) -> None:
         key = event.key()
         mod = event.modifiers()
-        ctrl = Qt.KeyboardModifier.ControlModifier
-        alt = Qt.KeyboardModifier.AltModifier
+        ctrl  = Qt.KeyboardModifier.ControlModifier
+        shift = Qt.KeyboardModifier.ShiftModifier
+        alt   = Qt.KeyboardModifier.AltModifier
         if mod == ctrl:
             if key == Qt.Key.Key_Slash:
                 self.toggle_comment_requested.emit()
                 return
+        if mod == (ctrl | shift):
             if key == Qt.Key.Key_BracketRight:
                 self.indent_at.emit()
                 return
@@ -241,12 +245,14 @@ class _NameLineEdit(QLineEdit):
     def keyPressEvent(self, event) -> None:
         key = event.key()
         mod = event.modifiers()
-        ctrl = Qt.KeyboardModifier.ControlModifier
-        alt = Qt.KeyboardModifier.AltModifier
+        ctrl  = Qt.KeyboardModifier.ControlModifier
+        shift = Qt.KeyboardModifier.ShiftModifier
+        alt   = Qt.KeyboardModifier.AltModifier
         if mod == ctrl:
             if key == Qt.Key.Key_Slash:
                 self.toggle_comment_requested.emit()
                 return
+        if mod == (ctrl | shift):
             if key == Qt.Key.Key_BracketRight:
                 self.indent_at.emit()
                 return

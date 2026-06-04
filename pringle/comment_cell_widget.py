@@ -104,7 +104,7 @@ class _CommentEdit(QPlainTextEdit):
                 or key == Qt.Key.Key_Question and mod == ctrl):
             self.toggle_comment_requested.emit()
             return
-        if mod == ctrl:
+        if mod == (ctrl | shift):
             if key == Qt.Key.Key_BracketRight:
                 self.indent_at.emit()
                 return

@@ -244,6 +244,32 @@ _WRAP_PAIRS: dict[int, tuple[str, str]] = {
 }
 
 
+def _indent_lines(edit: "CellTextEdit", direction: int) -> None:
+    """Indent (+1) or outdent (-1) every block overlapping the current selection."""
+    cursor = edit.textCursor()
+    start = cursor.selectionStart()
+    end   = cursor.selectionEnd()
+    cursor.beginEditBlock()
+    block = edit.document().findBlock(start)
+    while block.isValid() and block.position() <= end:
+        bc = QTextCursor(block)
+        if direction > 0:
+            bc.insertText("    ")
+        else:
+            text = block.text()
+            spaces = len(text) - len(text.lstrip(" "))
+            remove = min(spaces, 4)
+            if remove:
+                bc.movePosition(
+                    QTextCursor.MoveOperation.Right,
+                    QTextCursor.MoveMode.KeepAnchor,
+                    remove,
+                )
+                bc.removeSelectedText()
+        block = block.next()
+    cursor.endEditBlock()
+
+
 class CellTextEdit(QPlainTextEdit):
     """
     QPlainTextEdit that:
@@ -366,8 +392,16 @@ class CellTextEdit(QPlainTextEdit):
             self.insertPlainText("    ")
             return
 
-        ctrl = Qt.KeyboardModifier.ControlModifier
-        alt = Qt.KeyboardModifier.AltModifier
+        ctrl  = Qt.KeyboardModifier.ControlModifier
+        shift = Qt.KeyboardModifier.ShiftModifier
+        alt   = Qt.KeyboardModifier.AltModifier
+        if mod == (ctrl | shift):
+            if key == Qt.Key.Key_BracketRight:
+                self.indent_at.emit()   # cell-level: move into folder above
+                return
+            if key == Qt.Key.Key_BracketLeft:
+                self.outdent_at.emit()  # cell-level: remove from folder
+                return
         if mod == ctrl:
             if key == Qt.Key.Key_Backspace:
                 cursor = self.textCursor()
@@ -380,10 +414,10 @@ class CellTextEdit(QPlainTextEdit):
                     self.setTextCursor(cursor)
                 return  # always consume — do not fall through to "delete word"
             if key == Qt.Key.Key_BracketRight:
-                self.indent_at.emit()
+                _indent_lines(self, +1)
                 return
             if key == Qt.Key.Key_BracketLeft:
-                self.outdent_at.emit()
+                _indent_lines(self, -1)
                 return
             if key == Qt.Key.Key_Slash:
                 self._toggle_line_comment()
