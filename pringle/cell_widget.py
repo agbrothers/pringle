@@ -311,10 +311,13 @@ class CellTextEdit(QPlainTextEdit):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        # Do NOT call _adjust_height() here. documentSizeChanged fires synchronously
-        # from super() whenever wrapping changes width, so _on_document_size_changed
-        # already runs with exact blockBoundingRect heights. Calling _adjust_height()
-        # afterward would override the correct height with a font-metrics underestimate.
+        # Explicitly recompute after every width change. super() runs a synchronous
+        # document relayout so blockBoundingRect is accurate immediately afterward —
+        # we don't need to wait for the documentSizeChanged signal, which may be
+        # deferred on some Qt builds/platforms. If the signal did fire synchronously
+        # inside super() and already set the correct height, this call is a no-op
+        # (same blockBoundingRect values, same setFixedHeight result).
+        self._on_document_size_changed(None)
 
     def focusOutEvent(self, event):
         self.focus_lost.emit()
