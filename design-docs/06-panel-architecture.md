@@ -157,6 +157,8 @@ A cell morphs to a comment when its first character is `#`. Comment cells use a 
 
 Attached to equation cells via the **+** sub-cell button. Each sub-cell uses a `CellTextEdit` (auto-expanding `QPlainTextEdit`) so long constraint or recursion expressions wrap and grow rather than truncating. The Enter key in sub-cells inserts a newline rather than advancing to the next top-level cell.
 
+**`CellTextEdit` auto-height.** Height is driven by `documentSizeChanged`, which fires synchronously from within `resizeEvent`'s `super()` call whenever wrapping changes. `_on_document_size_changed` sums `blockBoundingRect(block).height()` over every block in the document — exact pixel heights from the layout engine, not a font-metrics estimate — so the cell is always precisely tall enough regardless of line count or font scaling. `_adjust_height()` (font-metrics estimate) is only called from `__init__` as a bootstrap before the first layout pass; it is deliberately **not** called from `resizeEvent` so it cannot override the accurate measurement.
+
 ---
 
 ## Slider Animation Evaluation Thread (PERF-015)

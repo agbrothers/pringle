@@ -146,6 +146,40 @@ Each cell has a **drag handle** on its left edge. Dragging reorders cells within
 
 Dragging a **folder header** moves the entire folder+members block as a unit. Members maintain their relative order after the move. Hidden (collapsed) members are skipped in drop-target computation so the indicator always lands at a visible cell boundary.
 
+### Syntax Highlighting (FEAT-063 / FEAT-147)
+
+`PringleHighlighter` (`syntax_highlighter.py`) is a `QSyntaxHighlighter` attached to every `CellTextEdit` document. It operates per-line via `highlightBlock`. Colors come from `syntax_theme.py`.
+
+**Token → color table (GitHub Dark palette):**
+
+| Token | Example | Color |
+|---|---|---|
+| Magic vars / grid inputs | `x`, `y`, `z`, `xyz`, `n` | `MAGIC_COLOR` `#E9A15F` |
+| Whitelisted numpy/scipy functions | `sin`, `zeros`, `concatenate` | `FUNCTION_COLOR` `#D7BEF6` |
+| Any identifier immediately before `(` | `bifurcate(...)`, `dE(...)` | `FUNCTION_COLOR` `#D7BEF6` |
+| Identifier after `def` | `bifurcate` in `def bifurcate(...)` | `FUNCTION_COLOR` `#D7BEF6` |
+| Function parameters (signature + body) | `memories`, `k`, `β` throughout cell | `MAGIC_COLOR` `#E9A15F` |
+| Numeric literals | `42`, `3.14`, `1e-6` | `NUMBER_COLOR` `#7DB4F9` |
+| Literal constants | `None`, `True`, `False` | `NUMBER_COLOR` `#7DB4F9` |
+| Control-flow keywords | `def`, `for`, `return`, `if`, … | `OPERATOR_COLOR` `#EC7C6F` |
+| Arithmetic / comparison operators | `+`, `*`, `<=`, `!=` | `OPERATOR_COLOR` `#EC7C6F` |
+| Rainbow brackets | `(`, `[`, `{` (depth-colored) | `RAINBOW_BRACKETS` |
+| Inline `#` comments | `## BUILD OUTPUT DATA` | `COMMENT_COLOR` `#79838E` |
+
+**Keyword set** (`def return for while continue break not in if elif else and or is pass lambda del assert raise try except finally with as`). Intentionally excludes `import`/`from`/`class`/`async`/`yield` — blocked by the safety layer and would mislead users.
+
+**Argument scoping.** On every `contentsChanged`, `safety.get_param_names()` parses the cell source and extracts all `def`/lambda parameter names. If the set changes, `rehighlight()` recolors the entire cell body. This is cell-wide (a same-named free variable outside the function also gets `MAGIC_COLOR`) — per-function scoping deferred to v2.
+
+**Pass ordering in `highlightBlock`** (later passes override earlier on overlapping spans):
+1. Static rules (magic → func → number → literals → keywords → operators), code region only
+2. Function-call pattern (identifiers before `(`, skipping keywords and magic names)
+3. `def`-name pass (identifier after `def` keyword)
+4. Argument-names pass (arg names win over whitelisted function names)
+5. Rainbow brackets, code region only
+6. Comment span (last — overwrites everything inside `#…`)
+
+Brackets inside a `#` comment do not change rainbow nesting depth.
+
 ### Undefined Variable Suggestion
 
 When a cell references a name not defined anywhere in the session:

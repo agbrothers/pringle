@@ -285,19 +285,23 @@ class CellTextEdit(QPlainTextEdit):
         self._highlighter = PringleHighlighter(self.document())
         self._adjust_height()
 
-    def _on_document_size_changed(self, new_size) -> None:
-        # ceil + 2px: prevents a 1-2px sub-pixel shortfall that triggers
-        # ensureCursorVisible to scroll when the cursor is on the last line.
-        line_count = max(1, math.ceil(new_size.height()))
-        line_h = self.fontMetrics().lineSpacing()
+    def _on_document_size_changed(self, _new_size) -> None:
+        # Sum actual block heights from the layout engine — exact regardless of line count.
+        # +2px: prevents ensureCursorVisible from scrolling when cursor is on the last line.
+        layout = self.document().documentLayout()
+        total_h = 0.0
+        block = self.document().begin()
+        while block.isValid():
+            total_h += layout.blockBoundingRect(block).height()
+            block = block.next()
         dm = int(self.document().documentMargin())
         m = self.contentsMargins()
-        h = line_count * line_h + 2 * dm + m.top() + m.bottom() + 2
+        h = math.ceil(total_h) + 2 * dm + m.top() + m.bottom() + 2
         self.setFixedHeight(max(h, 32))
         self.updateGeometry()
 
     def _adjust_height(self) -> None:
-        """Initial sizing before documentSizeChanged has fired."""
+        """Font-metrics estimate used before documentSizeChanged has first fired."""
         line_count = max(1, math.ceil(self.document().size().height()))
         line_h = self.fontMetrics().lineSpacing()
         dm = int(self.document().documentMargin())
@@ -307,7 +311,10 @@ class CellTextEdit(QPlainTextEdit):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        self._adjust_height()
+        # Do NOT call _adjust_height() here. documentSizeChanged fires synchronously
+        # from super() whenever wrapping changes width, so _on_document_size_changed
+        # already runs with exact blockBoundingRect heights. Calling _adjust_height()
+        # afterward would override the correct height with a font-metrics underestimate.
 
     def focusOutEvent(self, event):
         self.focus_lost.emit()
@@ -460,7 +467,7 @@ class CellWidget(QWidget):
         self._outer_frame = QFrame()
         self._outer_frame.setObjectName("cellFrame")
         outer = QVBoxLayout(self._outer_frame)
-        outer.setContentsMargins(0, 2, 0, 2)
+        outer.setContentsMargins(0, 2, 0, 6)
         outer.setSpacing(2)
         content_layout.addWidget(self._outer_frame)
 

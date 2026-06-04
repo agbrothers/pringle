@@ -100,6 +100,29 @@ def get_cfg_writes(source: str) -> set[str]:
     return writes
 
 
+def get_param_names(source: str) -> set[str]:
+    """Return all parameter names declared by def/lambda signatures in source.
+
+    Used by the syntax highlighter to color arguments throughout a cell.
+    Returns an empty set for syntactically-incomplete source (e.g. mid-typing).
+    """
+    try:
+        tree = ast.parse(source, mode="exec")
+    except SyntaxError:
+        return set()
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            a = node.args
+            for arg in a.args + a.posonlyargs + a.kwonlyargs:
+                names.add(arg.arg)
+            if a.vararg:
+                names.add(a.vararg.arg)
+            if a.kwarg:
+                names.add(a.kwarg.arg)
+    return names
+
+
 def get_free_names(source: str) -> set[str]:
     """
     Return the set of unbound names referenced in source.

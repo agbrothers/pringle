@@ -195,3 +195,179 @@ class TestSetColors:
         h.set_colors({"rainbow": ["#FF1234"] * 6})
         h.run("(x)")
         assert h.color_at(0) == QColor("#FF1234").name().upper()
+
+
+# ---------------------------------------------------------------------------
+# FEAT-147 — keyword, def-name, argument, and inline-comment highlighting
+# ---------------------------------------------------------------------------
+
+class TestKeywordColors:
+    """Keywords must render in OPERATOR_COLOR."""
+
+    def test_for_keyword(self, cap):
+        cap.run("for i in arange(10):")
+        assert cap.color_at(0) == QColor(theme.OPERATOR_COLOR).name().upper()
+
+    def test_def_keyword(self, cap):
+        cap.run("def foo(x):")
+        assert cap.color_at(0) == QColor(theme.OPERATOR_COLOR).name().upper()
+
+    def test_return_keyword(self, cap):
+        cap.run("    return x")
+        assert cap.color_at(4) == QColor(theme.OPERATOR_COLOR).name().upper()
+
+    def test_in_keyword(self, cap):
+        # 'in' at position 7 in "for i in arange(10):"
+        cap.run("for i in arange(10):")
+        assert cap.color_at(7) == QColor(theme.OPERATOR_COLOR).name().upper()
+
+    def test_if_keyword(self, cap):
+        cap.run("if x > 0:")
+        assert cap.color_at(0) == QColor(theme.OPERATOR_COLOR).name().upper()
+
+    def test_else_keyword(self, cap):
+        cap.run("else:")
+        assert cap.color_at(0) == QColor(theme.OPERATOR_COLOR).name().upper()
+
+    def test_import_not_highlighted(self, cap):
+        # 'import' is not in the keyword set — should not get OPERATOR_COLOR
+        cap.run("import os")
+        assert cap.color_at(0) != QColor(theme.OPERATOR_COLOR).name().upper()
+
+
+class TestDefNameColor:
+    """The identifier after 'def' must be FUNCTION_COLOR; 'def' itself stays OPERATOR_COLOR."""
+
+    def test_defname_is_function_color(self, cap):
+        cap.run("def bifurcate(x):")
+        # 'bifurcate' starts at index 4
+        assert cap.color_at(4) == QColor(theme.FUNCTION_COLOR).name().upper()
+
+    def test_def_token_is_operator_color(self, cap):
+        cap.run("def bifurcate(x):")
+        assert cap.color_at(0) == QColor(theme.OPERATOR_COLOR).name().upper()
+
+    def test_defname_full_span(self, cap):
+        cap.run("def foo(x):")
+        for pos in range(4, 7):
+            assert cap.color_at(pos) == QColor(theme.FUNCTION_COLOR).name().upper()
+
+
+class TestArgumentColors:
+    """Parameters from def signatures must be MAGIC_COLOR in the signature and body."""
+
+    def _make_cap(self, qapp) -> _CapturingHighlighter:
+        doc = QTextDocument()
+        return _CapturingHighlighter(doc)
+
+    def test_arg_in_signature(self, qapp):
+        h = self._make_cap(qapp)
+        h.document().setPlainText("def f(memories, k):\n    return memories")
+        h.document().documentLayout().documentSize()
+        h._captures.clear()
+        h.highlightBlock("def f(memories, k):")
+        assert h.color_at(6) == QColor(theme.MAGIC_COLOR).name().upper()
+
+    def test_arg_in_body(self, qapp):
+        h = self._make_cap(qapp)
+        h.document().setPlainText("def f(memories, k):\n    return memories")
+        h.document().documentLayout().documentSize()
+        h._captures.clear()
+        h.highlightBlock("    return memories")
+        assert h.color_at(11) == QColor(theme.MAGIC_COLOR).name().upper()
+
+    def test_unicode_arg(self, qapp):
+        h = self._make_cap(qapp)
+        h.document().setPlainText("def f(β):\n    return β")
+        h.document().documentLayout().documentSize()
+        h._captures.clear()
+        h.highlightBlock("def f(β):")
+        assert h.color_at(6) == QColor(theme.MAGIC_COLOR).name().upper()
+
+    def test_annotation_type_not_magic(self, qapp):
+        # 'k:int' — 'k' is magic, 'int' is NOT magic (not a param name)
+        h = self._make_cap(qapp)
+        h.document().setPlainText("def f(k:int):\n    return k")
+        h.document().documentLayout().documentSize()
+        h._captures.clear()
+        h.highlightBlock("def f(k:int):")
+        assert h.color_at(6) == QColor(theme.MAGIC_COLOR).name().upper()
+        assert h.color_at(8) != QColor(theme.MAGIC_COLOR).name().upper()
+
+    def test_non_param_not_magic(self, qapp):
+        # 'pts' is a local variable, not a parameter — must not be MAGIC_COLOR
+        h = self._make_cap(qapp)
+        h.document().setPlainText("def f(k):\n    pts = k + 1")
+        h.document().documentLayout().documentSize()
+        h._captures.clear()
+        h.highlightBlock("    pts = k + 1")
+        assert h.color_at(4) != QColor(theme.MAGIC_COLOR).name().upper()
+
+
+class TestInlineCommentColors:
+    """Inline # comments must render in COMMENT_COLOR; prior tokens are overwritten."""
+
+    def test_comment_line_is_comment_color(self, cap):
+        cap.run("## BUILD OUTPUT DATA")
+        assert cap.color_at(0) == QColor(theme.COMMENT_COLOR).name().upper()
+
+    def test_inline_comment_suffix(self, cap):
+        # 'x + 1  # comment' — the # and beyond must be COMMENT_COLOR
+        cap.run("x + 1  # comment")
+        assert cap.color_at(7) == QColor(theme.COMMENT_COLOR).name().upper()
+
+    def test_code_before_comment_not_comment_color(self, cap):
+        cap.run("x + 1  # comment")
+        assert cap.color_at(0) != QColor(theme.COMMENT_COLOR).name().upper()
+
+    def test_bracket_inside_comment_no_depth_change(self, cap):
+        # A bracket inside a # comment must not affect rainbow depth
+        cap.run("x  # (unclosed")
+        assert cap._block_state == 0
+
+
+class TestLiteralColors:
+    """None/True/False must render in NUMBER_COLOR, not OPERATOR_COLOR."""
+
+    def test_none_is_number_color(self, cap):
+        cap.run("enrg[:, None]")
+        # 'None' starts at index 8 (space at 7)
+        assert cap.color_at(8) == QColor(theme.NUMBER_COLOR).name().upper()
+
+    def test_none_not_operator_color(self, cap):
+        cap.run("enrg[:, None]")
+        assert cap.color_at(8) != QColor(theme.OPERATOR_COLOR).name().upper()
+
+    def test_true_is_number_color(self, cap):
+        cap.run("flag = True")
+        assert cap.color_at(7) == QColor(theme.NUMBER_COLOR).name().upper()
+
+    def test_false_is_number_color(self, cap):
+        cap.run("flag = False")
+        assert cap.color_at(7) == QColor(theme.NUMBER_COLOR).name().upper()
+
+
+class TestFunctionCallColors:
+    """Unknown identifiers immediately before ( must be colored FUNCTION_COLOR."""
+
+    def test_unknown_call_is_function_color(self, cap):
+        # 'bifurcate' is not in the numpy whitelist — detected via call pattern
+        cap.run("result = bifurcate(M, k)")
+        # 'bifurcate' starts at index 9
+        assert cap.color_at(9) == QColor(theme.FUNCTION_COLOR).name().upper()
+
+    def test_keyword_before_paren_not_function_color(self, cap):
+        # 'return' followed by ( must stay OPERATOR_COLOR
+        cap.run("return(x)")
+        assert cap.color_at(0) == QColor(theme.OPERATOR_COLOR).name().upper()
+
+    def test_magic_before_paren_not_overridden(self, cap):
+        # magic names that happen to be called must NOT change from MAGIC_COLOR
+        # (function-call pass skips _MAGIC_NAMES)
+        cap.run("z()")
+        assert cap.color_at(0) == QColor(theme.MAGIC_COLOR).name().upper()
+
+    def test_known_func_call_still_function_color(self, cap):
+        # Known whitelisted functions are already FUNCTION_COLOR; call pass is idempotent
+        cap.run("sin(x)")
+        assert cap.color_at(0) == QColor(theme.FUNCTION_COLOR).name().upper()

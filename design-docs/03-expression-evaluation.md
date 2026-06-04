@@ -146,6 +146,8 @@ def get_free_names(code_str):
 
 Names in `free` that are not defined in any other cell are flagged as undefined, triggering the "suggest slider" behavior in the UI.
 
+`safety.get_param_names(source)` is a companion function that returns only the parameter names declared by `def`/lambda signatures in the source (using the same AST walk). Returns an empty set for syntactically-incomplete source. Used by `PringleHighlighter` to color function arguments throughout a cell (FEAT-147).
+
 ## Parsing Workflow
 
 ```
