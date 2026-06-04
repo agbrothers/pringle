@@ -125,6 +125,8 @@ Standard text editor behavior in a `QPlainTextEdit`:
 - **Enter / Return**: creates a new empty equation cell directly below and moves focus there (from any cursor position).
 - **Shift+Enter**: inserts a literal newline within the current cell (for multi-line expressions or comments).
 - **Ctrl+Enter** (Cmd+Enter on macOS): creates a new folder cell directly below and moves focus there.
+- **Cmd+/** (in an equation or slider cell): toggles `# ` on the cursor's current line, or on every line that overlaps the selection. All toggled lines are treated as a single undo step. If the first line ends up starting with `#` after the toggle, the cell auto-morphs to a `CommentCellWidget`.
+- **Cmd+/** (in a comment cell): cell-level uncomment — morphs the cell back to an equation cell (same as `Cmd+Option+/`).
 
 These shortcuts apply to equation cells, comment cells, and all text fields on slider cells (value, min, max, step, name).
 
@@ -223,6 +225,8 @@ Selecting "Add Constraint" appends a constraint sub-cell below the primary cell,
 | `Ctrl+N` | New empty session |
 | 📷 toolbar button | Save current canvas frame as PNG (native save dialog, defaults to `pringle_screenshot.png`) |
 | `Ctrl+Enter` / `Cmd+Enter` | Add new folder cell below focused cell (in the expression panel); force re-evaluate focused cell when focus is on the viewport |
+| `Cmd+/` | **In equation/slider cell:** toggle `# ` on current line or all selected lines (single undo step). **In comment cell:** cell-level uncomment — morphs back to equation/slider. |
+| `Cmd+Option+/` (macOS) / `Cmd+Shift+/` (other) | **Cell-level comment toggle:** morph focused equation/slider cell → `CommentCellWidget`, or comment cell → equation/slider. With a multi-line selection, strips `# ` from every selected line on uncomment. |
 | `Ctrl+[` / `Ctrl+]` | Collapse / expand focused folder cell |
 | `Cmd+]` / `Ctrl+]` | Indent cell into the folder directly above it (equation, slider, comment cells; no-op on folder cells and when no folder is adjacent above) |
 | `Cmd+[` / `Ctrl+[` | Outdent cell out of its current folder, placing it below the folder's last member (no-op when cell is not in a folder) |

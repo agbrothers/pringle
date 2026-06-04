@@ -50,6 +50,7 @@ class _SpinBox(QDoubleSpinBox):
     outdent_at = pyqtSignal()
     move_up_at = pyqtSignal()
     move_down_at = pyqtSignal()
+    toggle_comment_requested = pyqtSignal()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -71,6 +72,9 @@ class _SpinBox(QDoubleSpinBox):
         ctrl = Qt.KeyboardModifier.ControlModifier
         alt = Qt.KeyboardModifier.AltModifier
         if mod == ctrl:
+            if key == Qt.Key.Key_Slash:
+                self.toggle_comment_requested.emit()
+                return
             if key == Qt.Key.Key_BracketRight:
                 self.indent_at.emit()
                 return
@@ -131,6 +135,7 @@ class _ExprBox(QLineEdit):
     outdent_at = pyqtSignal()
     move_up_at = pyqtSignal()
     move_down_at = pyqtSignal()
+    toggle_comment_requested = pyqtSignal()
 
     def __init__(self, value: float = 0.0, parent=None):
         super().__init__(_fmt(value), parent)
@@ -186,6 +191,9 @@ class _ExprBox(QLineEdit):
         ctrl = Qt.KeyboardModifier.ControlModifier
         alt = Qt.KeyboardModifier.AltModifier
         if mod == ctrl:
+            if key == Qt.Key.Key_Slash:
+                self.toggle_comment_requested.emit()
+                return
             if key == Qt.Key.Key_BracketRight:
                 self.indent_at.emit()
                 return
@@ -228,6 +236,7 @@ class _NameLineEdit(QLineEdit):
     outdent_at = pyqtSignal()
     move_up_at = pyqtSignal()
     move_down_at = pyqtSignal()
+    toggle_comment_requested = pyqtSignal()
 
     def keyPressEvent(self, event) -> None:
         key = event.key()
@@ -235,6 +244,9 @@ class _NameLineEdit(QLineEdit):
         ctrl = Qt.KeyboardModifier.ControlModifier
         alt = Qt.KeyboardModifier.AltModifier
         if mod == ctrl:
+            if key == Qt.Key.Key_Slash:
+                self.toggle_comment_requested.emit()
+                return
             if key == Qt.Key.Key_BracketRight:
                 self.indent_at.emit()
                 return
@@ -271,6 +283,7 @@ class SliderWidget(QWidget):
     outdent_requested = pyqtSignal(str)         # cell_id — Cmd+[ / Cmd+Left
     move_up_requested = pyqtSignal(str)         # cell_id — Cmd+Up
     move_down_requested = pyqtSignal(str)       # cell_id — Cmd+Down
+    toggle_comment_requested = pyqtSignal(str)  # cell_id — Cmd+/
 
     _ANIM_INTERVAL_MS = 16   # ~60fps animation step
 
@@ -448,6 +461,7 @@ class SliderWidget(QWidget):
             _field.outdent_at.connect(lambda: self.outdent_requested.emit(self.cell_id))
             _field.move_up_at.connect(lambda: self.move_up_requested.emit(self.cell_id))
             _field.move_down_at.connect(lambda: self.move_down_requested.emit(self.cell_id))
+            _field.toggle_comment_requested.connect(lambda: self.toggle_comment_requested.emit(self.cell_id))
 
         # Separator outside outer_h so the swatch doesn't cover it
         line = QFrame()
@@ -470,7 +484,7 @@ class SliderWidget(QWidget):
         return True
 
     def focus(self) -> None:
-        pass
+        self._spinbox.setFocus()
 
     def primary_focus_widget(self) -> "_SpinBox":
         return self._spinbox
@@ -587,6 +601,7 @@ class SliderWidget(QWidget):
         self._name_edit.outdent_at.connect(lambda: self.outdent_requested.emit(self.cell_id))
         self._name_edit.move_up_at.connect(lambda: self.move_up_requested.emit(self.cell_id))
         self._name_edit.move_down_at.connect(lambda: self.move_down_requested.emit(self.cell_id))
+        self._name_edit.toggle_comment_requested.connect(lambda: self.toggle_comment_requested.emit(self.cell_id))
         self._name_edit.setFocus()
 
     def _on_name_text_changed(self, text: str) -> None:

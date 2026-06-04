@@ -73,12 +73,22 @@ class TestMorphCommentToEquation:
         """Comment → equation on 'a = 2.5' continues to morph into a SliderWidget."""
         comment = clist.add_comment_cell(source="# a = 2.5")
         cell_id = comment.cell_id
+        # Simulate real app state: comment cell is active when the user triggers uncomment.
+        # Without this, _active_cell is None and the use-after-free on the intermediate
+        # CellWidget (deleted by _maybe_morph_to_slider) is invisible to the test.
+        clist._active_cell = comment
         clist._morph_comment_to_equation(cell_id)
         qapp.processEvents()
         new = clist._cells[clist._index_of(cell_id)]
         assert isinstance(new, SliderWidget)
         assert new.name == "a"
         assert new.value == pytest.approx(2.5)
+        # _active_cell must not point to the deleted intermediate CellWidget.
+        if clist._active_cell is not None:
+            try:
+                clist._active_cell.objectName()
+            except RuntimeError:
+                pytest.fail("_active_cell points to a deleted C++ widget after slider morph")
 
     def test_adds_to_namespace(self, qapp, clist):
         comment = clist.add_comment_cell(source="# exported = 99")
@@ -229,6 +239,62 @@ class TestAutoReverseOnHashRemoval:
         comment.content_changed.emit(comment.cell_id)
         qapp.processEvents()
         assert len(clist._cells) == count_before
+
+
+class TestMultiLineUncomment:
+    """Cmd+/ with a multi-line selection strips '# ' from every selected line."""
+
+    def _make_list(self, qapp):
+        return CellListWidget(on_cell_result=lambda *a: None, grid=make_grid(GridConfig(n=32)))
+
+    def _select_all(self, comment):
+        from PyQt6.QtGui import QTextCursor
+        c = comment._edit.textCursor()
+        c.select(QTextCursor.SelectionType.Document)
+        comment._edit.setTextCursor(c)
+
+    def test_multiline_all_lines_stripped_with_selection(self, qapp):
+        """Selecting all lines and uncommenting strips '# ' from every line."""
+        clist = self._make_list(qapp)
+        comment = clist.add_comment_cell("# z = x**2\n# + y**2\n# + 1")
+        cell_id = comment.cell_id
+        self._select_all(comment)
+        clist._morph_comment_to_equation(cell_id)
+        qapp.processEvents()
+        new = clist._cells[clist._index_of(cell_id)]
+        assert isinstance(new, CellWidget)
+        assert new.source() == "z = x**2\n+ y**2\n+ 1"
+
+    def test_no_selection_strips_first_line_only(self, qapp):
+        """With no selection, only the first line's '# ' is stripped (cursor behaviour)."""
+        clist = self._make_list(qapp)
+        comment = clist.add_comment_cell("# z = x**2\n# + y**2")
+        cell_id = comment.cell_id
+        # cursor at start, no selection
+        from PyQt6.QtGui import QTextCursor
+        c = comment._edit.textCursor()
+        c.movePosition(QTextCursor.MoveOperation.Start)
+        comment._edit.setTextCursor(c)
+        clist._morph_comment_to_equation(cell_id)
+        qapp.processEvents()
+        new = clist._cells[clist._index_of(cell_id)]
+        assert isinstance(new, CellWidget)
+        assert new.source() == "z = x**2\n# + y**2"
+
+    def test_multiline_select_all_then_uncomment_round_trips_correctly(self, qapp):
+        """Full round-trip: equation → comment → select-all uncomment → same source."""
+        clist = self._make_list(qapp)
+        cell = clist.add_cell(source="z = x**2\n+ y**2")
+        cell_id = cell.cell_id
+        clist._morph_equation_to_comment(cell_id)
+        comment = clist._cells[clist._index_of(cell_id)]
+        assert isinstance(comment, CommentCellWidget)
+        self._select_all(comment)
+        clist._morph_comment_to_equation(cell_id)
+        qapp.processEvents()
+        new = clist._cells[clist._index_of(cell_id)]
+        assert isinstance(new, CellWidget)
+        assert new.source() == "z = x**2\n+ y**2"
 
 
 class TestToggleCommentNoop:

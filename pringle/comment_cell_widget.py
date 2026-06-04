@@ -92,12 +92,18 @@ class _CommentEdit(QPlainTextEdit):
     outdent_at = pyqtSignal()
     move_up_at = pyqtSignal()
     move_down_at = pyqtSignal()
+    toggle_comment_requested = pyqtSignal()  # Ctrl+/ or Ctrl+Shift+/ → uncomment cell
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         key = event.key()
         mod = event.modifiers()
         ctrl = Qt.KeyboardModifier.ControlModifier
+        shift = Qt.KeyboardModifier.ShiftModifier
         alt = Qt.KeyboardModifier.AltModifier
+        if (key == Qt.Key.Key_Slash and (mod == ctrl or mod == ctrl | shift)
+                or key == Qt.Key.Key_Question and mod == ctrl):
+            self.toggle_comment_requested.emit()
+            return
         if mod == ctrl:
             if key == Qt.Key.Key_BracketRight:
                 self.indent_at.emit()
@@ -147,6 +153,7 @@ class CommentCellWidget(QWidget):
     outdent_requested = pyqtSignal(str)        # cell_id
     move_up_requested = pyqtSignal(str)        # cell_id
     move_down_requested = pyqtSignal(str)      # cell_id
+    toggle_comment_requested = pyqtSignal(str) # cell_id — Ctrl+/ or Ctrl+Shift+/
 
     def __init__(
         self,
@@ -168,6 +175,7 @@ class CommentCellWidget(QWidget):
         self._edit.outdent_at.connect(lambda: self.outdent_requested.emit(self.cell_id))
         self._edit.move_up_at.connect(lambda: self.move_up_requested.emit(self.cell_id))
         self._edit.move_down_at.connect(lambda: self.move_down_requested.emit(self.cell_id))
+        self._edit.toggle_comment_requested.connect(lambda: self.toggle_comment_requested.emit(self.cell_id))
         if source:
             self.set_source(source)
 

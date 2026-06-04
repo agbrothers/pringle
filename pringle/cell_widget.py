@@ -319,6 +319,37 @@ class CellTextEdit(QPlainTextEdit):
         # (same blockBoundingRect values, same setFixedHeight result).
         self._on_document_size_changed(None)
 
+    def _toggle_line_comment(self) -> None:
+        cursor = self.textCursor()
+        start = cursor.selectionStart()
+        end = cursor.selectionEnd()
+
+        # Collect all blocks that overlap the selection (or just the cursor's block).
+        doc = self.document()
+        first_block = doc.findBlock(start)
+        last_block = doc.findBlock(end if end > start else start)
+
+        blocks = []
+        b = first_block
+        while True:
+            blocks.append(b)
+            if b == last_block:
+                break
+            b = b.next()
+
+        all_commented = all(b.text().startswith("# ") for b in blocks)
+
+        cursor.beginEditBlock()
+        for b in blocks:
+            bc = self.textCursor()
+            bc.setPosition(b.position())
+            if all_commented:
+                bc.movePosition(bc.MoveOperation.Right, bc.MoveMode.KeepAnchor, 2)
+                bc.removeSelectedText()
+            else:
+                bc.insertText("# ")
+        cursor.endEditBlock()
+
     def focusOutEvent(self, event):
         self.focus_lost.emit()
         super().focusOutEvent(event)
@@ -342,6 +373,9 @@ class CellTextEdit(QPlainTextEdit):
                 return
             if key == Qt.Key.Key_BracketLeft:
                 self.outdent_at.emit()
+                return
+            if key == Qt.Key.Key_Slash:
+                self._toggle_line_comment()
                 return
         if mod & alt:
             if key == Qt.Key.Key_Up:

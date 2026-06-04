@@ -479,6 +479,7 @@ class CellListWidget(QWidget):
             cell.outdent_requested.connect(self.outdent_cell)
             cell.move_up_requested.connect(self.move_cell_up)
             cell.move_down_requested.connect(self.move_cell_down)
+            cell.toggle_comment_requested.connect(self._morph_equation_to_comment)
         else:
             cell = CellWidget(style=style)
             cell.content_changed.connect(self._on_cell_changed)
@@ -560,6 +561,7 @@ class CellListWidget(QWidget):
         cell.outdent_requested.connect(self.outdent_cell)
         cell.move_up_requested.connect(self.move_cell_up)
         cell.move_down_requested.connect(self.move_cell_down)
+        cell.toggle_comment_requested.connect(self._morph_comment_to_equation)
 
         if after_id is not None:
             idx = self._index_of(after_id)
@@ -748,7 +750,10 @@ class CellListWidget(QWidget):
         if cell is self._active_cell:
             return
         if self._active_cell is not None:
-            self._mark_active(self._active_cell, False)
+            try:
+                self._mark_active(self._active_cell, False)
+            except RuntimeError:
+                pass  # C++ widget already deleted (e.g. morph replaced it)
         self._active_cell = cell
         if cell is not None:
             self._mark_active(cell, True)
@@ -1229,6 +1234,7 @@ class CellListWidget(QWidget):
         comment.outdent_requested.connect(self.outdent_cell)
         comment.move_up_requested.connect(self.move_cell_up)
         comment.move_down_requested.connect(self.move_cell_down)
+        comment.toggle_comment_requested.connect(self._morph_comment_to_equation)
 
         self._layout.replaceWidget(cell, comment)
         self._cells[idx] = comment
@@ -1273,10 +1279,13 @@ class CellListWidget(QWidget):
         slider.outdent_requested.connect(self.outdent_cell)
         slider.move_up_requested.connect(self.move_cell_up)
         slider.move_down_requested.connect(self.move_cell_down)
+        slider.toggle_comment_requested.connect(self._morph_equation_to_comment)
 
         # Swap in the layout and the cells list
         self._layout.replaceWidget(cell, slider)
         self._cells[idx] = slider
+        if cell is self._active_cell:
+            self._active_cell = None
         cell.deleteLater()
 
     # ------------------------------------------------------------------
@@ -1323,6 +1332,7 @@ class CellListWidget(QWidget):
         comment.outdent_requested.connect(self.outdent_cell)
         comment.move_up_requested.connect(self.move_cell_up)
         comment.move_down_requested.connect(self.move_cell_down)
+        comment.toggle_comment_requested.connect(self._morph_comment_to_equation)
         self._layout.replaceWidget(cell, comment)
         self._cells[idx] = comment
         cell.deleteLater()
@@ -1342,7 +1352,17 @@ class CellListWidget(QWidget):
             return
         stashed_visible = getattr(cell, '_stashed_visible', True)
         folder_id = self._cell_folder.get(cell_id)
-        raw = _HASH_RE.sub("", cell.source()).strip()
+        # Strip '# ' from all lines when the user has a multi-line selection
+        # (e.g. Cmd+A then Cmd+/); otherwise strip only the first line so that
+        # a plain cursor-on-line-1 uncomment preserves trailing commented lines.
+        cursor = cell._edit.textCursor()
+        multiline_sel = (cursor.hasSelection() and
+                         cursor.document().findBlock(cursor.selectionStart()) !=
+                         cursor.document().findBlock(cursor.selectionEnd()))
+        if multiline_sel:
+            raw = "\n".join(_HASH_RE.sub("", ln) for ln in cell.source().splitlines()).strip()
+        else:
+            raw = _HASH_RE.sub("", cell.source()).strip()
         style = cell.style
         new_cell = CellWidget(cell_id=cell_id, style=style)
         new_cell.content_changed.connect(self._on_cell_changed)
@@ -1368,13 +1388,15 @@ class CellListWidget(QWidget):
         if not stashed_visible:
             new_cell._on_visibility_toggled(False)
         new_cell.set_source(raw)
-        new_cell.focus()
-        QTimer.singleShot(0, lambda w=new_cell: self._scroll.ensureWidgetVisible(w))
         # Recovered source may be a slider assignment; run the standard morph check.
         self._maybe_morph_to_slider(cell_id)
         # Reapply folder indent and collapsed-visibility to whatever is now at this slot.
+        # Focus and scroll cur (not new_cell) — _maybe_morph_to_slider may have replaced
+        # new_cell with a SliderWidget and deleted it.
         cur = self._cells[self._index_of(cell_id)]
         self._assign_folder(cur, folder_id)
+        cur.focus()
+        QTimer.singleShot(0, lambda w=cur: self._scroll.ensureWidgetVisible(w))
         self._rebuild_namespace()
 
     def _make_name_validator(self, slider: SliderWidget) -> Callable[[str], bool]:
