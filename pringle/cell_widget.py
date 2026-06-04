@@ -22,6 +22,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QPoint
 from PyQt6.QtGui import (
     QKeyEvent, QFont, QFontMetricsF,
     QPainter, QColor, QLinearGradient, QBrush,
+    QTextCursor,
 )
 
 from pringle.style import CellStyle
@@ -368,6 +369,16 @@ class CellTextEdit(QPlainTextEdit):
         ctrl = Qt.KeyboardModifier.ControlModifier
         alt = Qt.KeyboardModifier.AltModifier
         if mod == ctrl:
+            if key == Qt.Key.Key_Backspace:
+                cursor = self.textCursor()
+                if not cursor.atBlockStart():
+                    cursor.movePosition(
+                        QTextCursor.MoveOperation.StartOfBlock,
+                        QTextCursor.MoveMode.KeepAnchor,
+                    )
+                    cursor.removeSelectedText()
+                    self.setTextCursor(cursor)
+                return  # always consume — do not fall through to "delete word"
             if key == Qt.Key.Key_BracketRight:
                 self.indent_at.emit()
                 return
