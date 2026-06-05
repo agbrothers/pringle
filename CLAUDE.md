@@ -78,4 +78,4 @@ You are assigned one of the following 3 roles: developer, planner, or profiler. 
 - `14` Namespace reference (all whitelisted names, excluded builtins, rationale)
 - `20` Profiling SOP
 
-**Note:** Docs 15–19 removed 2026-05-24; active issue tracking on GitHub Issues. See `gh issue list` or https://github.com/agbrothers/pringle/issues.
+**Note:** Active issue tracking on GitHub Issues. See `gh issue list` or https://github.com/agbrothers/pringle/issues.

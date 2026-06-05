@@ -47,6 +47,7 @@ cells:
   step: 0.01
   is_playing: false
   anim_mode: pingpong
+  anim_speed_multiplier: 1.0
   sub_cells: []
 - id: fc8f45e8-2a27-4c64-8652-af247429a81a
   style:
@@ -183,10 +184,10 @@ view:
   show_shadow: false
   shadow_opacity: 0.5
   camera_position:
-  - 1.5616928397364371
-  - -0.0234271496487044
-  - 12.108391167658045
+  - -4.006932233234854
+  - -0.004388601808923663
+  - 10.908731726351
   orbit_target:
-  - 0.2557224929332733
-  - -0.0038361253682523966
+  - -0.6331702470779419
+  - -0.04902280122041702
   - 0.0
