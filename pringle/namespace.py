@@ -22,23 +22,24 @@ from numpy import (
     zeros, ones, empty, full,
     zeros_like, ones_like, empty_like, full_like,
     linspace, arange, meshgrid,
-    array, asarray, concatenate, 
+    array, asarray, concatenate,
     stack, column_stack, row_stack, hstack, vstack,
     # Shape
     reshape, ravel, transpose, squeeze,
     # Math
-    sum, prod, cumsum, cumprod, 
+    sum, prod, cumsum, cumprod,
     min, max, mean, median, std, var, maximum, minimum,
     diff, gradient, dot, cross, outer, einsum,
     # Boolean / masking
     where, select, isnan, isinf, isfinite, logical_and, logical_or, logical_not,
     any, all,
-    # Linear algebra
+    # Constants
     pi, e, inf, nan,
+    # Dtypes
+    float32, float64, int32, int64, complex64, complex128, bool_,
     # Random (numpy.random) — available as `random` sub-namespace
 )
 import numpy.random as random  # noqa: F401 — expose as `random`
-import numpy as _np            # private; used by namespace-builder below
 
 from scipy.special import (
     gamma, factorial, comb,
@@ -95,6 +96,11 @@ def build_equation_namespace() -> dict:
         "logical_not": logical_not,
         "any": any, "all": all,
         "pi": pi, "e": e, "inf": inf, "nan": nan,
+        # Dtypes
+        "float32": float32, "float64": float64,
+        "int32": int32, "int64": int64,
+        "complex64": complex64, "complex128": complex128,
+        "bool_": bool_,
         "int": int,  # safe builtin — needed for array indexing (e.g. path[int(t)])
         "random": random,
         # scipy.special
@@ -112,15 +118,3 @@ def build_equation_namespace() -> dict:
     return ns
 
 
-def build_data_namespace() -> dict:
-    """
-    Return a namespace for data panel cells.
-
-    Same numpy/scipy whitelist as equation namespace, plus the full `np`
-    module alias for convenience (e.g. np.random.randn).  No AST safety
-    check is applied (data panel is intentionally more permissive for
-    setup/sampling code).  Still no Python builtins.
-    """
-    ns = build_equation_namespace()
-    ns["np"] = _np
-    return ns

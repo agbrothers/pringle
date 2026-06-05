@@ -1,5 +1,5 @@
 """
-Recurrence relation parser and executor for data panel cells.
+Recurrence relation parser and executor for equation cells with recurrence sub-cells.
 
 A recurrence cell consists of:
   Main expression:        path = zeros((50, 2))

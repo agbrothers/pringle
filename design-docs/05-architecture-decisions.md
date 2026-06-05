@@ -17,8 +17,7 @@ This document tracks the high-level design decisions for Pringle and the open qu
 |---|---|---|
 | Target environment | Standalone desktop window | Best performance; direct GPU access; no web-dev complexity |
 | Expression language | Python math syntax, numpy/scipy namespace | Natural for Python users; no prefix needed; limited attack surface |
-| Expression security | Whitelisted namespace (numpy/scipy only) + no builtins + AST safety check | Strong posture for personal/trusted use; upgrade to subprocess isolation before full public release |
-| Data panel security | Whitelisted namespace + no builtins (no AST check) | Data panel is intentionally more permissive; document clearly |
+| Expression security | Whitelisted namespace (numpy/scipy only) + no builtins + AST safety check (all cells) | Protects against malicious shared sessions; sufficient for local desktop use; see `03-expression-evaluation.md` |
 | Data re-evaluation | Per-cell ▶ Run button only; never automatic | Prevents stochastic re-sampling from being tied to slider/animation updates |
 | Time variation | `t` is **not** reserved — it is a regular slider name in v1; a dedicated animation mechanism is deferred to v2 | `t` removed from `SPATIAL_NAMES` and `grid_vars()` (FEAT-041); injecting `t=0` was dead code that blocked a common slider name |
 | Evaluation order | Dependency graph (topological sort), not visual order | Visual order is for organization only; cells can be freely dragged/reordered |
@@ -38,9 +37,9 @@ This document tracks the high-level design decisions for Pringle and the open qu
 | Grid evaluation (v1) | CPU numpy vectorized eval + buffer re-upload | Simple, debuggable, sufficient for 30fps at 128×128 |
 | Magic variable scoping | Magic names (`z`, `y`, `xyz`, etc.) are local to cell execution; never exported to shared namespace | Allows multiple `z = expr` cells without collision; spatial grid vars are never shadowed |
 | Duplicate magic name cells | Two cells both writing `z = expr` → two independent surfaces | Each renders separately; no shared namespace conflict |
-| Unified dependency graph | All cells (equation and data) on the same DAG; panel separation is UI-only | Solves boot order; data cells can reference equation lambdas; both panels freely reorderable |
+| Unified dependency graph | All cell types (equation, slider, folder, comment) on the same DAG | Evaluation order is topological; cells can freely reference outputs from any other cell |
 | Data cell reactivity | Auto-evaluates on upstream parameter changes (slider animation, upstream cell edits), same as any equation cell; text edits to the cell or sub-cells mark stale instead of debounce-re-evaluating; `→` button increments `_rng_seed` (produces new draws) | Stable random draws during slider animation; user controls resampling explicitly |
-| Session boot sequence | (1) load YAML, (2) build DAG, (3) eval reactive cells (sliders/lambdas), (4) ▶▶ Run All data, (5) eval render cells, (6) first render | Guarantees lambdas available to data cells at load time |
+| Session boot sequence | (1) load YAML, (2) build DAG, (3) single `_rebuild_namespace()`, (4) first render | All cell types evaluated in topological order; no separate "Run All data" step |
 | `def` cell deferred eval | Cells whose stripped source begins with `def ` skip the 300 ms debounce and evaluate on focus-out only. `lambda` cells stay on the eager debounce path. This is an intentional user-facing control knob: choose `def` for heavy multi-line functions, `lambda` for lightweight live-feedback expressions. Detection: `source().lstrip().startswith("def ")` in `_on_text_changed`; `set_def_mode(bool)` swaps `focus_lost → _emit_changed` in/out. |
 | Comment cell detection | Source starts with `#`; auto-morphs to `CommentCellWidget` on focus-out. Auto-reverse: editing the text so it no longer starts with `#` immediately morphs back to an equation cell via `_on_comment_changed`. `# ` prefix is stored as literal text in the edit field — no separate margin decoration. | Bidirectional morph keeps the cell type in sync with the text without requiring an explicit toggle |
 | (u,v) parametric grid default | `[0, 2π] × [0, 2π]`; configurable in View Settings panel | Captures full rotation for common cylindrical/spherical surfaces |
@@ -140,7 +139,6 @@ Deferred to v2. Focus v1 on explicit and parametric surfaces.
 - Undo/redo (snapshot-based), copy/paste cells ✓
 
 ### Deferred to v2
-- Data panel with per-cell ▶ Run button (designed; not yet implemented)
 - Recurrence relations via initial_condition + recursion sub-cells (designed; not yet implemented)
 - `t` animation parameter + play/pause controls (designed; not yet implemented)
 - Implicit surfaces (`f(x,y,z) = c`)

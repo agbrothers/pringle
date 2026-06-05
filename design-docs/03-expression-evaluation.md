@@ -6,101 +6,59 @@ Desmos is structurally safe by design — their expression language is **not Jav
 
 ## Security Model for Pringle
 
-### The Strategy: Whitelisted Namespace + No Builtins
+### Threat Model
 
-Rather than trying to sandbox arbitrary Python, Pringle restricts the execution namespace to explicitly imported numpy and scipy names. No builtins are exposed. This means:
+Pringle runs locally on the user's machine. The primary threat is **not** users harming themselves — if someone writes arbitrary Python in their own session, that is their Python environment. The real threat is **malicious shared sessions**: a `.yml` file distributed via GitHub, a blog post, or a colleague that silently executes harmful code when loaded. Sessions are designed to be shared and are human-readable, which makes them a plausible social-engineering vector.
 
-- `import` statements fail — `__import__` is a builtin and is not in scope
-- `open()`, `eval()`, `exec()` fail — not in namespace
+The security posture is calibrated for this: strong enough that a malicious shared session cannot escape to the filesystem or network, lightweight enough that it does not block legitimate scientific expressions.
+
+### The Strategy: Whitelisted Namespace + No Builtins + AST Check
+
+All cells (equation, data-mode, recurrence) use the same execution model: a whitelisted namespace of explicitly imported numpy/scipy names, no Python builtins, and an AST safety check before execution.
+
+- `import` statements fail — blocked at AST check
+- `open()`, `eval()`, `exec()` fail — both blocked by name in AST check and absent from namespace
+- All dunder attribute access (`.__class__`, `.__builtins__`, etc.) blocked by AST check
 - Only numpy/scipy callables are reachable
 
-```python
-from numpy import (
-    sin, cos, tan, arcsin, arccos, arctan, arctan2,
-    exp, log, log2, log10, sqrt, abs, sign, ceil, floor,
-    pi, e, inf, nan,
-    array, zeros, ones, full, eye, linspace, arange, meshgrid,
-    where, clip, concatenate, stack, hstack, vstack,
-    sum, prod, cumsum, min, max, argmin, argmax,
-    dot, cross, outer, kron,
-    real, imag, conj, angle,
-    random,
-)
-from numpy.linalg import norm, inv, det, eig, svd, solve, lstsq
-from scipy.special import gamma, erf, erfc, beta, factorial
-
-EQUATION_NAMESPACE = {k: v for k, v in locals().items() if not k.startswith("_")}
-```
-
-### Remaining Exposure
-
-The namespace restriction alone is not fully bulletproof. Without builtins, a user can still construct Python literals and access their class hierarchy:
-
-```python
-# This would still work even with no builtins:
-x = (1, 2)
-x.__class__.__bases__[0].__subclasses__()
-```
-
-The `.__class__` attribute chain traverses Python's object model independent of builtins. This is a known limitation of namespace-only sandboxing.
+The whitelisted namespace is defined in `namespace.py` (`build_equation_namespace()`). Adding a new function requires an explicit line there — not just `import numpy as np`.
 
 ### Defense-in-Depth: AST Check
 
-An AST pre-check closes most remaining vectors by blocking constructs that aren't needed for math expressions:
+The AST pre-check in `safety.py` (`SafetyChecker`) enforces the following before any `exec()`:
 
-```python
-import ast
+- **Blocks `import` / `from-import`** — `visit_Import`, `visit_ImportFrom`
+- **Blocks named calls** to `exec`, `eval`, `compile`, `open`, `breakpoint` — `visit_Call` on `ast.Name`
+- **Blocks dunder calls** — any call to a name or attribute starting with `__` (e.g. `__import__()`)
+- **Blocks all dunder attribute access** — any `obj.attr` where `attr` starts with `__`; this covers `.__class__`, `.__builtins__`, `.__subclasses__`, `.__globals__`, etc. on any object including module-level names like `random`
 
-BLOCKED_NODE_TYPES = {
-    ast.Import, ast.ImportFrom,       # import statements
-    ast.With,                          # with ... as ...:
-    ast.Try,                           # try/except
-    ast.Global, ast.Nonlocal,         # scope manipulation
-    ast.Delete,                        # del x
-    ast.ClassDef, ast.AsyncFunctionDef,
-}
+The dunder block is the key layer: even though module objects like `random = numpy.random` are in scope and technically have `.__builtins__`, the AST check prevents any expression from reaching them.
 
-BLOCKED_ATTRIBUTE_TARGETS = {"__class__", "__bases__", "__subclasses__", "__globals__"}
+### Remaining Exposure
 
-class SafetyChecker(ast.NodeVisitor):
-    def generic_visit(self, node):
-        if type(node) in BLOCKED_NODE_TYPES:
-            raise ValueError(f"Disallowed syntax: {type(node).__name__}")
-        super().generic_visit(node)
+The class-traversal attack (`x.__class__.__bases__[0].__subclasses__()`) is caught by the dunder block. The remaining surface is narrow:
 
-    def visit_Attribute(self, node):
-        if node.attr in BLOCKED_ATTRIBUTE_TARGETS:
-            raise ValueError(f"Disallowed attribute access: {node.attr}")
-        self.generic_visit(node)
-```
+- `for` loops, list comprehensions, `with` statements, `try/except`, `class` definitions, and `def` are syntactically permitted but cannot escape the restricted namespace — they have no access to builtins or dunder attributes
+- `int` (the Python builtin type) is explicitly in scope because it is needed for array indexing (`path[int(t)]`). It is a live Python type, but dunder attribute access on it is blocked, so the class hierarchy is not reachable
+- A cell can delete names from `local_ns` via `del` — this is harmless since the namespace is rebuilt fresh before each execution
 
-**Equation panel**: namespace restriction + AST check. This is a strong posture for a tool with a known/trusted user base.
-
-**Data panel**: namespace restriction only (the data panel is intentionally more permissive — it's where the user writes setup code, samples from distributions, etc.). Document clearly that the data panel is not sandboxed.
-
-### Comparison of Approaches
-
-| Approach | Equation Panel | Data Panel | Notes |
-|---|---|---|---|
-| Namespace restriction + no builtins | ✓ Apply | ✓ Apply | Core layer for both panels |
-| AST check (block dangerous syntax) | ✓ Apply | Optional | Closes class-traversal vector |
-| Subprocess isolation | Overkill for v1 | Overkill for v1 | Only needed for fully public deployment |
+The practical risk from these is negligible for the shared-session threat model.
 
 ### How `exec` vs `eval` Changes Under This Model
 
-`eval()` accepts a single expression and returns its value. `exec()` runs a block of statements. For multi-line equation blocks, `exec()` is required.
+`eval()` accepts a single expression and returns its value. `exec()` runs a block of statements. For multi-line cells, `exec()` is required.
 
-The security posture is the same either way — both accept a globals dict and locals dict. The namespace restriction + AST check applies to both.
+The security posture is the same either way — both accept a globals dict. The namespace restriction + AST check applies to both.
 
 ```python
-def run_block(code_str, grid_vars, shared_namespace):
+def run_cell(source, shared_namespace, grid):
     # Parse and check
-    tree = ast.parse(code_str, mode="exec")
-    SafetyChecker().visit(tree)
+    tree = check_ast(source)  # raises SecurityError or SyntaxError
 
     # Build execution namespace
-    local_ns = {**EQUATION_NAMESPACE, **shared_namespace, **grid_vars}
-    local_ns["__builtins__"] = {}
+    local_ns = build_equation_namespace()
+    local_ns.update(shared_namespace)
+    local_ns.update(grid_vars(grid))
 
     # Execute
     exec(compile(tree, "<cell>", "exec"), local_ns)
@@ -119,7 +77,6 @@ The expression language is Python math syntax. Conventions:
 - **Integer casting for array indices**: Use `int_(expr)` to cast a float scalar or array to integer type for use as an array index. For scalars, `int(expr)` also works (Python builtin, already in namespace). Prefer `int_(round(expr))` over `int_(floor(expr))` to avoid floating-point off-by-one errors at whole numbers. The `intp` type is equivalent but sized for indexing on the current platform — either is acceptable. This fills the gap between slider auto-promotion (which converts whole-number slider floats to Python `int` automatically) and equation-cell outputs, which remain numpy floats and cannot be used as array indices without explicit casting.
 - **Helper functions**: `f = lambda x, y: sin(x) * cos(y)` in any cell — available in the shared namespace
 - **`def` vs `lambda` — evaluation timing control knob**: cells whose stripped source begins with `def ` are evaluated on **focus-out only** (deferred mode); `lambda` cells stay on the standard 300 ms debounce (eager mode). This is an intentional UX asymmetry: `lambda` gives live visual feedback for simple fast expressions; `def` avoids triggering an expensive downstream re-evaluation chain on every keystroke while editing a multi-line function body. Users choose the behavior by choosing the syntax. See `07-cell-types-and-blocks.md`.
-- **Data**: names from the data panel — available in the shared namespace
 - **Math builtins**: `sin`, `cos`, `pi`, etc. from the whitelisted namespace — no prefix needed
 - **No `numpy.` prefix required**: functions are imported directly into the namespace
 - **Power**: `**` (not `^`)

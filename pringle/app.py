@@ -2,7 +2,7 @@
 Qt application shell for Pringle.
 
 Creates the top-level QMainWindow with:
-  - Left panel: CellListWidget (equation + data cells in one unified list)
+  - Left panel: CellListWidget (all cell types in one unified list)
                + ViewSettingsWidget (axis bounds, camera presets)
   - Right panel: QRenderWidget embedding the pygfx canvas
   - Horizontal QSplitter between left and right

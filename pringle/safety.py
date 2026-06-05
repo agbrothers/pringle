@@ -1,15 +1,15 @@
 """
-AST safety checker for equation panel cells.
+AST safety checker for all cells.
 
 Walks the parsed AST and raises SecurityError if any dangerous construct
-is found.  Applied only to equation cells — data cells are intentionally
-more permissive (no AST check, but still no builtins).
+is found.  Protects against malicious shared sessions (.yml files) executing
+harmful code when loaded.
 
 Blocked constructs:
 - import / from-import statements
 - Calls to __dunder__ names (e.g. __import__, __class__)
-- Attribute access on double-underscore names
-- Calls to exec() or eval() by name
+- Attribute access on any double-underscore name
+- Calls to exec(), eval(), compile(), open(), breakpoint() by name
 """
 
 from __future__ import annotations

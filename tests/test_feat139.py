@@ -134,54 +134,54 @@ class TestRunCellBatch:
     def test_k_n_3_bare_assignment_gives_scatter_batch(self, grid):
         # k=5 avoids the channels-first ambiguity (shape[0] in {4, 6} → vector priority)
         src = "arr = ones((5, 50, 3))"
-        result = run_cell(src, {}, grid, is_data_cell=True)
+        result = run_cell(src, {}, grid)
         assert result.render_type == "scatter_batch"
         assert result.data.shape == (5, 50, 3)
         assert result.data.dtype == np.float32
 
     def test_k_n_2_bare_assignment_gives_scatter_batch_2d(self, grid):
         src = "arr = ones((5, 50, 2))"
-        result = run_cell(src, {}, grid, is_data_cell=True)
+        result = run_cell(src, {}, grid)
         assert result.render_type == "scatter_batch_2d"
         assert result.data.shape == (5, 50, 2)
         assert result.data.dtype == np.float32
 
     def test_points_magic_k_n_3_gives_scatter_batch(self, grid):
         src = "points = ones((3, 20, 3))"
-        result = run_cell(src, {}, grid, is_data_cell=True)
+        result = run_cell(src, {}, grid)
         assert result.render_type == "scatter_batch"
         assert result.data.shape == (3, 20, 3)
 
     def test_points_magic_k_n_2_gives_scatter_batch_2d(self, grid):
         src = "points = ones((3, 20, 2))"
-        result = run_cell(src, {}, grid, is_data_cell=True)
+        result = run_cell(src, {}, grid)
         assert result.render_type == "scatter_batch_2d"
         assert result.data.shape == (3, 20, 2)
 
     def test_points_magic_n_3_still_plain_scatter(self, grid):
         # (N, 3) via points = ... must remain plain scatter
         src = "points = ones((50, 3))"
-        result = run_cell(src, {}, grid, is_data_cell=True)
+        result = run_cell(src, {}, grid)
         assert result.render_type == "scatter"
 
     def test_shape_preview_set(self, grid):
         src = "arr = ones((5, 50, 3))"
-        result = run_cell(src, {}, grid, is_data_cell=True)
+        result = run_cell(src, {}, grid)
         assert result.shape_preview == "(5, 50, 3)"
 
     def test_from_shape_inference_true_for_bare(self, grid):
         src = "arr = ones((5, 50, 3))"
-        result = run_cell(src, {}, grid, is_data_cell=True)
+        result = run_cell(src, {}, grid)
         assert result.from_shape_inference is True
 
     def test_from_shape_inference_false_for_points_magic(self, grid):
         src = "points = ones((4, 50, 3))"
-        result = run_cell(src, {}, grid, is_data_cell=True)
+        result = run_cell(src, {}, grid)
         assert result.from_shape_inference is False
 
     def test_k_n_6_does_not_give_scatter_batch(self, grid):
         src = "arr = ones((4, 50, 6))"
-        result = run_cell(src, {}, grid, is_data_cell=True)
+        result = run_cell(src, {}, grid)
         assert result.render_type == "vectors"
 
 

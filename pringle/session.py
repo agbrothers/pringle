@@ -13,7 +13,7 @@ cells:
     folder_id: str | null     # which folder this cell belongs to
     style:
       color: [r, g, b, a]
-    visible: bool             # equation/data cells
+    visible: bool             # equation cells
     value: float              # slider cells
     min_val: float            # slider cells
     max_val: float            # slider cells
@@ -24,7 +24,7 @@ cells:
 Public API
 ----------
 cell_to_dict(cell, folder_id=None)     → dict
-save_session(path, cell_list, grid_config, data_panel=None)
+save_session(path, cell_list, grid_config, view=None)
 load_session(path)                     → dict
 restore_cell_list(cell_list, cells_data)
 """

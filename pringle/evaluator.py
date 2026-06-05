@@ -24,7 +24,7 @@ from pringle.preprocess import (
     MAGIC_NAMES, SPATIAL_NAMES,
 )
 from pringle.safety import check_ast, SecurityError, get_free_names, get_store_names
-from pringle.namespace import build_equation_namespace, build_data_namespace
+from pringle.namespace import build_equation_namespace
 from pringle.grid import Grid, grid_vars
 
 
@@ -390,7 +390,6 @@ def run_cell(
     grid: Grid,
     constraint_exprs: list[str] | None = None,
     condition_exprs: list[str] | None = None,
-    is_data_cell: bool = False,
 ) -> CellResult:
     """
     Evaluate one cell and return a CellResult.
@@ -402,7 +401,6 @@ def run_cell(
     grid              : current spatial grid
     constraint_exprs  : list of boolean expr strings (constraint sub-cells)
     condition_exprs   : list of boolean expr strings (piecewise conditions)
-    is_data_cell      : skip AST safety check for data panel cells
     """
     result = CellResult()
     constraint_exprs = constraint_exprs or []
@@ -446,17 +444,15 @@ def run_cell(
         )
         return result
 
-    # --- Safety check (equation cells only) ---
-    if not is_data_cell:
-        try:
-            check_ast(preprocessed)
-        except (SecurityError, SyntaxError) as exc:
-            result.error = str(exc)
-            return result
+    # --- Safety check ---
+    try:
+        check_ast(preprocessed)
+    except (SecurityError, SyntaxError) as exc:
+        result.error = str(exc)
+        return result
 
     # --- Build execution namespace ---
-    # Layer 1: whitelist (data cells get full numpy alias `np`)
-    local_ns = build_data_namespace() if is_data_cell else build_equation_namespace()
+    local_ns = build_equation_namespace()
     # Layer 2+3+4: shared namespace (sliders, lambdas, data outputs)
     local_ns.update(shared_namespace)
     # Layer 5: grid vars (highest priority — cannot be shadowed)

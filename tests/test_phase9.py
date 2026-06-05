@@ -1,12 +1,10 @@
 """
-Phase 9 tests: recurrence cells and data-namespace evaluation.
+Phase 9 tests: recurrence cells and equation cell evaluation.
 
 Tests validate:
 - parse_recurrence / execute_recurrence correctness
 - Shared namespace accumulates across run_cell calls
-- import statement is blocked at runtime (no __builtins__)
-- np alias is available via is_data_cell=True
-- run_cell with is_data_cell=True skips AST safety check
+- import statement is blocked by AST safety check
 - Recurrence sub-cells can reference functions defined in upstream cells
 """
 
@@ -18,7 +16,6 @@ from PyQt6.QtWidgets import QApplication
 
 from pringle.recurrence import parse_recurrence, execute_recurrence
 from pringle.evaluator import run_cell
-from pringle.namespace import build_data_namespace
 from pringle.grid import make_grid, GridConfig
 from pringle.dag import cell_uses
 
@@ -117,52 +114,33 @@ class TestRecurrence:
 
 
 # ---------------------------------------------------------------------------
-# Data namespace
+# Equation cell evaluation
 # ---------------------------------------------------------------------------
 
-class TestDataNamespace:
-    def test_np_in_data_namespace(self):
-        ns = build_data_namespace()
-        assert "np" in ns
-        assert ns["np"] is np
-
-    def test_array_in_data_namespace(self):
-        ns = build_data_namespace()
-        assert "array" in ns
-
-    def test_random_in_data_namespace(self):
-        ns = build_data_namespace()
-        assert "random" in ns
-
-
-# ---------------------------------------------------------------------------
-# run_cell with is_data_cell=True
-# ---------------------------------------------------------------------------
-
-class TestDataCellEval:
-    def test_np_available(self, grid):
-        result = run_cell("d = np.zeros((5, 3))", {}, grid, is_data_cell=True)
+class TestEquationCellEval:
+    def test_zeros_available(self, grid):
+        result = run_cell("d = zeros((5, 3))", {}, grid)
         assert result.error is None
         assert "d" in result.exports
         assert result.exports["d"].shape == (5, 3)
 
     def test_random_available(self, grid):
-        result = run_cell("d = random.randn(10, 3)", {}, grid, is_data_cell=True)
+        result = run_cell("d = random.randn(10, 3)", {}, grid)
         assert result.error is None
         assert result.exports["d"].shape == (10, 3)
 
-    def test_import_blocked_at_runtime(self, grid):
-        result = run_cell("import os", {}, grid, is_data_cell=True)
+    def test_import_blocked_by_ast(self, grid):
+        result = run_cell("import os", {}, grid)
         assert result.error is not None
 
     def test_scatter_detected(self, grid):
-        result = run_cell("points = random.randn(20, 3)", {}, grid, is_data_cell=True)
+        result = run_cell("points = random.randn(20, 3)", {}, grid)
         assert result.render_type == "scatter"
 
     def test_exports_propagate(self, grid):
-        result1 = run_cell("scale = 5.0", {}, grid, is_data_cell=True)
+        result1 = run_cell("scale = 5.0", {}, grid)
         ns = result1.exports
-        result2 = run_cell("d = zeros((10,)) + scale", ns, grid, is_data_cell=True)
+        result2 = run_cell("d = zeros((10,)) + scale", ns, grid)
         assert result2.error is None
         assert np.allclose(result2.exports["d"], 5.0)
 

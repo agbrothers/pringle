@@ -129,27 +129,27 @@ class TestRunCellVectors:
         return make_grid()
 
     def test_explicit_n6_array_yields_vectors(self, grid):
-        src = "arrows = np.column_stack([np.zeros((5, 3)), np.ones((5, 3))])"
-        result = run_cell(src, {}, grid, is_data_cell=True)
+        src = "arrows = column_stack([zeros((5, 3)), ones((5, 3))])"
+        result = run_cell(src, {}, grid)
         assert result.error is None
         assert result.render_type == "vectors"
         assert result.data.shape == (5, 6)
 
     def test_explicit_n4_array_yields_vectors_2d(self, grid):
-        src = "field = np.zeros((4, 4), dtype=np.float32)"
-        result = run_cell(src, {}, grid, is_data_cell=True)
+        src = "field = zeros((4, 4), dtype=float32)"
+        result = run_cell(src, {}, grid)
         assert result.error is None
         assert result.render_type == "vectors_2d"
         assert result.data.shape == (4, 4)
 
     def test_vectors_data_is_float32(self, grid):
-        src = "arrows = np.zeros((3, 6))"
-        result = run_cell(src, {}, grid, is_data_cell=True)
+        src = "arrows = zeros((3, 6))"
+        result = run_cell(src, {}, grid)
         assert result.data.dtype == np.float32
 
     def test_from_shape_inference_true_for_vectors(self, grid):
-        src = "arrows = np.zeros((5, 6))"
-        result = run_cell(src, {}, grid, is_data_cell=True)
+        src = "arrows = zeros((5, 6))"
+        result = run_cell(src, {}, grid)
         assert result.from_shape_inference is True
 
 
