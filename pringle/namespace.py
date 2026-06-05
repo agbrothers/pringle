@@ -1,10 +1,13 @@
 """
-Whitelisted evaluation namespace for equation cells.
+Convenience pre-imports for equation cells.
 
-Defines every name reachable from cell expressions. Adding a name requires
-an explicit line here — not just `import numpy as np`. See
-design-docs/14-namespace-reference.md for the full reference with rationale.
+Defines names available in every cell without an explicit import. Adding a
+name requires an explicit line here — not just `import numpy as np`. See
+design-docs/14-namespace-reference.md for the full reference.
 """
+
+import math as _math
+import numpy as _numpy
 
 from numpy import (
     # Trig
@@ -55,11 +58,13 @@ def build_equation_namespace() -> dict:
     """
     Return a fresh namespace dict for exec()ing one equation cell.
 
-    Contains whitelisted numpy/scipy names plus a curated set of safe Python
-    builtins. '__builtins__' is set to {} to block all other builtins.
-    See design-docs/14-namespace-reference.md for the full list and rationale.
+    Contains numpy/scipy convenience names plus standard Python builtins.
+    See design-docs/14-namespace-reference.md for the full list.
     """
     ns: dict = {
+        # --- top-level module aliases ---
+        "np": _numpy,
+        "math": _math,
         # --- numpy: trig ---
         "sin": sin, "cos": cos, "tan": tan,
         "arcsin": arcsin, "arccos": arccos, "arctan": arctan,
@@ -125,7 +130,5 @@ def build_equation_namespace() -> dict:
         "sorted": sorted, "reversed": reversed, "len": len,
         # Type inspection
         "isinstance": isinstance, "issubclass": issubclass, "callable": callable,
-        # No builtins beyond the above
-        "__builtins__": {},
     }
     return ns

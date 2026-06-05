@@ -8,7 +8,7 @@ from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor
 
 from pringle.preprocess import MAGIC_NAMES, SPATIAL_NAMES
 from pringle.namespace import build_equation_namespace
-from pringle.safety import get_param_names
+from pringle.ast_utils import get_param_names
 import pringle.syntax_theme as _theme
 
 # ---------------------------------------------------------------------------
@@ -17,15 +17,16 @@ import pringle.syntax_theme as _theme
 
 _MAGIC_NAMES: frozenset[str] = MAGIC_NAMES | SPATIAL_NAMES | {"n", "cfg", "camera"}
 _FUNC_NAMES: frozenset[str] = (
-    frozenset(build_equation_namespace().keys()) - _MAGIC_NAMES - {"__builtins__"}
+    frozenset(k for k in build_equation_namespace().keys() if not k.startswith("_"))
+    - _MAGIC_NAMES
 )
 
-# Keywords Pringle permits (excludes import/class/async/await/yield — not usable here)
-# None/True/False are intentionally excluded: they color as NUMBER_COLOR (literals).
+# Keywords (None/True/False excluded — they color as NUMBER_COLOR literals).
 _KEYWORDS = frozenset({
     "def", "return", "for", "while", "continue", "break", "not", "in",
     "if", "elif", "else", "and", "or", "is", "pass", "lambda",
     "del", "assert", "raise", "try", "except", "finally", "with", "as",
+    "import", "from",
 })
 
 # Patterns sorted longest-first to avoid partial matches (e.g. arctan2 > arctan)
@@ -36,10 +37,12 @@ _RE_NUMBER   = re.compile(r'\b\d+\.?\d*(?:[eE][+-]?\d+)?\b')
 _RE_LITERAL  = re.compile(r'\b(None|True|False)\b')   # boolean/None literals → NUMBER_COLOR
 _RE_OPERATOR = re.compile(r'[+\-*/%=<>!&|~^]+')
 _RE_BRACKET  = re.compile(r'[\[\]()\{\}]')
-_RE_CALL     = re.compile(r'\b(\w+)(?=\s*\()')        # identifier immediately before (
-_RE_DEFNAME  = re.compile(r'\bdef\s+(\w+)')
-_RE_IDENT    = re.compile(r'\b\w+\b')
-_RE_COMMENT  = re.compile(r'#.*')
+_RE_CALL        = re.compile(r'\b(\w+)(?=\s*\()')        # identifier immediately before (
+_RE_DEFNAME     = re.compile(r'\bdef\s+(\w+)')
+_RE_IDENT       = re.compile(r'\b\w+\b')
+_RE_COMMENT     = re.compile(r'#.*')
+_RE_IMPORT_MOD  = re.compile(r'\b(?:from|import)\s+([\w.]+)')   # module name → MAGIC_COLOR
+_RE_FROM_NAMES  = re.compile(r'\bfrom\s+[\w.]+\s+import\s+(.*)')  # imported names → FUNC_COLOR
 
 
 def _make_fmt(hex_color: str) -> QTextCharFormat:
@@ -118,6 +121,23 @@ class PringleHighlighter(QSyntaxHighlighter):
             for m in _RE_IDENT.finditer(text):
                 if m.start() < code_end and m.group() in self._arg_names:
                     self.setFormat(m.start(), m.end() - m.start(), self._magic_fmt)
+
+        # Import module names → MAGIC_COLOR (e.g. 'scipy' in 'import scipy as sc')
+        for m in _RE_IMPORT_MOD.finditer(text):
+            if m.start() < code_end:
+                self.setFormat(m.start(1), m.end(1) - m.start(1), self._magic_fmt)
+
+        # Imported names → FUNCTION_COLOR (e.g. 'norm', 'erf' in 'from scipy import norm, erf')
+        for m in _RE_FROM_NAMES.finditer(text):
+            if m.start() < code_end:
+                pos = m.start(1)
+                for segment in m.group(1).split(","):
+                    name_m = re.match(r'\s*(\w+)', segment)
+                    if name_m:
+                        word_pos = pos + name_m.start(1)
+                        if word_pos < code_end:
+                            self.setFormat(word_pos, len(name_m.group(1)), self._func_fmt)
+                    pos += len(segment) + 1
 
         # Rainbow brackets — code region only (so # comments don't affect depth)
         for m in _RE_BRACKET.finditer(text):

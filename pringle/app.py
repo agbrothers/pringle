@@ -253,8 +253,38 @@ class PringleViewport(QRenderWidget):
             self._pr._controller.target = (0.0, 0.0, 0.0)
 
 
+class _PlayOverlay(QFrame):
+    """
+    Centered trust overlay shown over the viewport when a session is not yet
+    approved to run.  Clicking 'Run Session' triggers _rebuild_namespace().
+    """
+    play_clicked = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("play_overlay")
+        self.setFixedSize(300, 108)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 18, 20, 14)
+        layout.setSpacing(10)
+
+        btn = QPushButton("▶   Run Session")
+        btn.setObjectName("play_overlay_btn")
+        btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.clicked.connect(self.play_clicked)
+
+        label = QLabel("Trust and verify this code before running it.")
+        label.setObjectName("play_overlay_label")
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        label.setWordWrap(True)
+
+        layout.addWidget(btn)
+        layout.addWidget(label)
+
+
 class _ViewportContainer(QWidget):
-    """Wraps PringleViewport with no overlay buttons (settings moved to header bar)."""
+    """Wraps PringleViewport; supports an absolutely-positioned overlay widget."""
 
     def __init__(self, viewport: PringleViewport, parent=None):
         super().__init__(parent)
@@ -262,6 +292,23 @@ class _ViewportContainer(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(viewport)
+        self._overlay: QWidget | None = None
+
+    def set_overlay(self, overlay: QWidget) -> None:
+        self._overlay = overlay
+        overlay.setParent(self)
+        self._center_overlay()
+        overlay.raise_()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._center_overlay()
+
+    def _center_overlay(self) -> None:
+        if self._overlay is not None and self._overlay.isVisible():
+            x = (self.width()  - self._overlay.width())  // 2
+            y = (self.height() - self._overlay.height()) // 2
+            self._overlay.move(x, y)
 
 
 class AxisSettingsPopover(QFrame):
@@ -343,6 +390,12 @@ class PringleWindow(QMainWindow):
             cfg.x_min, cfg.x_max, cfg.y_min, cfg.y_max, -z_half, z_half
         )
         self._vp_container = _ViewportContainer(self._viewport)
+
+        # Play button overlay — shown when a file-loaded session is untrusted.
+        self._play_overlay = _PlayOverlay()
+        self._vp_container.set_overlay(self._play_overlay)
+        self._play_overlay.play_clicked.connect(self._on_play_clicked)
+        self._play_overlay.hide()
 
         # Floating axis settings dialog (non-modal Qt.Tool window)
         self._view_settings = ViewSettingsWidget(config=self._grid.config)
@@ -538,9 +591,17 @@ class PringleWindow(QMainWindow):
         self._on_save()
         return not self._modified  # True only if save completed (not cancelled)
 
+    def _on_play_clicked(self) -> None:
+        """User approved the loaded session — trust it and run all cells."""
+        self._play_overlay.hide()
+        self._cell_list._session_trusted = True
+        self._cell_list._rebuild_namespace()
+
     def _on_new(self) -> None:
         if not self._confirm_discard():
             return
+        self._cell_list._session_trusted = True
+        self._play_overlay.hide()
         for cell in list(self._cell_list._cells):
             self._cell_list.remove_cell(cell.cell_id)
         self._session_path = None
@@ -563,6 +624,9 @@ class PringleWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Load error", str(exc))
             return
+        # File-loaded sessions start untrusted: cells are displayed but not evaluated
+        # until the user clicks the play button overlay.
+        self._cell_list._session_trusted = False
         restore_cell_list(self._cell_list, data.get("cells", []))
         if data.get("grid"):
             from pringle.session import grid_config_from_dict
@@ -610,6 +674,14 @@ class PringleWindow(QMainWindow):
         self._session_path = path
         self._modified = False
         self._update_title()
+        # Show play button now that the container is fully laid out.
+        QTimer.singleShot(0, self._show_play_overlay)
+
+    def _show_play_overlay(self) -> None:
+        """Position and reveal the play button overlay (deferred so container is sized)."""
+        self._play_overlay.show()
+        self._play_overlay.raise_()
+        self._vp_container._center_overlay()
 
     def _on_save(self) -> None:
         if self._session_path:

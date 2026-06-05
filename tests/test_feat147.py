@@ -5,7 +5,7 @@ Covers: annotations, defaults, *args/**kwargs, multiple defs,
 unicode identifiers, and syntactically-invalid source.
 """
 
-from pringle.safety import get_param_names
+from pringle.ast_utils import get_param_names
 
 
 class TestGetParamNames:

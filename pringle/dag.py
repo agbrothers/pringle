@@ -21,7 +21,7 @@ import networkx as nx
 # equal-rank nodes in reversed visual order — breaks multi-cell camera.* patterns).
 USE_KAHN_SORT: bool = False
 
-from pringle.safety import get_store_names, get_free_names
+from pringle.ast_utils import get_store_names, get_free_names
 from pringle.preprocess import SPATIAL_NAMES
 
 

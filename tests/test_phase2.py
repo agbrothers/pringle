@@ -12,7 +12,7 @@ import imageio.v3 as iio
 from pathlib import Path
 
 from pringle.namespace import build_equation_namespace
-from pringle.safety import check_ast, get_free_names, SecurityError
+from pringle.ast_utils import get_free_names
 from pringle.grid import GridConfig, make_grid
 from pringle.preprocess import preprocess, is_comment_cell, is_slider_cell
 from pringle.evaluator import run_cell, apply_constraints
@@ -32,10 +32,6 @@ def grid():
 # ---------------------------------------------------------------------------
 
 class TestNamespace:
-    def test_no_builtins(self):
-        ns = build_equation_namespace()
-        assert ns["__builtins__"] == {}
-
     def test_numpy_funcs_available(self):
         ns = build_equation_namespace()
         assert "sin" in ns and "cos" in ns and "pi" in ns
@@ -44,52 +40,20 @@ class TestNamespace:
         ns = build_equation_namespace()
         assert "gamma" in ns and "norm" in ns and "erf" in ns
 
-    def test_no_open(self):
+    def test_np_alias_available(self):
         ns = build_equation_namespace()
-        assert "open" not in ns
+        import numpy as np
+        assert ns["np"] is np
+
+    def test_math_module_available(self):
+        ns = build_equation_namespace()
+        import math
+        assert ns["math"] is math
 
     def test_sin_works(self):
         ns = build_equation_namespace()
         result = ns["sin"](ns["pi"] / 2)
         assert abs(result - 1.0) < 1e-6
-
-
-# ---------------------------------------------------------------------------
-# Safety checker
-# ---------------------------------------------------------------------------
-
-class TestSafety:
-    def test_blocks_import(self):
-        with pytest.raises(SecurityError):
-            check_ast("import os")
-
-    def test_blocks_from_import(self):
-        with pytest.raises(SecurityError):
-            check_ast("from os import path")
-
-    def test_blocks_exec(self):
-        with pytest.raises(SecurityError):
-            check_ast("exec('import os')")
-
-    def test_blocks_eval(self):
-        with pytest.raises(SecurityError):
-            check_ast("eval('1+1')")
-
-    def test_blocks_dunder_call(self):
-        with pytest.raises(SecurityError):
-            check_ast("__import__('os')")
-
-    def test_blocks_dunder_attr(self):
-        with pytest.raises(SecurityError):
-            check_ast("(1).__class__")
-
-    def test_allows_math(self):
-        tree = check_ast("z = sin(x) * cos(y)")
-        assert tree is not None
-
-    def test_allows_where(self):
-        tree = check_ast("z = where(x > 0, x**2, -x**2)")
-        assert tree is not None
 
 
 # ---------------------------------------------------------------------------
@@ -236,14 +200,20 @@ class TestRunCell:
         assert result.slider_value == 2.5
         assert result.exports == {"a": 2.5}
 
-    def test_security_blocked(self, grid):
-        result = run_cell("import os", {}, grid)
-        assert result.error is not None
-        assert "import" in result.error.lower()
+    def test_import_allowed(self, grid):
+        result = run_cell("import os\npath_sep = os.sep", {}, grid)
+        assert result.error is None
+        assert "path_sep" in result.exports
 
-    def test_dunder_blocked(self, grid):
-        result = run_cell("z = __import__('os')", {}, grid)
-        assert result.error is not None
+    def test_np_alias_works_in_cell(self, grid):
+        result = run_cell("arr = np.zeros(3)", {}, grid)
+        assert result.error is None
+        assert "arr" in result.exports
+
+    def test_math_module_works_in_cell(self, grid):
+        result = run_cell("val = math.floor(3.7)", {}, grid)
+        assert result.error is None
+        assert result.exports.get("val") == 3
 
     def test_undefined_var_free_names(self, grid):
         result = run_cell("z = q * sin(x)", {}, grid)
@@ -350,3 +320,43 @@ class TestEvalAndRender:
         assert surf_result.render_type == "surface"
         assert not np.allclose(surf_result.data, 0), "a=2 should scale the surface"
         iio.imwrite(FRAMES / "phase2_slider_a2.png", self._render("z = 2.0 * sin(x) * cos(y)"))
+
+
+# ---------------------------------------------------------------------------
+# Session trust gate
+# ---------------------------------------------------------------------------
+
+class TestSessionTrust:
+    def _make_cell_list(self, grid):
+        import sys
+        from PyQt6.QtWidgets import QApplication
+        QApplication.instance() or QApplication(sys.argv)
+        from pringle.cell_list import CellListWidget
+        return CellListWidget(on_cell_result=lambda *a: None, grid=grid)
+
+    def test_trusted_by_default(self):
+        """New CellListWidget starts in trusted mode."""
+        grid = make_grid(GridConfig(n=8))
+        cl = self._make_cell_list(grid)
+        assert cl._session_trusted is True
+
+    def test_untrusted_blocks_eval(self):
+        """Setting _session_trusted=False prevents _rebuild_namespace from evaluating."""
+        grid = make_grid(GridConfig(n=8))
+        cl = self._make_cell_list(grid)
+        cl._session_trusted = False
+        cl.add_cell("a = 42")
+        # Namespace should be empty — no evaluation happened
+        assert "a" not in cl._shared_ns
+
+    def test_trust_enables_eval(self):
+        """After setting _session_trusted=True and calling _rebuild_namespace, cells evaluate."""
+        grid = make_grid(GridConfig(n=8))
+        cl = self._make_cell_list(grid)
+        cl._session_trusted = False
+        cl.add_cell("a = 42")
+        assert "a" not in cl._shared_ns
+        # Now trust and run
+        cl._session_trusted = True
+        cl._rebuild_namespace()
+        assert cl._shared_ns.get("a") == 42

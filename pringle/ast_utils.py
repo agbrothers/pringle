@@ -1,63 +1,13 @@
 """
-AST safety checker for all cells.
+AST utility functions used for DAG analysis and syntax highlighting.
 
-Walks the parsed AST and raises SecurityError if any dangerous construct
-is found.  Protects against malicious shared sessions (.yml files) executing
-harmful code when loaded.
-
-Blocked constructs:
-- import / from-import statements
-- Calls to __dunder__ names (e.g. __import__, __class__)
-- Attribute access on any double-underscore name
-- Calls to exec(), eval(), compile(), open(), breakpoint() by name
+Parses cell source and extracts structural information (free names, store
+names, parameter names, cfg/camera write targets).  No security enforcement
+— safety is provided by the session trust model (play button on load).
 """
 
 from __future__ import annotations
 import ast
-
-
-class SecurityError(ValueError):
-    pass
-
-
-_BLOCKED_CALLS = frozenset({"exec", "eval", "compile", "open", "breakpoint"})
-
-
-class SafetyChecker(ast.NodeVisitor):
-    def visit_Import(self, node: ast.Import):
-        raise SecurityError("import statements are not allowed in equation cells")
-
-    def visit_ImportFrom(self, node: ast.ImportFrom):
-        raise SecurityError("import statements are not allowed in equation cells")
-
-    def visit_Call(self, node: ast.Call):
-        # Block calls to plain names like exec(), eval()
-        if isinstance(node.func, ast.Name):
-            if node.func.id in _BLOCKED_CALLS:
-                raise SecurityError(f"'{node.func.id}' is not allowed")
-            if node.func.id.startswith("__"):
-                raise SecurityError(f"dunder calls are not allowed: {node.func.id}")
-        # Block calls on dunder attributes like obj.__class__()
-        if isinstance(node.func, ast.Attribute):
-            if node.func.attr.startswith("__"):
-                raise SecurityError(f"dunder attribute calls are not allowed: {node.func.attr}")
-        self.generic_visit(node)
-
-    def visit_Attribute(self, node: ast.Attribute):
-        if node.attr.startswith("__"):
-            raise SecurityError(f"dunder attribute access is not allowed: {node.attr}")
-        self.generic_visit(node)
-
-
-def check_ast(source: str) -> ast.Module:
-    """
-    Parse source and run the safety checker.
-
-    Returns the parsed AST on success; raises SecurityError or SyntaxError.
-    """
-    tree = ast.parse(source, mode="exec")
-    SafetyChecker().visit(tree)
-    return tree
 
 
 def get_store_names(source: str) -> set[str]:
@@ -78,6 +28,12 @@ def get_store_names(source: str) -> set[str]:
             stores.add(node.id)
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             stores.add(node.name)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                stores.add(alias.asname or alias.name.split(".")[0])
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                stores.add(alias.asname or alias.name)
     return stores
 
 

@@ -7,7 +7,6 @@ Tests validate:
 - Slider-driven cfg write (a = 2; cfg.x_max = a) fires bounds_override on value change
 - If no cell writes to cfg, bounds_override is NOT emitted
 - Read-only use (z = sin(cfg.x_max * x)) evaluates without an "Undefined" warning
-- cfg.__class__ in a cell raises SecurityError
 - get_cfg_writes returns correct attribute sets
 """
 
@@ -18,7 +17,7 @@ import numpy as np
 from PyQt6.QtWidgets import QApplication
 
 from pringle.grid import GridConfig, make_grid
-from pringle.safety import SecurityError, check_ast, get_cfg_writes
+from pringle.ast_utils import get_cfg_writes
 
 
 @pytest.fixture(scope="module")
@@ -68,23 +67,6 @@ class TestGetCfgWrites:
     def test_augmented_assign_not_included(self):
         # cfg.x_max += 1 is an AugAssign, not a plain Assign — out of scope
         assert get_cfg_writes("cfg.x_max += 1") == set()
-
-
-# ---------------------------------------------------------------------------
-# Safety checker: cfg dunder access raises SecurityError
-# ---------------------------------------------------------------------------
-
-class TestCfgDunderBlocked:
-    def test_cfg_dunder_class_raises(self):
-        with pytest.raises(SecurityError):
-            check_ast("x = cfg.__class__")
-
-    def test_cfg_plain_attribute_passes(self):
-        # Should not raise
-        check_ast("z = sin(cfg.x_max * x)")
-
-    def test_cfg_write_passes(self):
-        check_ast("cfg.x_max = t")
 
 
 # ---------------------------------------------------------------------------

@@ -54,7 +54,7 @@ You are assigned one of the following 3 roles: developer, planner, or profiler. 
 - Piecewise: `z = [f, g, h]` list syntax + N condition sub-cells → `np.select`
 - `f(x,y) = expr` preprocessed to lambda; auto-renders as surface
 - Boot sequence: load YAML (two-pass: cells then folder membership) → restore RNG states → single `_rebuild_namespace()` → first render; no separate "Run All data" step
-- Security: explicit numpy/scipy whitelist + `__builtins__={}` + AST safety check (equation cells); no AST check for data-mode cells; `random` in namespace is `numpy.random` (not stdlib)
+- Security: session trust model — file-loaded sessions start unexecuted (`_session_trusted=False` on `CellListWidget`); a play button overlay is shown until the user approves; new sessions are trusted by default; no sandbox or AST check; full Python builtins available; `np`, `math`, and individual numpy/scipy names are pre-imported as convenience aliases; `random` in namespace is `numpy.random` (not stdlib)
 - Transparency: `alpha_mode="weighted_blend"` (WBOIT) when `opacity < 1.0` — order-independent, handles self-overlapping surfaces
 - WASD panning is camera-relative (not world-space); forward = camera-to-target projected onto XY; Space/Shift remain world ±Z
 - Session `view` block persists camera position, orbit target, and all overlay toggle states (axes, bbox, crosshair, shadow, light bg)

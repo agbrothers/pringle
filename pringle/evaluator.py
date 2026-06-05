@@ -23,7 +23,7 @@ from pringle.preprocess import (
     preprocess, is_comment_cell, is_slider_cell, get_func_auto_render,
     MAGIC_NAMES, SPATIAL_NAMES,
 )
-from pringle.safety import check_ast, SecurityError, get_free_names, get_store_names
+from pringle.ast_utils import get_free_names, get_store_names
 from pringle.namespace import build_equation_namespace
 from pringle.grid import Grid, grid_vars
 
@@ -444,13 +444,6 @@ def run_cell(
         )
         return result
 
-    # --- Safety check ---
-    try:
-        check_ast(preprocessed)
-    except (SecurityError, SyntaxError) as exc:
-        result.error = str(exc)
-        return result
-
     # --- Build execution namespace ---
     local_ns = build_equation_namespace()
     # Layer 2+3+4: shared namespace (sliders, lambdas, data outputs)
@@ -460,8 +453,7 @@ def run_cell(
 
     # --- Execute ---
     # np.errstate suppresses floating-point warnings (NaN from sqrt of negative,
-    # divide by zero, etc.) so they don't trigger __import__ via the warning
-    # system — which would fail because __builtins__ is disabled.
+    # divide by zero, etc.) that would otherwise clutter stderr.
     try:
         with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
             exec(preprocessed, local_ns)  # noqa: S102

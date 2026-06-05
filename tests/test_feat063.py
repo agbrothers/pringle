@@ -229,10 +229,10 @@ class TestKeywordColors:
         cap.run("else:")
         assert cap.color_at(0) == QColor(theme.OPERATOR_COLOR).name().upper()
 
-    def test_import_not_highlighted(self, cap):
-        # 'import' is not in the keyword set — should not get OPERATOR_COLOR
+    def test_import_keyword_highlighted(self, cap):
+        # 'import' is now a keyword (imports allowed via trust model)
         cap.run("import os")
-        assert cap.color_at(0) != QColor(theme.OPERATOR_COLOR).name().upper()
+        assert cap.color_at(0) == QColor(theme.OPERATOR_COLOR).name().upper()
 
 
 class TestDefNameColor:

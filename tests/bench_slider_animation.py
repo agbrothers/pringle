@@ -62,8 +62,8 @@ def _stats(times: list[float]) -> tuple[float, float, float]:
 # Section 1 — AST pipeline overhead
 #
 # Measures the repeated AST work done for each cell on each slider tick:
-#   preprocess → get_free_names → get_store_names → check_ast
-# These four operations run once per downstream cell per frame.
+#   preprocess → get_free_names → get_store_names
+# These operations run once per downstream cell per frame.
 # ---------------------------------------------------------------------------
 
 def bench_ast_pipeline(n_frames: int) -> dict[str, list[float]]:
@@ -74,7 +74,7 @@ def bench_ast_pipeline(n_frames: int) -> dict[str, list[float]]:
     all cells (i.e., what the app pays per tick, not per cell).
     """
     from pringle.preprocess import preprocess
-    from pringle.safety import check_ast, get_free_names, get_store_names
+    from pringle.ast_utils import get_free_names, get_store_names
 
     # Sources of cells downstream of β in memory.yml
     downstream_sources = [
@@ -92,7 +92,6 @@ def bench_ast_pipeline(n_frames: int) -> dict[str, list[float]]:
         "preprocess": [],
         "get_free_names": [],
         "get_store_names": [],
-        "check_ast": [],
         "total_ast": [],
     }
 
@@ -108,21 +107,15 @@ def bench_ast_pipeline(n_frames: int) -> dict[str, list[float]]:
         for p in preprocessed:
             get_store_names(p)
 
-    def _one_frame_check_ast():
-        for p in preprocessed:
-            check_ast(p)
-
     def _one_frame_total():
         for s in downstream_sources:
             p, _ = preprocess(s)
             get_free_names(p)
             get_store_names(p)
-            check_ast(p)
 
     results["preprocess"]     = _timeit(_one_frame_preprocess,  n_frames)
     results["get_free_names"] = _timeit(_one_frame_free_names,  n_frames)
     results["get_store_names"]= _timeit(_one_frame_store_names, n_frames)
-    results["check_ast"]      = _timeit(_one_frame_check_ast,   n_frames)
     results["total_ast"]      = _timeit(_one_frame_total,       n_frames)
     return results
 
@@ -569,7 +562,7 @@ def _print_report(
 
     print()
     print("  [AST pipeline — per tick across all downstream cells]")
-    for key in ("total_ast", "preprocess", "get_free_names", "get_store_names", "check_ast"):
+    for key in ("total_ast", "preprocess", "get_free_names", "get_store_names"):
         label = f"  {key}" if key != "total_ast" else key
         print(_fmt_row(f"  ast/{label}", ast_res.get(key, [])))
 

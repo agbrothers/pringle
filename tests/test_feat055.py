@@ -95,13 +95,10 @@ def test_array_index_with_intp_in_cell(qapp, grid):
 
 
 # ---------------------------------------------------------------------------
-# AST check still applies
+# int_ dunder access is allowed (no sandbox)
 # ---------------------------------------------------------------------------
 
-def test_ast_blocks_dunder_on_int_result(qapp, grid):
-    """The AST safety check must block __class__ access even on int_ results."""
-    from pringle.safety import check_ast
-    import ast
-    code = "n = int_(1.0)\nx = n.__class__"
-    with pytest.raises(Exception):
-        check_ast(ast.parse(code, mode="exec"))
+def test_dunder_access_allowed_on_int_result(qapp, grid):
+    """With the sandbox removed, dunder access on int_ results is no longer blocked."""
+    result = run_cell("n = int_(1.0)\nklass = n.__class__", {}, grid)
+    assert result.error is None

@@ -292,6 +292,10 @@ class CellListWidget(QWidget):
         self._source_hashes: dict[str, int] = {}  # cell_id → hash((source, rng_seed))
         self._last_grid_hash: int = -1  # invalidates skip gate when grid config changes
 
+        # Trust gate: False until the user clicks "Run" on a file-loaded session.
+        # New sessions (Ctrl+N, default startup) start as trusted.
+        self._session_trusted: bool = True
+
         # Camera provider for the `camera` namespace object (FEAT-159).
         # Set by app.py to a callable returning (x, y, z, tx, ty, tz); None → zeros.
         # roll is not readable from the live camera so it always reads as 0.0.
@@ -919,6 +923,9 @@ class CellListWidget(QWidget):
         self._eval_generation += 1
         self._pending_eval = None
 
+        if not self._session_trusted:
+            return
+
         from pringle.dag import topo_order, undefined_names
         from pringle.folder_cell_widget import FolderCellWidget
         from pringle.comment_cell_widget import CommentCellWidget
@@ -1447,7 +1454,7 @@ class CellListWidget(QWidget):
 
     def _dispatch_pending_eval(self) -> None:
         """Build a work package from the latest pending tick and hand it to the worker."""
-        if self._pending_eval is None:
+        if self._pending_eval is None or not self._session_trusted:
             return
         name, value = self._pending_eval
         self._pending_eval = None

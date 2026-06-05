@@ -4,7 +4,7 @@ Phase 9 tests: recurrence cells and equation cell evaluation.
 Tests validate:
 - parse_recurrence / execute_recurrence correctness
 - Shared namespace accumulates across run_cell calls
-- import statement is blocked by AST safety check
+- import statements work (sandbox removed)
 - Recurrence sub-cells can reference functions defined in upstream cells
 """
 
@@ -129,9 +129,10 @@ class TestEquationCellEval:
         assert result.error is None
         assert result.exports["d"].shape == (10, 3)
 
-    def test_import_blocked_by_ast(self, grid):
-        result = run_cell("import os", {}, grid)
-        assert result.error is not None
+    def test_import_allowed(self, grid):
+        result = run_cell("import os\npath_sep = os.sep", {}, grid)
+        assert result.error is None
+        assert "path_sep" in result.exports
 
     def test_scatter_detected(self, grid):
         result = run_cell("points = random.randn(20, 3)", {}, grid)

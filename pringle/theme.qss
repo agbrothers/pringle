@@ -345,3 +345,21 @@ AxisSettingsPopover QPushButton {
 }
 AxisSettingsPopover QPushButton:hover  { color: #eee; border-color: #666; }
 AxisSettingsPopover QPushButton:pressed { background: #1a1a1a; }
+
+/* Play button overlay — shown when a file-loaded session is not yet trusted */
+QFrame#play_overlay {
+    background: rgba(18, 18, 18, 220);
+    border: 1px solid #444;
+    border-radius: 10px;
+}
+QPushButton#play_overlay_btn {
+    color: #E9A15F;
+    font-size: 14px;
+    padding: 6px 20px;
+    background: transparent;
+    border: 1px solid #E9A15F;
+    border-radius: 10px;
+}
+QPushButton#play_overlay_btn:hover  { color: #eee; border-color: #aaa; }
+QPushButton#play_overlay_btn:pressed { background: #2a2a2a; }
+QLabel#play_overlay_label { color: #666; font-size: 11px; }

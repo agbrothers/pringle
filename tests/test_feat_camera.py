@@ -8,7 +8,6 @@ Tests validate:
 - CameraState is initialised from the live camera position (via _camera_provider), not zeros
 - get_camera_writes correctly identifies written fields and ignores reads
 - get_camera_writes returns empty set without crashing on dunder access patterns
-- camera.__class__ in a cell raises SecurityError
 - 'camera' does not trigger an 'Undefined' warning when used in a cell
 """
 
@@ -18,7 +17,7 @@ import pytest
 from PyQt6.QtWidgets import QApplication
 
 from pringle.grid import GridConfig, make_grid
-from pringle.safety import SecurityError, check_ast, get_camera_writes
+from pringle.ast_utils import get_camera_writes
 
 
 @pytest.fixture(scope="module")
@@ -78,22 +77,6 @@ class TestGetCameraWrites:
     def test_augmented_assign_not_included(self):
         # camera.x += 1 is AugAssign, not Assign — out of scope
         assert get_camera_writes("camera.x += 1") == set()
-
-
-# ---------------------------------------------------------------------------
-# Safety checker: camera dunder access raises SecurityError
-# ---------------------------------------------------------------------------
-
-class TestCameraDunderBlocked:
-    def test_camera_dunder_class_raises(self):
-        with pytest.raises(SecurityError):
-            check_ast("x = camera.__class__")
-
-    def test_camera_plain_attribute_passes(self):
-        check_ast("v = camera.x + 1")
-
-    def test_camera_write_passes(self):
-        check_ast("camera.x = 5.0")
 
 
 # ---------------------------------------------------------------------------
