@@ -441,10 +441,10 @@ class CellTextEdit(QPlainTextEdit):
                 if mod == Qt.KeyboardModifier.ControlModifier:
                     self.folder_requested.emit()
                     return
-                if mod == Qt.KeyboardModifier.NoModifier:
-                    self.enter_at_end.emit()   # new cell below (any cursor position)
+                if mod == Qt.KeyboardModifier.ShiftModifier:
+                    self.enter_at_end.emit()   # new cell below
                     return
-                # Shift+Enter falls through to super → inserts newline
+                # Plain Enter (and any other modifier) falls through to super → newline
             super().keyPressEvent(event)
             return
 

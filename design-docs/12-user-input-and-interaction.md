@@ -122,13 +122,16 @@ Optional: a numeric input controlling the spacing between grid lines. Defaults t
 Standard text editor behavior in a `QPlainTextEdit`:
 - Arrow keys, Home/End, Ctrl+A select all, etc.
 - Multi-line input is allowed — the cell expands vertically as content grows
-- **Enter / Return**: creates a new empty equation cell directly below and moves focus there (from any cursor position).
-- **Shift+Enter**: inserts a literal newline within the current cell (for multi-line expressions or comments).
+- **Enter / Return**: inserts a literal newline within the current cell (for multi-line expressions or comments).
+- **Shift+Enter**: creates a new empty equation cell directly below and moves focus there (from any cursor position).
 - **Ctrl+Enter** (Cmd+Enter on macOS): creates a new folder cell directly below and moves focus there.
+- **Cmd+Delete** (macOS): deletes all text on the current line to the left of the cursor (kill to start of line). No-op when the cursor is already at the start of a block.
+- **Cmd+]** (in a multi-line cell): indents every line overlapping the current selection by 4 spaces.
+- **Cmd+[** (in a multi-line cell): outdents every line overlapping the current selection by up to 4 spaces.
 - **Cmd+/** (in an equation or slider cell): toggles `# ` on the cursor's current line, or on every line that overlaps the selection. All toggled lines are treated as a single undo step. If the first line ends up starting with `#` after the toggle, the cell auto-morphs to a `CommentCellWidget`.
 - **Cmd+/** (in a comment cell): cell-level uncomment — morphs the cell back to an equation cell (same as `Cmd+Option+/`).
 
-These shortcuts apply to equation cells, comment cells, and all text fields on slider cells (value, min, max, step, name).
+These shortcuts apply to equation cells, comment cells, and all text fields on slider cells (value, min, max, name). Text-indent (`Cmd+]/[`) is a no-op on single-line fields (slider value, min, max, name) since there is nothing to indent.
 
 - **Up arrow on first line / Down arrow on last line**: moves focus to the adjacent cell or subcell in the flat visual order (Jupyter-style cross-cell navigation). Pressing Up/Down on an interior line moves the cursor within the cell normally without escaping.
 
@@ -225,11 +228,14 @@ Selecting "Add Constraint" appends a constraint sub-cell below the primary cell,
 | `Ctrl+N` | New empty session |
 | 📷 toolbar button | Save current canvas frame as PNG (native save dialog, defaults to `pringle_screenshot.png`) |
 | `Ctrl+Enter` / `Cmd+Enter` | Add new folder cell below focused cell (in the expression panel); force re-evaluate focused cell when focus is on the viewport |
+| `Shift+Enter` | Add new equation cell below focused cell (in the expression panel) |
 | `Cmd+/` | **In equation/slider cell:** toggle `# ` on current line or all selected lines (single undo step). **In comment cell:** cell-level uncomment — morphs back to equation/slider. |
 | `Cmd+Option+/` (macOS) / `Cmd+Shift+/` (other) | **Cell-level comment toggle:** morph focused equation/slider cell → `CommentCellWidget`, or comment cell → equation/slider. With a multi-line selection, strips `# ` from every selected line on uncomment. |
 | `Ctrl+[` / `Ctrl+]` | Collapse / expand focused folder cell |
-| `Cmd+]` / `Ctrl+]` | Indent cell into the folder directly above it (equation, slider, comment cells; no-op on folder cells and when no folder is adjacent above) |
-| `Cmd+[` / `Ctrl+[` | Outdent cell out of its current folder, placing it below the folder's last member (no-op when cell is not in a folder) |
+| `Cmd+]` | **In a text cell:** indent selected lines by 4 spaces. **In a slider field:** no-op. |
+| `Cmd+[` | **In a text cell:** outdent selected lines by up to 4 spaces. **In a slider field:** no-op. |
+| `Cmd+Shift+]` | Move focused cell into the folder directly above it (equation, slider, comment cells; no-op on folder cells and when no folder is adjacent above) |
+| `Cmd+Shift+[` | Outdent focused cell out of its current folder, placing it below the folder's last member (no-op when cell is not in a folder) |
 | `Opt+↑` / `Alt+↑` | Move cell one position up in the expression panel (re-infers folder membership from new position) |
 | `Opt+↓` / `Alt+↓` | Move cell one position down in the expression panel (re-infers folder membership from new position) |
 

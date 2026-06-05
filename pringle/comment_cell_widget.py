@@ -122,10 +122,10 @@ class _CommentEdit(QPlainTextEdit):
             if mod == ctrl:
                 self.folder_requested.emit()
                 return
-            if mod == Qt.KeyboardModifier.NoModifier:
-                self.enter_at_end.emit()
+            if mod == Qt.KeyboardModifier.ShiftModifier:
+                self.enter_at_end.emit()   # new cell below
                 return
-            # Shift+Enter → insert newline (fall through to super)
+            # Plain Enter → insert newline (fall through to super)
         elif key == Qt.Key.Key_Down:
             if self.textCursor().blockNumber() == self.document().blockCount() - 1:
                 self.navigate_down_requested.emit()

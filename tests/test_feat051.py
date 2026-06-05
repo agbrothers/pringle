@@ -50,31 +50,31 @@ def _press_enter(widget, modifier=Qt.KeyboardModifier.NoModifier):
 # ---------------------------------------------------------------------------
 
 class TestEnterInEquationCell:
-    def test_enter_adds_cell_below(self, qapp, clist):
+    def test_shift_enter_adds_cell_below(self, qapp, clist):
         cell = clist.add_cell()
         assert len(clist._cells) == 1
-        _press_enter(cell._text_edit)
+        _press_enter(cell._text_edit, Qt.KeyboardModifier.ShiftModifier)
         qapp.processEvents()
         assert len(clist._cells) == 2
         assert isinstance(clist._cells[1], CellWidget)
 
-    def test_enter_inserts_after_not_at_end(self, qapp, clist):
-        """Enter from any cursor position creates a new cell, not just from end."""
+    def test_shift_enter_inserts_after_not_at_end(self, qapp, clist):
+        """Shift+Enter from any cursor position creates a new cell, not just from end."""
         first = clist.add_cell("z = sin(x)")
         second = clist.add_cell()
         count_before = len(clist._cells)
-        # Move cursor to beginning of first cell, then press Enter
+        # Move cursor to beginning of first cell, then press Shift+Enter
         cursor = first._text_edit.textCursor()
         cursor.movePosition(cursor.MoveOperation.Start)
         first._text_edit.setTextCursor(cursor)
-        _press_enter(first._text_edit)
+        _press_enter(first._text_edit, Qt.KeyboardModifier.ShiftModifier)
         qapp.processEvents()
         assert len(clist._cells) == count_before + 1
 
-    def test_shift_enter_inserts_newline(self, qapp, clist):
+    def test_enter_inserts_newline(self, qapp, clist):
         cell = clist.add_cell()
         count_before = len(clist._cells)
-        _press_enter(cell._text_edit, Qt.KeyboardModifier.ShiftModifier)
+        _press_enter(cell._text_edit)
         qapp.processEvents()
         assert len(clist._cells) == count_before   # no new cell
         assert "\n" in cell._text_edit.toPlainText()
@@ -89,10 +89,10 @@ class TestEnterInEquationCell:
         assert len(clist._cells) == count_before + 1
         assert isinstance(clist._cells[idx + 1], FolderCellWidget)
 
-    def test_enter_on_last_cell_appends(self, qapp, clist):
+    def test_shift_enter_on_last_cell_appends(self, qapp, clist):
         cell = clist.add_cell()
         count_before = len(clist._cells)
-        _press_enter(cell._text_edit)
+        _press_enter(cell._text_edit, Qt.KeyboardModifier.ShiftModifier)
         qapp.processEvents()
         assert len(clist._cells) == count_before + 1
 
@@ -112,7 +112,7 @@ class TestSliderEnterPressed:
         s.enter_pressed.emit(s.cell_id)
         assert received == [s.cell_id]
 
-    def test_morphed_slider_enter_creates_cell(self, qapp, grid):
+    def test_morphed_slider_shift_enter_creates_cell(self, qapp, grid):
         """Slider created via focus-out morph (not add_cell) must also wire enter_pressed."""
         clist = self._make_list(qapp, grid)
         cell = clist.add_cell()
@@ -122,16 +122,16 @@ class TestSliderEnterPressed:
         slider = clist._cells[0]
         assert isinstance(slider, SliderWidget)
         count_before = len(clist._cells)
-        _press_enter(slider._spinbox)
+        _press_enter(slider._spinbox, Qt.KeyboardModifier.ShiftModifier)
         qapp.processEvents()
         assert len(clist._cells) == count_before + 1
 
-    def test_slider_value_field_enter_creates_cell(self, qapp, grid):
+    def test_slider_value_field_shift_enter_creates_cell(self, qapp, grid):
         clist = self._make_list(qapp, grid)
         slider = clist.add_cell("a = 5")
         assert isinstance(slider, SliderWidget)
         count_before = len(clist._cells)
-        _press_enter(slider._spinbox)
+        _press_enter(slider._spinbox, Qt.KeyboardModifier.ShiftModifier)
         qapp.processEvents()
         assert len(clist._cells) == count_before + 1
         assert isinstance(clist._cells[clist._cells.index(slider) + 1], CellWidget)
@@ -182,20 +182,20 @@ class TestEnterInCommentCell:
     def _make_list(self, qapp, grid):
         return CellListWidget(on_cell_result=lambda *a: None, grid=grid)
 
-    def test_enter_adds_equation_cell_below(self, qapp, grid):
-        clist = self._make_list(qapp, grid)
-        comment = clist.add_comment_cell("# hello")
-        count_before = len(clist._cells)
-        _press_enter(comment._edit)
-        qapp.processEvents()
-        assert len(clist._cells) == count_before + 1
-        assert isinstance(clist._cells[1], CellWidget)
-
-    def test_shift_enter_inserts_newline(self, qapp, grid):
+    def test_shift_enter_adds_equation_cell_below(self, qapp, grid):
         clist = self._make_list(qapp, grid)
         comment = clist.add_comment_cell("# hello")
         count_before = len(clist._cells)
         _press_enter(comment._edit, Qt.KeyboardModifier.ShiftModifier)
+        qapp.processEvents()
+        assert len(clist._cells) == count_before + 1
+        assert isinstance(clist._cells[1], CellWidget)
+
+    def test_enter_inserts_newline(self, qapp, grid):
+        clist = self._make_list(qapp, grid)
+        comment = clist.add_comment_cell("# hello")
+        count_before = len(clist._cells)
+        _press_enter(comment._edit)
         qapp.processEvents()
         assert len(clist._cells) == count_before   # no new cell
         assert "\n" in comment._edit.toPlainText()

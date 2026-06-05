@@ -44,6 +44,7 @@ class _SpinBox(QDoubleSpinBox):
     Shows integers without a decimal point; strips trailing zeros from floats.
     """
     new_cell_requested = pyqtSignal()
+    folder_requested = pyqtSignal()
     navigate_up = pyqtSignal()
     navigate_down = pyqtSignal()
     indent_at = pyqtSignal()
@@ -97,8 +98,12 @@ class _SpinBox(QDoubleSpinBox):
             self.navigate_down.emit()
             return
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            if mod == Qt.KeyboardModifier.ControlModifier:
+                self.folder_requested.emit()
+                return
             super().keyPressEvent(event)  # commits value via editingFinished
-            self.new_cell_requested.emit()
+            if mod == Qt.KeyboardModifier.ShiftModifier:
+                self.new_cell_requested.emit()
             return
         super().keyPressEvent(event)
 
@@ -129,6 +134,8 @@ def _fmt(v: float) -> str:
 class _ExprBox(QLineEdit):
     """Numeric input that also accepts expression strings resolvable to a scalar."""
     committed = pyqtSignal(float)
+    new_cell_requested = pyqtSignal()
+    folder_requested = pyqtSignal()
     navigate_up = pyqtSignal()
     navigate_down = pyqtSignal()
     navigate_left = pyqtSignal()   # emitted when Left is pressed at position 0
@@ -224,7 +231,12 @@ class _ExprBox(QLineEdit):
             self.navigate_right.emit()
             return
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            self.editingFinished.emit()   # commit value; do NOT emit new_cell_requested
+            if mod == Qt.KeyboardModifier.ControlModifier:
+                self.folder_requested.emit()
+                return
+            self.editingFinished.emit()   # commits value
+            if mod == Qt.KeyboardModifier.ShiftModifier:
+                self.new_cell_requested.emit()
             return
         super().keyPressEvent(event)
 
@@ -236,6 +248,7 @@ class _ExprBox(QLineEdit):
 class _NameLineEdit(QLineEdit):
     """Inline name editor for SliderWidget; Enter commits then requests a new cell."""
     new_cell_requested = pyqtSignal()
+    folder_requested = pyqtSignal()
     indent_at = pyqtSignal()
     outdent_at = pyqtSignal()
     move_up_at = pyqtSignal()
@@ -267,8 +280,12 @@ class _NameLineEdit(QLineEdit):
                 self.move_down_at.emit()
                 return
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            if mod == Qt.KeyboardModifier.ControlModifier:
+                self.folder_requested.emit()
+                return
             self.editingFinished.emit()   # commits the name
-            self.new_cell_requested.emit()
+            if mod == Qt.KeyboardModifier.ShiftModifier:
+                self.new_cell_requested.emit()
             return
         super().keyPressEvent(event)
 
@@ -278,7 +295,8 @@ class SliderWidget(QWidget):
 
     value_changed = pyqtSignal(str, float)     # (name, value)
     name_changed = pyqtSignal(str, str, str)   # (old_name, new_name, cell_id)
-    enter_pressed = pyqtSignal(str)            # cell_id — any field Enter → new cell below
+    enter_pressed = pyqtSignal(str)            # cell_id — Shift+Enter → new cell below
+    new_folder_requested = pyqtSignal(str)     # cell_id — Ctrl+Enter → new folder below
     delete_requested = pyqtSignal(str)          # cell_id
     drag_started = pyqtSignal(str)              # cell_id
     drag_moved = pyqtSignal(str, int)           # cell_id, global_y
@@ -393,7 +411,6 @@ class SliderWidget(QWidget):
         self._delete_btn.clicked.connect(lambda: self.delete_requested.emit(self.cell_id))
         row1.addWidget(self._delete_btn)
 
-        self._spinbox.new_cell_requested.connect(lambda: self.enter_pressed.emit(self.cell_id))
         outer.addLayout(row1)
 
         # --- Row 2: play + min + slider (stretch) + max + ↺ ---
@@ -461,13 +478,15 @@ class SliderWidget(QWidget):
                      self._min_box.setCursorPosition(len(self._min_box.text())))
         )
 
-        # Cell movement from any focused field
+        # Cell movement / creation from any focused field
         for _field in (self._spinbox, self._min_box, self._max_box):
             _field.indent_at.connect(lambda: self.indent_requested.emit(self.cell_id))
             _field.outdent_at.connect(lambda: self.outdent_requested.emit(self.cell_id))
             _field.move_up_at.connect(lambda: self.move_up_requested.emit(self.cell_id))
             _field.move_down_at.connect(lambda: self.move_down_requested.emit(self.cell_id))
             _field.toggle_comment_requested.connect(lambda: self.toggle_comment_requested.emit(self.cell_id))
+            _field.new_cell_requested.connect(lambda: self.enter_pressed.emit(self.cell_id))
+            _field.folder_requested.connect(lambda: self.new_folder_requested.emit(self.cell_id))
 
         # Separator outside outer_h so the swatch doesn't cover it
         line = QFrame()
@@ -603,6 +622,7 @@ class SliderWidget(QWidget):
         self._name_edit.textChanged.connect(self._on_name_text_changed)
         self._name_edit.editingFinished.connect(self._on_name_commit)
         self._name_edit.new_cell_requested.connect(lambda: self.enter_pressed.emit(self.cell_id))
+        self._name_edit.folder_requested.connect(lambda: self.new_folder_requested.emit(self.cell_id))
         self._name_edit.indent_at.connect(lambda: self.indent_requested.emit(self.cell_id))
         self._name_edit.outdent_at.connect(lambda: self.outdent_requested.emit(self.cell_id))
         self._name_edit.move_up_at.connect(lambda: self.move_up_requested.emit(self.cell_id))
