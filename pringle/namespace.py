@@ -1,13 +1,9 @@
 """
-Whitelisted evaluation namespace for equation panel cells.
+Whitelisted evaluation namespace for equation cells.
 
-Only explicitly imported numpy/scipy names are available.  No builtins,
-no __import__, no exec/eval inside expressions.  The safety AST checker
-(safety.py) provides a second layer of protection.
-
-Design note: we import individual names so the set of available functions
-is enumerable and auditable.  Adding a new function requires an explicit
-line here — not just "import numpy as np".
+Defines every name reachable from cell expressions. Adding a name requires
+an explicit line here — not just `import numpy as np`. See
+design-docs/14-namespace-reference.md for the full reference with rationale.
 """
 
 from numpy import (
@@ -57,24 +53,27 @@ from scipy.linalg import (
 
 def build_equation_namespace() -> dict:
     """
-    Return a fresh namespace dict suitable for exec()ing one equation cell.
+    Return a fresh namespace dict for exec()ing one equation cell.
 
-    The namespace contains the whitelisted numpy/scipy names only.
-    '__builtins__' is explicitly removed (set to {}) to prevent access
-    to Python built-ins (open, import, eval, exec, etc.).
+    Contains whitelisted numpy/scipy names plus a curated set of safe Python
+    builtins. '__builtins__' is set to {} to block all other builtins.
+    See design-docs/14-namespace-reference.md for the full list and rationale.
     """
     ns: dict = {
-        # numpy names
+        # --- numpy: trig ---
         "sin": sin, "cos": cos, "tan": tan,
         "arcsin": arcsin, "arccos": arccos, "arctan": arctan,
         "arctan2": arctan2, "hypot": hypot,
         "sinh": sinh, "cosh": cosh, "tanh": tanh,
         "arcsinh": arcsinh, "arccosh": arccosh, "arctanh": arctanh,
+        # --- numpy: rounding / casting ---
         "abs": abs, "floor": floor, "ceil": ceil, "round": round,
         "sign": sign, "clip": clip, "mod": mod,
         "int_": int_, "intp": intp,
+        # --- numpy: exponential / log ---
         "exp": exp, "exp2": exp2, "log": log, "log2": log2,
         "log10": log10, "sqrt": sqrt, "cbrt": cbrt, "power": power,
+        # --- numpy: array creation ---
         "zeros": zeros, "ones": ones, "empty": empty, "full": full,
         "zeros_like": zeros_like, "ones_like": ones_like,
         "empty_like": empty_like, "full_like": full_like,
@@ -83,38 +82,50 @@ def build_equation_namespace() -> dict:
         "concatenate": concatenate, "stack": stack,
         "column_stack": column_stack, "row_stack": row_stack,
         "hstack": hstack, "vstack": vstack,
+        # --- numpy: shape ---
         "reshape": reshape, "ravel": ravel,
         "transpose": transpose, "squeeze": squeeze,
+        # --- numpy: math ---
         "sum": sum, "prod": prod, "cumsum": cumsum, "cumprod": cumprod,
         "min": min, "max": max, "mean": mean, "median": median,
-        "std": std, "var": var, "maximum": maximum, "minimum": minimum, 
+        "std": std, "var": var, "maximum": maximum, "minimum": minimum,
         "diff": diff, "gradient": gradient,
         "dot": dot, "cross": cross, "outer": outer, "einsum": einsum,
+        # --- numpy: boolean / masking ---
         "where": where, "select": select,
         "isnan": isnan, "isinf": isinf, "isfinite": isfinite,
         "logical_and": logical_and, "logical_or": logical_or,
         "logical_not": logical_not,
         "any": any, "all": all,
+        # --- numpy: constants ---
         "pi": pi, "e": e, "inf": inf, "nan": nan,
-        # Dtypes
+        # --- numpy: dtypes ---
         "float32": float32, "float64": float64,
         "int32": int32, "int64": int64,
         "complex64": complex64, "complex128": complex128,
         "bool_": bool_,
-        "int": int,  # safe builtin — needed for array indexing (e.g. path[int(t)])
+        # --- numpy: random ---
         "random": random,
-        # scipy.special
+        # --- scipy.special ---
         "gamma": gamma, "factorial": factorial, "comb": comb,
         "erf": erf, "erfc": erfc, "erfinv": erfinv,
         "j0": j0, "j1": j1, "jn": jn, "yn": yn,
         "legendre": legendre,
         "logsumexp": logsumexp,
-        # scipy.linalg
+        # --- scipy.linalg ---
         "norm": norm, "det": det, "inv": inv, "solve": solve,
         "eig": eig, "eigvals": eigvals, "svd": svd,
-        # No builtins
+        # --- safe Python builtins ---
+        # Type constructors: safe — dunder block prevents class-hierarchy traversal
+        "bool": bool, "int": int, "float": float, "complex": complex,
+        "str": str, "bytes": bytes,
+        "tuple": tuple, "list": list, "dict": dict, "set": set,
+        # Iterators / sequences
+        "range": range, "enumerate": enumerate, "zip": zip,
+        "sorted": sorted, "reversed": reversed, "len": len,
+        # Type inspection
+        "isinstance": isinstance, "issubclass": issubclass, "callable": callable,
+        # No builtins beyond the above
         "__builtins__": {},
     }
     return ns
-
-

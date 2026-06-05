@@ -12,16 +12,16 @@ Pringle runs locally on the user's machine. The primary threat is **not** users 
 
 The security posture is calibrated for this: strong enough that a malicious shared session cannot escape to the filesystem or network, lightweight enough that it does not block legitimate scientific expressions.
 
-### The Strategy: Whitelisted Namespace + No Builtins + AST Check
+### The Strategy: Whitelisted Namespace + Safe Builtins + AST Check
 
-All cells (equation, data-mode, recurrence) use the same execution model: a whitelisted namespace of explicitly imported numpy/scipy names, no Python builtins, and an AST safety check before execution.
+All cells use the same execution model: a whitelisted namespace of explicitly imported numpy/scipy names plus a curated set of safe Python builtins, and an AST safety check before execution. The complete list of available and excluded names is in `14-namespace-reference.md`.
 
 - `import` statements fail — blocked at AST check
 - `open()`, `eval()`, `exec()` fail — both blocked by name in AST check and absent from namespace
 - All dunder attribute access (`.__class__`, `.__builtins__`, etc.) blocked by AST check
-- Only numpy/scipy callables are reachable
+- Reflection builtins (`getattr`, `setattr`, `hasattr`, `vars`) are absent — these are the primary bypass for dunder-based sandbox escapes and have no math use case
 
-The whitelisted namespace is defined in `namespace.py` (`build_equation_namespace()`). Adding a new function requires an explicit line there — not just `import numpy as np`.
+The namespace is defined in `namespace.py` (`build_equation_namespace()`). See `14-namespace-reference.md` for the full auditable list.
 
 ### Defense-in-Depth: AST Check
 
