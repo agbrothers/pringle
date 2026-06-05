@@ -244,6 +244,35 @@ _WRAP_PAIRS: dict[int, tuple[str, str]] = {
 }
 
 
+def _move_line(edit: "CellTextEdit", direction: int) -> None:
+    """Swap the cursor's block with the one above (-1) or below (+1)."""
+    cursor = edit.textCursor()
+    block  = cursor.block()
+    col    = cursor.positionInBlock()
+    other  = block.previous() if direction < 0 else block.next()
+    if not other.isValid():
+        return
+    top, bottom = (other, block) if direction < 0 else (block, other)
+    # Select from start of top block to end of bottom block and replace in one step
+    sel = QTextCursor(top)
+    sel.movePosition(QTextCursor.MoveOperation.StartOfBlock)
+    end = QTextCursor(bottom)
+    end.movePosition(QTextCursor.MoveOperation.EndOfBlock)
+    sel.setPosition(end.position(), QTextCursor.MoveMode.KeepAnchor)
+    sel.beginEditBlock()
+    sel.insertText(bottom.text() + "\n" + top.text())
+    sel.endEditBlock()
+    # Land cursor at same column in the destination block (other's original number)
+    dest = edit.document().findBlockByNumber(other.blockNumber())
+    nc = QTextCursor(dest)
+    nc.movePosition(
+        QTextCursor.MoveOperation.Right,
+        QTextCursor.MoveMode.MoveAnchor,
+        min(col, dest.length() - 1),
+    )
+    edit.setTextCursor(nc)
+
+
 def _indent_lines(edit: "CellTextEdit", direction: int) -> None:
     """Indent (+1) or outdent (-1) every block overlapping the current selection."""
     cursor = edit.textCursor()
@@ -424,10 +453,16 @@ class CellTextEdit(QPlainTextEdit):
                 return
         if mod & alt:
             if key == Qt.Key.Key_Up:
-                self.move_up_at.emit()
+                if mod & shift:
+                    self.move_up_at.emit()   # cell-level move
+                else:
+                    _move_line(self, -1)     # line-level move within cell
                 return
             if key == Qt.Key.Key_Down:
-                self.move_down_at.emit()
+                if mod & shift:
+                    self.move_down_at.emit() # cell-level move
+                else:
+                    _move_line(self, +1)     # line-level move within cell
                 return
 
         if key in _WRAP_PAIRS and self.textCursor().hasSelection():

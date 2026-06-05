@@ -27,7 +27,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QFontMetricsF, QKeyEvent, QTextOption
 
 from pringle.style import CellStyle
-from pringle.cell_widget import ColorSwatchHandle
+from pringle.cell_widget import ColorSwatchHandle, _move_line
 
 _COMMENT_COLOR = (0.133333, 0.133333, 0.133333, 1.0) 
 
@@ -113,10 +113,16 @@ class _CommentEdit(QPlainTextEdit):
                 return
         if mod & alt:
             if key == Qt.Key.Key_Up:
-                self.move_up_at.emit()
+                if mod & shift:
+                    self.move_up_at.emit()
+                else:
+                    _move_line(self, -1)
                 return
             if key == Qt.Key.Key_Down:
-                self.move_down_at.emit()
+                if mod & shift:
+                    self.move_down_at.emit()
+                else:
+                    _move_line(self, +1)
                 return
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             if mod == ctrl:

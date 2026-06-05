@@ -86,10 +86,12 @@ class _SpinBox(QDoubleSpinBox):
                 return
         if mod & alt:
             if key == Qt.Key.Key_Up:
-                self.move_up_at.emit()
+                if mod & shift:
+                    self.move_up_at.emit()
                 return
             if key == Qt.Key.Key_Down:
-                self.move_down_at.emit()
+                if mod & shift:
+                    self.move_down_at.emit()
                 return
         if key == Qt.Key.Key_Up:
             self.navigate_up.emit()
@@ -213,10 +215,12 @@ class _ExprBox(QLineEdit):
                 return
         if mod & alt:
             if key == Qt.Key.Key_Up:
-                self.move_up_at.emit()
+                if mod & shift:
+                    self.move_up_at.emit()
                 return
             if key == Qt.Key.Key_Down:
-                self.move_down_at.emit()
+                if mod & shift:
+                    self.move_down_at.emit()
                 return
         if key == Qt.Key.Key_Up:
             self.navigate_up.emit()
@@ -274,10 +278,12 @@ class _NameLineEdit(QLineEdit):
                 return
         if mod & alt:
             if key == Qt.Key.Key_Up:
-                self.move_up_at.emit()
+                if mod & shift:
+                    self.move_up_at.emit()
                 return
             if key == Qt.Key.Key_Down:
-                self.move_down_at.emit()
+                if mod & shift:
+                    self.move_down_at.emit()
                 return
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             if mod == Qt.KeyboardModifier.ControlModifier:

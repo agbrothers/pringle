@@ -237,8 +237,10 @@ Selecting "Add Constraint" appends a constraint sub-cell below the primary cell,
 | `Cmd+[` | **In a text cell:** outdent selected lines by up to 4 spaces. **In a slider field:** no-op. |
 | `Cmd+Shift+]` | Move focused cell into the folder directly above it (equation, slider, comment cells; no-op on folder cells and when no folder is adjacent above) |
 | `Cmd+Shift+[` | Outdent focused cell out of its current folder, placing it below the folder's last member (no-op when cell is not in a folder) |
-| `Opt+↑` / `Alt+↑` | Move cell one position up in the expression panel (re-infers folder membership from new position) |
-| `Opt+↓` / `Alt+↓` | Move cell one position down in the expression panel (re-infers folder membership from new position) |
+| `Alt+↑` | **In a multi-line cell (equation, comment):** move the current line up within the cell (swap with line above); no-op at first line. **In a slider field:** no-op (single-line). |
+| `Alt+↓` | **In a multi-line cell:** move current line down (swap with line below); no-op at last line. **In a slider field:** no-op. |
+| `Alt+Shift+↑` / `Opt+Shift+↑` | Move entire cell one position up in the expression panel (re-infers folder membership from new position) |
+| `Alt+Shift+↓` / `Opt+Shift+↓` | Move entire cell one position down in the expression panel (re-infers folder membership from new position) |
 
 ---
 

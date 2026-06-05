@@ -432,7 +432,8 @@ def test_cell_text_edit_emits_move_up_signal(qapp):
     received = []
     cell.move_up_requested.connect(lambda cid: received.append(cid))
 
-    event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Up, Qt.KeyboardModifier.AltModifier)
+    event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Up,
+                      Qt.KeyboardModifier.AltModifier | Qt.KeyboardModifier.ShiftModifier)
     cell._text_edit.keyPressEvent(event)
     assert received == [cell.cell_id]
 
@@ -445,7 +446,8 @@ def test_cell_text_edit_emits_move_down_signal(qapp):
     received = []
     cell.move_down_requested.connect(lambda cid: received.append(cid))
 
-    event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Down, Qt.KeyboardModifier.AltModifier)
+    event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Down,
+                      Qt.KeyboardModifier.AltModifier | Qt.KeyboardModifier.ShiftModifier)
     cell._text_edit.keyPressEvent(event)
     assert received == [cell.cell_id]
 
