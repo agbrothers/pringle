@@ -444,7 +444,15 @@ class CellTextEdit(QPlainTextEdit):
                 if mod == Qt.KeyboardModifier.ShiftModifier:
                     self.enter_at_end.emit()   # new cell below
                     return
-                # Plain Enter (and any other modifier) falls through to super → newline
+                # Plain Enter — insert newline with matching indent (+ extra level after colon)
+                cursor = self.textCursor()
+                block_text = cursor.block().text()
+                indent = len(block_text) - len(block_text.lstrip())
+                if block_text.rstrip().endswith(":"):
+                    indent += 4
+                cursor.insertText("\n" + " " * indent)
+                self.setTextCursor(cursor)
+                return
             super().keyPressEvent(event)
             return
 
@@ -452,6 +460,19 @@ class CellTextEdit(QPlainTextEdit):
             if not self.toPlainText():
                 self.backspace_on_empty.emit()
                 return
+            cursor = self.textCursor()
+            col = cursor.positionInBlock()
+            if col > 0 and not cursor.hasSelection():
+                left_text = cursor.block().text()[:col]
+                if left_text == " " * col:
+                    remove = ((col - 1) % 4) + 1
+                    cursor.movePosition(
+                        QTextCursor.MoveOperation.Left,
+                        QTextCursor.MoveMode.KeepAnchor,
+                        remove,
+                    )
+                    cursor.removeSelectedText()
+                    return
 
         if key == Qt.Key.Key_Down:
             if self.textCursor().blockNumber() == self.document().blockCount() - 1:
