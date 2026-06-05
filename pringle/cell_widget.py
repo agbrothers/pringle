@@ -529,11 +529,22 @@ class CellTextEdit(QPlainTextEdit):
             return
 
         if key == Qt.Key.Key_Down:
-            if self.textCursor().blockNumber() == self.document().blockCount() - 1:
+            cursor = self.textCursor()
+            block_layout = cursor.block().layout()
+            on_last_block = cursor.blockNumber() == self.document().blockCount() - 1
+            on_last_visual_line = (
+                block_layout.lineForTextPosition(cursor.positionInBlock()).lineNumber()
+                == block_layout.lineCount() - 1
+            )
+            if on_last_block and on_last_visual_line:
                 self.navigate_down_requested.emit()
                 return
         elif key == Qt.Key.Key_Up:
-            if self.textCursor().blockNumber() == 0:
+            cursor = self.textCursor()
+            block_layout = cursor.block().layout()
+            on_first_block = cursor.blockNumber() == 0
+            on_first_visual_line = block_layout.lineForTextPosition(cursor.positionInBlock()).lineNumber() == 0
+            if on_first_block and on_first_visual_line:
                 self.navigate_up_requested.emit()
                 return
 

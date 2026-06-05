@@ -136,7 +136,7 @@ Standard text editor behavior in a `QPlainTextEdit`:
 
 These shortcuts apply to equation cells, comment cells, and all text fields on slider cells (value, min, max, name). Text-indent (`Cmd+]/[`) is a no-op on single-line fields (slider value, min, max, name) since there is nothing to indent.
 
-- **Up arrow on first line / Down arrow on last line**: moves focus to the adjacent cell or subcell in the flat visual order (Jupyter-style cross-cell navigation). Pressing Up/Down on an interior line moves the cursor within the cell normally without escaping.
+- **Up arrow on first visual line / Down arrow on last visual line**: moves focus to the adjacent cell or subcell in the flat visual order (Jupyter-style cross-cell navigation). Pressing Up/Down on an interior visual line (including wrapped lines within a single logical block) moves the cursor within the cell normally without escaping. Boundary detection uses `QTextLayout.lineForTextPosition()` so that visually-wrapped single-block cells behave correctly.
 
 **Cross-cell navigation flat order** (FEAT-053): `CellListWidget._focus_targets()` returns `(id, widget)` pairs in visual order — equation cell main edit, then its subcells in order, then next cell, etc. Folder headers are skipped; members of collapsed folders are excluded. Slider cells land on the `value` spinbox when navigated into. Navigation is a simple index ±1 lookup on this list.
 
