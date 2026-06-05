@@ -453,6 +453,11 @@ class CellTextEdit(QPlainTextEdit):
             if key == Qt.Key.Key_Slash:
                 self._toggle_line_comment()
                 return
+            if key == Qt.Key.Key_L:
+                cursor = self.textCursor()
+                cursor.select(QTextCursor.SelectionType.LineUnderCursor)
+                self.setTextCursor(cursor)
+                return
         if mod & alt:
             if key == Qt.Key.Key_Up:
                 if mod & shift:

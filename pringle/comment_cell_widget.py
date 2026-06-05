@@ -24,7 +24,7 @@ from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPlainTextEdit, QPushButton, QSizePolicy, QFrame,
 )
 from PyQt6.QtCore import pyqtSignal, Qt
-from PyQt6.QtGui import QFontMetricsF, QKeyEvent, QTextOption
+from PyQt6.QtGui import QFontMetricsF, QKeyEvent, QTextCursor, QTextOption
 
 from pringle.style import CellStyle
 from pringle.cell_widget import ColorSwatchHandle, _move_line
@@ -104,6 +104,12 @@ class _CommentEdit(QPlainTextEdit):
                 or key == Qt.Key.Key_Question and mod == ctrl):
             self.toggle_comment_requested.emit()
             return
+        if mod == ctrl:
+            if key == Qt.Key.Key_L:
+                cursor = self.textCursor()
+                cursor.select(QTextCursor.SelectionType.LineUnderCursor)
+                self.setTextCursor(cursor)
+                return
         if mod == (ctrl | shift):
             if key == Qt.Key.Key_BracketRight:
                 self.indent_at.emit()
