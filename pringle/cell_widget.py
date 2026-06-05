@@ -253,6 +253,8 @@ def _move_line(edit: "CellTextEdit", direction: int) -> None:
     if not other.isValid():
         return
     top, bottom = (other, block) if direction < 0 else (block, other)
+    # Capture block number before the edit — QTextBlock refs are invalidated after modification
+    dest_block_num = other.blockNumber()
     # Select from start of top block to end of bottom block and replace in one step
     sel = QTextCursor(top)
     sel.movePosition(QTextCursor.MoveOperation.StartOfBlock)
@@ -262,8 +264,8 @@ def _move_line(edit: "CellTextEdit", direction: int) -> None:
     sel.beginEditBlock()
     sel.insertText(bottom.text() + "\n" + top.text())
     sel.endEditBlock()
-    # Land cursor at same column in the destination block (other's original number)
-    dest = edit.document().findBlockByNumber(other.blockNumber())
+    # Land cursor at same column in the destination block
+    dest = edit.document().findBlockByNumber(dest_block_num)
     nc = QTextCursor(dest)
     nc.movePosition(
         QTextCursor.MoveOperation.Right,
@@ -508,6 +510,23 @@ class CellTextEdit(QPlainTextEdit):
                     )
                     cursor.removeSelectedText()
                     return
+
+        if key == Qt.Key.Key_Home:
+            cursor = self.textCursor()
+            block_text = cursor.block().text()
+            first_nonws = len(block_text) - len(block_text.lstrip())
+            block_start = cursor.block().position()
+            target = block_start + first_nonws
+            if cursor.position() == target or first_nonws == 0:
+                target = block_start
+            move_mode = (
+                QTextCursor.MoveMode.KeepAnchor
+                if mod & Qt.KeyboardModifier.ShiftModifier
+                else QTextCursor.MoveMode.MoveAnchor
+            )
+            cursor.setPosition(target, move_mode)
+            self.setTextCursor(cursor)
+            return
 
         if key == Qt.Key.Key_Down:
             if self.textCursor().blockNumber() == self.document().blockCount() - 1:

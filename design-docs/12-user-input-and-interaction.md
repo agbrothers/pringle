@@ -125,6 +125,8 @@ Standard text editor behavior in a `QPlainTextEdit`:
 - **Enter / Return**: inserts a newline with auto-indent — the new line is pre-filled with the same leading whitespace as the current line. If the current line's stripped text ends with `:` (e.g. `def f():`, `for i in range(n):`, `if x > 0:`, `else:`, `try:`, `with …:`), one additional indent level (4 spaces) is added.
 - **Shift+Enter**: creates a new empty equation cell directly below and moves focus there (from any cursor position).
 - **Ctrl+Enter** (Cmd+Enter on macOS): creates a new folder cell directly below and moves focus there.
+- **Home**: moves cursor to the first non-whitespace character on the current line. If the cursor is already there (or the line has no indent), moves to column 0. Matches VSCode/PyCharm smart-home behaviour.
+- **Shift+Home**: same as `Home` but extends the selection anchor to the destination position.
 - **Backspace** when the cursor is on a line whose content to the left is entirely spaces: deletes back to the previous 4-space tab stop (e.g. cursor at column 6 → deletes 2 spaces back to column 4; cursor at column 4 → deletes 4 spaces back to column 0). Falls through to normal single-character delete if any non-space precedes the cursor on the line.
 - **Cmd+Delete** (macOS): deletes all text on the current line to the left of the cursor (kill to start of line). No-op when the cursor is already at the start of a block.
 - **Cmd+]** (in a multi-line cell): indents every line overlapping the current selection by 4 spaces.
