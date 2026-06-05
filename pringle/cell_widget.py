@@ -33,7 +33,7 @@ from pringle.style import CellStyle
 # ---------------------------------------------------------------------------
 
 class DragHandle(QLabel):
-    """14-px strip; click-drag emits position signals for reordering."""
+    """16-px strip; click-drag emits position signals for reordering."""
 
     drag_started = pyqtSignal()
     drag_moved = pyqtSignal(int)
@@ -41,7 +41,7 @@ class DragHandle(QLabel):
 
     def __init__(self, parent=None):
         super().__init__("⠿", parent)
-        self.setFixedWidth(14)
+        self.setFixedWidth(16)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setCursor(Qt.CursorShape.SizeVerCursor)
         self._dragging = False
@@ -739,11 +739,12 @@ class CellWidget(QWidget):
 
         outer.addLayout(preview_row)
 
-        # Thin separator below the frame (outside outer_h so the swatch doesn't cover it)
+        # Separator inside content_layout so the swatch spans the full cell height
         line = QFrame()
         line.setObjectName("separator")
         line.setFrameShape(QFrame.Shape.HLine)
-        top_v.addWidget(line)
+        line.setFixedHeight(1)
+        content_layout.addWidget(line)
 
     # ------------------------------------------------------------------
     # Public API

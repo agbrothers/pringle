@@ -77,12 +77,10 @@ CellWidget[active="true"] #cell_content,
 CellWidget[active="true"] #cell_content QWidget,
 SliderWidget[active="true"] #cell_content,
 SliderWidget[active="true"] #cell_content QWidget,
-FolderCellWidget[active="true"] #cell_content,
-FolderCellWidget[active="true"] #cell_content QWidget,
 CommentCellWidget[active="true"] #cell_content,
 CommentCellWidget[active="true"] #cell_content QWidget { background: @active-cell-bg; }
-
-FolderCellWidget[active="true"] DragHandle { background: @active-cell-bg; }
+/* FolderCellWidget intentionally excluded: its #222222 card must not change
+   colour when the rename QLineEdit gains focus. */
 
 /* ── Cell text edit ──────────────────────────────────────────────── */
 CellTextEdit { border: none; background: transparent; }
@@ -116,7 +114,6 @@ CellWidget QPushButton:hover { color: #bbb; }
 
 /* ── Separator lines ─────────────────────────────────────────────── */
 QFrame#separator  { color: #1f1f1f; max-height: 1px; }
-QFrame#folder_sep { color: #1f1f1f; max-height: 1px; }
 
 /* ── Cell list toolbar ────────────────────────────────────────────── */
 QWidget#cell_toolbar {
@@ -165,7 +162,23 @@ SliderWidget QLineEdit {
     border: none;
     selection-background-color: #2a4a7a;
 }
-
+QSlider::groove:horizontal {
+    background: #ddd;          /* unfilled track */
+    height: 2px;
+    border-radius: 1px;
+}
+QSlider::sub-page:horizontal {
+    background: #ddd;       /* ← filled bar color (currently the macOS gold) */
+    height: 2px;
+    border-radius: 1px;
+}
+QSlider::handle:horizontal {
+    background: #ddd;          /* ← knob color (currently macOS gray) */
+    width: 14px;
+    height: 14px;
+    margin: -6px 0;
+    border-radius: 7px; 
+}
 SliderWidget QPushButton {
     color: #555;
     background: transparent;
@@ -193,13 +206,16 @@ SliderControlsPopover QComboBox {
 }
 SliderControlsPopover QComboBox::drop-down { border: none; }
 
-/* ── Folder cell header ───────────────────────────────────────────── */
-QWidget#folder_header {
-    background: #181818;
-    border-top: 1px solid #242424;
-    border-bottom: 1px solid #242424;
+/* ── Folder cell ──────────────────────────────────────────────────── */
+FolderCellWidget #cell_content {
+    background: #222222;
+    border-radius: 1px;
 }
-QPushButton#folder_toggle { color: #777; font-size: 10px; }
+QWidget#folder_header {
+    background: transparent;
+    border: none;
+}
+QPushButton#folder_toggle { color: #777; font-size: 10px; background: transparent; }
 QPushButton#folder_toggle:hover { color: #ccc; }
 QPushButton#folder_name {
     font-weight: bold;
@@ -209,18 +225,20 @@ QPushButton#folder_name {
     text-align: left;
     padding: 0;
     border: none;
+    background: transparent;
 }
 QPushButton#folder_name:hover { color: #ccc; }
 QLineEdit#folder_name_edit {
     font-weight: bold;
     font-size: 11px;
-    border: 1px solid #555;
-    border-radius: 2px;
-    background: #1e1e1e;
+    border: none;
+    background: transparent;
     color: #eee;
+    selection-background-color: #2a4a7a;
 }
-QPushButton#folder_del { color: #444; }
+QPushButton#folder_del { color: #444; background: transparent; }
 QPushButton#folder_del:hover { color: #ccc; }
+QFrame#folder_sep { color: #222222; max-height: 1px; }
 
 /* ── Comment cell ─────────────────────────────────────────────────── */
 CommentCellWidget { background: #111111; }

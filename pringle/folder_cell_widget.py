@@ -63,7 +63,7 @@ class FolderCellWidget(QWidget):
 
     def _build_ui(self):
         outer_h = QHBoxLayout(self)
-        outer_h.setContentsMargins(0, 2, 0, 0)
+        outer_h.setContentsMargins(0, 3, 0, 0)
         outer_h.setSpacing(0)
 
         self._drag_handle = DragHandle(self)

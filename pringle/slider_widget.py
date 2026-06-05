@@ -531,11 +531,12 @@ class SliderWidget(QWidget):
             _field.new_cell_requested.connect(lambda: self.enter_pressed.emit(self.cell_id))
             _field.folder_requested.connect(lambda: self.new_folder_requested.emit(self.cell_id))
 
-        # Separator outside outer_h so the swatch doesn't cover it
+        # Separator inside content so the swatch spans the full cell height
         line = QFrame()
         line.setObjectName("separator")
         line.setFrameShape(QFrame.Shape.HLine)
-        top_v.addWidget(line)
+        line.setFixedHeight(1)
+        outer.addWidget(line)
 
     # ------------------------------------------------------------------
     # Public API

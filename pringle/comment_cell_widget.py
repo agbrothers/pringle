@@ -204,8 +204,12 @@ class CommentCellWidget(QWidget):
         # (FEAT-148) paints inside the folder indent — see theme.qss.
         content = QWidget()
         content.setObjectName("cell_content")
+        outer_v.addWidget(content)
+
+        # Swatch (left) + inner column (right) — inner holds the body row AND the
+        # separator so the swatch spans the full cell height flush with neighbours.
         outer_h = QHBoxLayout(content)
-        outer_h.setContentsMargins(0, 2, 4, 2)
+        outer_h.setContentsMargins(0, 0, 0, 0)
         outer_h.setSpacing(0)
 
         # Color swatch — fixed #222222, drag to reorder
@@ -214,7 +218,17 @@ class CommentCellWidget(QWidget):
         self._swatch.drag_moved.connect(lambda y: self.drag_moved.emit(self.cell_id, y))
         self._swatch.drag_ended.connect(lambda: self.drag_ended.emit(self.cell_id))
         outer_h.addWidget(self._swatch)
-        outer_h.addSpacing(6)
+
+        inner_v = QVBoxLayout()
+        inner_v.setContentsMargins(0, 0, 0, 0)
+        inner_v.setSpacing(0)
+        outer_h.addLayout(inner_v, 1)
+
+        body = QHBoxLayout()
+        body.setContentsMargins(6, 2, 4, 2)
+        body.setSpacing(0)
+        body.addSpacing(6)
+        inner_v.addLayout(body)
 
         # Auto-grow text area — "# " prefix is part of the cell text
         self._edit = _CommentEdit()
@@ -223,7 +237,7 @@ class CommentCellWidget(QWidget):
         self._edit.document().contentsChanged.connect(
             lambda: self.content_changed.emit(self.cell_id)
         )
-        outer_h.addWidget(self._edit, 1)
+        body.addWidget(self._edit, 1)
 
         del_btn = QPushButton("✕")
         del_btn.setObjectName("comment_del")
@@ -231,14 +245,13 @@ class CommentCellWidget(QWidget):
         del_btn.setFlat(True)
         del_btn.setToolTip("Delete comment")
         del_btn.clicked.connect(lambda: self.delete_requested.emit(self.cell_id))
-        outer_h.addWidget(del_btn)
-
-        outer_v.addWidget(content)
+        body.addWidget(del_btn)
 
         line = QFrame()
         line.setObjectName("separator")
         line.setFrameShape(QFrame.Shape.HLine)
-        outer_v.addWidget(line)
+        line.setFixedHeight(1)
+        inner_v.addWidget(line)
 
     # ------------------------------------------------------------------
     # CellWidget-compatible interface
