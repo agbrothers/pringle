@@ -47,6 +47,8 @@ class _SpinBox(QDoubleSpinBox):
     folder_requested = pyqtSignal()
     navigate_up = pyqtSignal()
     navigate_down = pyqtSignal()
+    navigate_left = pyqtSignal()        # Left at pos 0 → name field
+    navigate_cell_down = pyqtSignal()   # Cmd+Down → skip row 2, exit cell below
     indent_at = pyqtSignal()
     outdent_at = pyqtSignal()
     move_up_at = pyqtSignal()
@@ -77,6 +79,12 @@ class _SpinBox(QDoubleSpinBox):
             if key == Qt.Key.Key_Slash:
                 self.toggle_comment_requested.emit()
                 return
+            if key == Qt.Key.Key_Up:
+                self.navigate_up.emit()
+                return
+            if key == Qt.Key.Key_Down:
+                self.navigate_cell_down.emit()
+                return
         if mod == (ctrl | shift):
             if key == Qt.Key.Key_BracketRight:
                 self.indent_at.emit()
@@ -98,6 +106,9 @@ class _SpinBox(QDoubleSpinBox):
             return
         if key == Qt.Key.Key_Down:
             self.navigate_down.emit()
+            return
+        if key == Qt.Key.Key_Left and self.lineEdit().cursorPosition() == 0:
+            self.navigate_left.emit()
             return
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             if mod == Qt.KeyboardModifier.ControlModifier:
@@ -253,6 +264,11 @@ class _NameLineEdit(QLineEdit):
     """Inline name editor for SliderWidget; Enter commits then requests a new cell."""
     new_cell_requested = pyqtSignal()
     folder_requested = pyqtSignal()
+    navigate_up = pyqtSignal()
+    navigate_down = pyqtSignal()
+    navigate_left = pyqtSignal()        # Left at pos 0 → cell above
+    navigate_right = pyqtSignal()       # Right at end → spinbox
+    navigate_cell_down = pyqtSignal()   # Cmd+Down → cell below
     indent_at = pyqtSignal()
     outdent_at = pyqtSignal()
     move_up_at = pyqtSignal()
@@ -276,6 +292,13 @@ class _NameLineEdit(QLineEdit):
             if key == Qt.Key.Key_BracketLeft:
                 self.outdent_at.emit()
                 return
+        if mod == ctrl:
+            if key == Qt.Key.Key_Up:
+                self.navigate_up.emit()
+                return
+            if key == Qt.Key.Key_Down:
+                self.navigate_cell_down.emit()
+                return
         if mod & alt:
             if key == Qt.Key.Key_Up:
                 if mod & shift:
@@ -285,6 +308,18 @@ class _NameLineEdit(QLineEdit):
                 if mod & shift:
                     self.move_down_at.emit()
                 return
+        if key == Qt.Key.Key_Up:
+            self.navigate_up.emit()
+            return
+        if key == Qt.Key.Key_Down:
+            self.navigate_down.emit()
+            return
+        if key == Qt.Key.Key_Left and self.cursorPosition() == 0:
+            self.navigate_left.emit()
+            return
+        if key == Qt.Key.Key_Right and self.cursorPosition() == len(self.text()):
+            self.navigate_right.emit()
+            return
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             if mod == Qt.KeyboardModifier.ControlModifier:
                 self.folder_requested.emit()
@@ -472,6 +507,8 @@ class SliderWidget(QWidget):
         # Arrow-key cross-cell navigation
         self._spinbox.navigate_up.connect(lambda: self.navigate_up_requested.emit(self.cell_id))
         self._spinbox.navigate_down.connect(lambda: self._min_box.setFocus())
+        self._spinbox.navigate_left.connect(self._focus_name_edit_at_end)
+        self._spinbox.navigate_cell_down.connect(lambda: self.navigate_down_requested.emit(self.cell_id))
         self._min_box.navigate_up.connect(lambda: self._spinbox.setFocus())
         self._min_box.navigate_down.connect(lambda: self.navigate_down_requested.emit(self.cell_id))
         self._min_box.navigate_right.connect(
@@ -617,6 +654,13 @@ class SliderWidget(QWidget):
             and (self._validate_name is None or self._validate_name(name))
         )
 
+    def _focus_name_edit_at_end(self) -> None:
+        """Focus the name field (creating it if needed) with cursor at end of text."""
+        if self._name_edit is None:
+            self._on_name_clicked()
+        self._name_edit.setFocus()
+        self._name_edit.setCursorPosition(len(self._name_edit.text()))
+
     def _on_name_clicked(self) -> None:
         if self._name_edit is not None:
             return
@@ -634,6 +678,16 @@ class SliderWidget(QWidget):
         self._name_edit.move_up_at.connect(lambda: self.move_up_requested.emit(self.cell_id))
         self._name_edit.move_down_at.connect(lambda: self.move_down_requested.emit(self.cell_id))
         self._name_edit.toggle_comment_requested.connect(lambda: self.toggle_comment_requested.emit(self.cell_id))
+        self._name_edit.navigate_up.connect(lambda: self.navigate_up_requested.emit(self.cell_id))
+        self._name_edit.navigate_left.connect(lambda: self.navigate_up_requested.emit(self.cell_id))
+        self._name_edit.navigate_down.connect(lambda: self._min_box.setFocus())
+        self._name_edit.navigate_right.connect(
+            lambda: (self._spinbox.setFocus(),
+                     self._spinbox.lineEdit().setCursorPosition(0))
+        )
+        self._name_edit.navigate_cell_down.connect(
+            lambda: self.navigate_down_requested.emit(self.cell_id)
+        )
         self._name_edit.setFocus()
 
     def _on_name_text_changed(self, text: str) -> None:

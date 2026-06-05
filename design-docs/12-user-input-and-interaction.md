@@ -138,7 +138,27 @@ These shortcuts apply to equation cells, comment cells, and all text fields on s
 
 **Cross-cell navigation flat order** (FEAT-053): `CellListWidget._focus_targets()` returns `(id, widget)` pairs in visual order — equation cell main edit, then its subcells in order, then next cell, etc. Folder headers are skipped; members of collapsed folders are excluded. Slider cells land on the `value` spinbox when navigated into. Navigation is a simple index ±1 lookup on this list.
 
-**Within-slider arrow navigation**: Up/Down always escape the slider (Up exits upward, Down exits downward) from any field (`value`, `min`, `max`, `step`). Exception: `value` Down → `min` (enters the bounds row). Within the bounds row, Left/Right at field boundaries traverse `min` ↔ `max` ↔ `step`. Left at `min` position 0 and Right at `step` end are no-ops. The `name` field does not participate in arrow-key navigation.
+**Within-slider arrow navigation:** Full keyboard traversal across all visible fields:
+
+| From | Key | To |
+|---|---|---|
+| name | Right (at end) | value spinbox (cursor at 0) |
+| name | Left (at pos 0) | cell above |
+| name | Up / Cmd+Up | cell above |
+| name | Down | min box |
+| name | Cmd+Down | cell below (skips min/max row) |
+| value spinbox | Left (at pos 0) | name field (cursor at end) |
+| value spinbox | Up / Cmd+Up | cell above |
+| value spinbox | Down | min box |
+| value spinbox | Cmd+Down | cell below (skips min/max row) |
+| min | Up | value spinbox |
+| min | Down | cell below |
+| min | Right (at end) | max box (cursor at 0) |
+| max | Up | value spinbox |
+| max | Down | cell below |
+| max | Left (at pos 0) | min box (cursor at end) |
+
+`step` is not in the layout (controls popover only) — no arrow-key navigation needed.
 
 ### Cell Deletion
 
