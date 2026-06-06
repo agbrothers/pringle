@@ -638,6 +638,10 @@ class PringleWindow(QMainWindow):
             self._view_settings.set_bounds(
                 cfg.x_min, cfg.x_max, cfg.y_min, cfg.y_max, cfg.z_min, cfg.z_max
             )
+            # Sync resolution spinbox; grid already built from cfg.n so skip signal.
+            self._view_settings._res_spin.blockSignals(True)
+            self._view_settings._res_spin.setValue(cfg.n)
+            self._view_settings._res_spin.blockSignals(False)
             self._viewport.renderer.set_overlay_bounds(
                 cfg.x_min, cfg.x_max, cfg.y_min, cfg.y_max, cfg.z_min, cfg.z_max
             )
