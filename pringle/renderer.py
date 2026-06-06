@@ -853,8 +853,8 @@ class _IncrementalOrbitHandler:
 
     _ORBIT_SENSITIVITY = 0.005   # radians per screen pixel
     _ZOOM_SENSITIVITY  = -0.001  # fractional scale per wheel unit (matches gfx default)
-    _COAST_DEADZONE    = 2.0     # rad/s — below this speed, no coasting starts
-    _COAST_SCALE       = 0.25     # velocity multiplier applied to drags that exceed the deadzone
+    _COAST_DEADZONE    = 1.5     # rad/s — below this speed, no coasting starts
+    _COAST_SCALE       = 0.15     # velocity multiplier applied to drags that exceed the deadzone
 
     def __init__(self, controller: gfx.OrbitController, renderer, canvas) -> None:
         self._controller = controller
@@ -975,11 +975,16 @@ class _PringleOrbitController(gfx.OrbitController):
         rot1 = rotation
 
         if self._custom_target is not None:
-            # Use the camera's actual world-space right vector for elevation so
-            # position and orientation rotate around the same axis (fix for BUG-178).
-            right = la.vec_transform_quat((1, 0, 0), rot1)
-            r_elevation_world = la.quat_from_axis_angle(right, -delta_elevation)
-            rot2 = la.quat_mul(r_elevation_world, la.quat_mul(r_azimuth, rot1))
+            # Apply azimuth first, then compute the camera right vector in that
+            # new orientation. Using the pre-azimuth right for elevation (as in
+            # stock pygfx) means the elevation axis is no longer perpendicular to
+            # the new forward at non-zero azimuth, which introduces roll.
+            # Using the post-azimuth right keeps position and orientation consistent
+            # and eliminates the roll (BUG-178).
+            rot_after_az = la.quat_mul(r_azimuth, rot1)
+            right_after_az = la.vec_transform_quat((1, 0, 0), rot_after_az)
+            r_elevation_world = la.quat_from_axis_angle(right_after_az, -delta_elevation)
+            rot2 = la.quat_mul(r_elevation_world, rot_after_az)
 
             target_pos = self._custom_target
             pos1_to_target = target_pos - position
