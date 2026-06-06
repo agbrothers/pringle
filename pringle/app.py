@@ -468,14 +468,6 @@ class PringleWindow(QMainWindow):
         self._session_path: str | None = None
         self._modified = False
 
-        # Camera-position poll: triggers a namespace rebuild when the camera moves so
-        # that cells reading camera.* (e.g. `v = camera.x`) display live values (FEAT-159).
-        self._last_camera_pos: tuple | None = None
-        self._camera_poll_timer = QTimer(self)
-        self._camera_poll_timer.setInterval(100)  # 10 fps — responsive without flooding rebuilds
-        self._camera_poll_timer.timeout.connect(self._on_camera_poll)
-        self._camera_poll_timer.start()
-
         self._setup_shortcuts()
 
     # ------------------------------------------------------------------
@@ -1012,34 +1004,6 @@ class PringleWindow(QMainWindow):
         # Restore default reference_up so camera presets and subsequent look_at calls
         # use the standard world-Z up (rotation from look_at above is already committed).
         cam.local.reference_up = (0., 0., 1.)
-
-        # Clear orbit coast velocity so residual inertia from a manual orbit can't
-        # keep nudging the camera and triggering repeated poll rebuilds (FEAT-159).
-        pr._orbit_handler._coast_velocity = None
-
-    def _on_camera_poll(self) -> None:
-        """Detect camera movement and rebuild namespace so camera.* cells show live values (FEAT-159)."""
-        from pringle.slider_widget import SliderWidget
-        pr = self._viewport._pr
-        pos = tuple(float(v) for v in pr._camera.local.position)
-        tgt = tuple(float(v) for v in pr._controller.target)
-        now = pos + tgt
-        if now != self._last_camera_pos:
-            self._last_camera_pos = now
-            if not self._cell_list._eval_busy:
-                # During animation, the tick path owns camera updates.  A poll-triggered
-                # full rebuild uses the last *committed* slider value (one tick stale),
-                # which would emit a camera_override with a slightly wrong roll — visibly
-                # snapping against the smooth animation.  Suppress the override while any
-                # slider is playing; the rebuild still runs so camera.* preview cells update.
-                any_playing = any(
-                    isinstance(c, SliderWidget) and c._anim_timer.isActive()
-                    for c in self._cell_list._cells
-                )
-                self._cell_list._rebuild_namespace(
-                    _suppress_camera_override=any_playing,
-                    _suppress_session_dirty=True,
-                )
 
     def _on_bounds_changed(
         self,

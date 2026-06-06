@@ -906,11 +906,7 @@ class CellListWidget(QWidget):
     # Evaluation
     # ------------------------------------------------------------------
 
-    def _rebuild_namespace(
-        self,
-        _suppress_camera_override: bool = False,
-        _suppress_session_dirty: bool = False,
-    ) -> None:
+    def _rebuild_namespace(self) -> None:
         """
         Re-evaluate all cells in dependency (topological) order.
 
@@ -1051,10 +1047,8 @@ class CellListWidget(QWidget):
             self.bounds_override.emit(*_cfg_after)
 
         # Emit camera_override if any cell wrote to camera during this eval pass (FEAT-159).
-        # Suppressed for poll-triggered rebuilds during animation to prevent stale-t overrides
-        # from racing against the animation tick and snapping the roll (see _on_camera_poll).
         _camera_after = (camera.x, camera.y, camera.z, camera.target_x, camera.target_y, camera.target_z, camera.roll)
-        if _camera_before != _camera_after and not _suppress_camera_override:
+        if _camera_before != _camera_after:
             self.camera_override.emit(*_camera_after)
 
         _resolver = _make_resolver(self._shared_ns)
@@ -1063,8 +1057,7 @@ class CellListWidget(QWidget):
                 cell.set_resolver(_resolver)   # keep resolver current for future user edits
                 cell.re_resolve(_resolver)     # re-evaluate any stored expressions
         self.namespace_rebuilt.emit()
-        if not _suppress_session_dirty:
-            self.session_dirtied.emit()
+        self.session_dirtied.emit()
 
     def _eval_cell(self, cell: CellWidget, shared: dict) -> CellResult:
         """Evaluate one cell against the current shared namespace + grid."""
