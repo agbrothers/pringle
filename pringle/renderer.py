@@ -853,6 +853,8 @@ class _IncrementalOrbitHandler:
 
     _ORBIT_SENSITIVITY = 0.005   # radians per screen pixel
     _ZOOM_SENSITIVITY  = -0.001  # fractional scale per wheel unit (matches gfx default)
+    _COAST_DEADZONE    = 2.0     # rad/s — below this speed, no coasting starts
+    _COAST_SCALE       = 0.25     # velocity multiplier applied to drags that exceed the deadzone
 
     def __init__(self, controller: gfx.OrbitController, renderer, canvas) -> None:
         self._controller = controller
@@ -924,7 +926,13 @@ class _IncrementalOrbitHandler:
             return
         total_daz = sum(s[0] for s in recent)
         total_del = sum(s[1] for s in recent)
-        self._coast_velocity = (total_daz / dt, total_del / dt)
+        vaz = total_daz / dt
+        vel_ = total_del / dt
+        speed = (vaz ** 2 + vel_ ** 2) ** 0.5
+        if speed < self._COAST_DEADZONE:
+            self._coast_velocity = None
+            return
+        self._coast_velocity = (vaz * self._COAST_SCALE, vel_ * self._COAST_SCALE)
         self._vel_samples.clear()
 
 

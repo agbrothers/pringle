@@ -11,6 +11,8 @@
 
 Orbit, pan, and zoom are handled by `gfx.OrbitController` for its math, but the event wiring uses a custom `_IncrementalOrbitHandler` (`renderer.py`) instead of `OrbitController.register_events()`. The stock event system snapshots camera state at drag-start; the custom handler calls `controller.rotate()` / `.pan()` / `.zoom()` with per-frame incremental pixel deltas so the controller always reads live camera state, enabling WASD and mouse orbit simultaneously (BUG-013). The orbit-around-center model prevents disorienting roll and keeps axes readable.
 
+**Orbit momentum (coasting):** On left-drag release, `_compute_coast_velocity()` averages the last 100 ms of drag samples to compute angular velocity (ω_az, ω_el) in rad/s. Two constants gate the coast: `_COAST_DEADZONE = 2.0` rad/s — drags below this speed produce no coasting (prevents accidental momentum from micro-adjustments); `_COAST_SCALE = 0.25` — velocities that exceed the deadzone are scaled down before storing, so coasting feels deliberate rather than 1:1 with raw drag speed. Coasting runs at constant velocity (no decay) until interrupted by a new pointer-down event. Camera-reading cells do not update during free orbit (the 100 ms poll was removed in ARCH-176); they update on the next slider move, cell edit, or grid change.
+
 ## 3D Viewport: Keyboard Controls (WASD)
 
 WASD pans the **orbit target** — the point the camera orbits around and zooms toward — in the **camera's horizontal reference frame**. The camera translates by the same delta so its angle and distance to the target are preserved.
