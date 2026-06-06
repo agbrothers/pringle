@@ -40,6 +40,7 @@ class TestResolutionSpinboxOnLoad:
         win._view_settings._res_spin.setValue(cfg.n)
         win._view_settings._res_spin.blockSignals(False)
         assert win._view_settings._res_spin.value() == 128
+        win.close()  # shuts down eval thread before Qt tears down the window
 
     def test_spinbox_reflects_loaded_n(self, qapp):
         """_res_spin.value() must equal cfg.n after the load sequence."""
