@@ -193,8 +193,10 @@ class PringleViewport(QRenderWidget):
     def add_object(self, cell_id: str, obj: gfx.WorldObject) -> None:
         self._pr.add_object(cell_id, obj)
         if cell_id not in self._seen_cell_ids:
+            fit = not self._seen_cell_ids  # only auto-fit on first cell ever added
             self._seen_cell_ids.add(cell_id)
-            self._pr.fit_camera()
+            if fit:
+                self._pr.fit_camera()
 
     def update_surface(
         self, cell_id: str,
@@ -208,8 +210,10 @@ class PringleViewport(QRenderWidget):
             colormap, colormap_reversed,
         )
         if is_new and cell_id not in self._seen_cell_ids:
+            fit = not self._seen_cell_ids  # only auto-fit on first cell ever added
             self._seen_cell_ids.add(cell_id)
-            self._pr.fit_camera()
+            if fit:
+                self._pr.fit_camera()
 
     def update_arrows(
         self, cell_id: str,
@@ -220,8 +224,10 @@ class PringleViewport(QRenderWidget):
                                         colormap=colormap, colormap_reversed=colormap_reversed,
                                         vertex_colors=vertex_colors)
         if is_new and cell_id not in self._seen_cell_ids:
+            fit = not self._seen_cell_ids  # only auto-fit on first cell ever added
             self._seen_cell_ids.add(cell_id)
-            self._pr.fit_camera()
+            if fit:
+                self._pr.fit_camera()
 
     def remove_object(self, cell_id: str) -> None:
         self._pr.remove_object(cell_id)
@@ -620,6 +626,10 @@ class PringleWindow(QMainWindow):
         # until the user clicks the play button overlay.
         self._cell_list._session_trusted = False
         restore_cell_list(self._cell_list, data.get("cells", []))
+        # Pre-populate so that play-button evaluation never triggers fit_camera
+        # for cells that already exist in the session (camera position is restored below).
+        for cell in self._cell_list._cells:
+            self._viewport._seen_cell_ids.add(cell.cell_id)
         if data.get("grid"):
             from pringle.session import grid_config_from_dict
             cfg = grid_config_from_dict(data["grid"])
