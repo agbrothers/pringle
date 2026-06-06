@@ -937,6 +937,66 @@ class _IncrementalOrbitHandler:
 
 
 # ---------------------------------------------------------------------------
+# Orbit controller (patched subclass)
+# ---------------------------------------------------------------------------
+
+class _PringleOrbitController(gfx.OrbitController):
+    """OrbitController that fixes elevation orbit at non-zero azimuth.
+
+    Stock _update_rotate applies the elevation rotation to camera orientation
+    around hardcoded world-X, but applies it to camera position around the
+    actual world-space right vector. When azimuth != 0 these axes diverge and
+    the scene drifts or spins during vertical drags. Fix: use the world-space
+    right vector for both (BUG-178).
+    """
+
+    def _update_rotate(self, delta):
+        assert isinstance(delta, tuple) and len(delta) == 2
+
+        delta_azimuth, delta_elevation = delta
+        camera_state = self._get_camera_state()
+
+        position = camera_state["position"]
+        rotation = camera_state["rotation"]
+        up = camera_state["reference_up"]
+
+        forward = la.vec_transform_quat((0, 0, -1), rotation)
+
+        # Clamp elevation so camera cannot flip past vertical
+        elevation = la.vec_angle(forward, up) - 0.5 * np.pi
+        new_elevation = elevation + delta_elevation
+        bounds = -89 * np.pi / 180, 89 * np.pi / 180
+        if new_elevation < bounds[0]:
+            delta_elevation = bounds[0] - elevation
+        elif new_elevation > bounds[1]:
+            delta_elevation = bounds[1] - elevation
+
+        r_azimuth = la.quat_from_axis_angle(up, -delta_azimuth)
+        rot1 = rotation
+
+        if self._custom_target is not None:
+            # Use the camera's actual world-space right vector for elevation so
+            # position and orientation rotate around the same axis (fix for BUG-178).
+            right = la.vec_transform_quat((1, 0, 0), rot1)
+            r_elevation_world = la.quat_from_axis_angle(right, -delta_elevation)
+            rot2 = la.quat_mul(r_elevation_world, la.quat_mul(r_azimuth, rot1))
+
+            target_pos = self._custom_target
+            pos1_to_target = target_pos - position
+            pos1_to_target_rotated = la.vec_transform_quat(pos1_to_target, r_azimuth)
+            pos1_to_target_final = la.vec_transform_quat(pos1_to_target_rotated, r_elevation_world)
+            pos2 = target_pos - pos1_to_target_final
+        else:
+            r_elevation = la.quat_from_axis_angle((1, 0, 0), -delta_elevation)
+            rot2 = la.quat_mul(r_azimuth, la.quat_mul(rot1, r_elevation))
+            pos2target1 = self._get_target_vec(camera_state, rotation=rot1)
+            pos2target2 = self._get_target_vec(camera_state, rotation=rot2)
+            pos2 = position + pos2target1 - pos2target2
+
+        self._set_camera_state({"position": pos2, "rotation": rot2})
+
+
+# ---------------------------------------------------------------------------
 # Scene manager
 # ---------------------------------------------------------------------------
 
@@ -1003,7 +1063,7 @@ class PringleRenderer:
 
         # Orbit controller — _IncrementalOrbitHandler wires mouse/wheel events
         # using per-frame deltas so WASD and mouse orbit can run simultaneously.
-        self._controller = gfx.OrbitController(self._camera)
+        self._controller = _PringleOrbitController(self._camera)
         self._orbit_handler = _IncrementalOrbitHandler(
             self._controller, self._renderer, canvas
         )
