@@ -31,22 +31,22 @@ QPushButton#header_file_btn {
     font-size: 12px;
     padding: 4px 12px;
     background: transparent;
-    border: 1px solid #333;
-    border-radius: 10px;
+    border: 1px solid #222;
+    border-radius: 5px;
     min-width: 40px;
 }
 QPushButton#header_file_btn:hover  { color: #eee; border-color: #666; }
 QPushButton#header_file_btn:pressed { background: #222; }
 QPushButton#header_file_btn[modified="true"]  { color: #E9A15F; border-color: #E9A15F; }
-QPushButton#header_file_btn[modified="false"] { color: #888;    border-color: #333; }
+QPushButton#header_file_btn[modified="false"] { color: #888;    border-color: #222; }
 
 QPushButton#header_screenshot_btn {
     color: #888;
     font-size: 14px;
     padding: 4px 6px;
     background: transparent;
-    border: 1px solid #333;
-    border-radius: 10px;
+    border: 1px solid #222;
+    border-radius: 5px;
 }
 QPushButton#header_screenshot_btn:hover   { color: #eee; border-color: #666; }
 QPushButton#header_screenshot_btn:pressed { background: #222; }
@@ -350,7 +350,10 @@ AxisSettingsPopover QPushButton:pressed { background: #1a1a1a; }
 QFrame#play_overlay {
     background: rgba(18, 18, 18, 220);
     border: 1px solid #444;
-    border-radius: 10px;
+    border-radius: 5px;
+}
+QLabel#play_overlay_label {
+    background-color: transparent;
 }
 QPushButton#play_overlay_btn {
     color: #E9A15F;
@@ -358,7 +361,7 @@ QPushButton#play_overlay_btn {
     padding: 6px 20px;
     background: transparent;
     border: 1px solid #E9A15F;
-    border-radius: 10px;
+    border-radius: 5px;
 }
 QPushButton#play_overlay_btn:hover  { color: #eee; border-color: #aaa; }
 QPushButton#play_overlay_btn:pressed { background: #2a2a2a; }

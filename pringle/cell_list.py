@@ -31,6 +31,7 @@ class AxisConfig:
     x_min: float; x_max: float
     y_min: float; y_max: float
     z_min: float; z_max: float
+    n: int
 
 
 @dataclass
@@ -944,6 +945,7 @@ class CellListWidget(QWidget):
             x_min=float(grid_cfg.x_min), x_max=float(grid_cfg.x_max),
             y_min=float(grid_cfg.y_min), y_max=float(grid_cfg.y_max),
             z_min=float(grid_cfg.z_min), z_max=float(grid_cfg.z_max),
+            n=int(grid_cfg.n),
         )
         shared["cfg"] = cfg
         _cfg_before = (cfg.x_min, cfg.x_max, cfg.y_min, cfg.y_max, cfg.z_min, cfg.z_max)
@@ -1493,6 +1495,7 @@ class CellListWidget(QWidget):
             x_min=float(grid_cfg.x_min), x_max=float(grid_cfg.x_max),
             y_min=float(grid_cfg.y_min), y_max=float(grid_cfg.y_max),
             z_min=float(grid_cfg.z_min), z_max=float(grid_cfg.z_max),
+            n=int(grid_cfg.n),
         )
 
         # Give this eval pass a fresh camera state (FEAT-159).
