@@ -146,6 +146,59 @@ Old session files with boolean `scatter_as_line` or `scatter_as_spheres` flags a
 
 `z_min`/`z_max` control how the wireframe bounding box and axis overlays are drawn in the 3D scene. They do **not** affect expression evaluation (which only uses `x`, `y` grids). Changing them via the Axis Bounds panel and clicking "Apply Bounds" updates the overlay immediately without re-evaluating cells.
 
+## Python Script Export
+
+Sessions can also be exported as a standalone `.py` file via **Export** (Ctrl+Shift+E) or the header bar button. The exported script is valid, runnable Python that requires no Pringle installation.
+
+### What gets emitted
+
+| Cell type | Exported as |
+|---|---|
+| Slider | `name = value  # slider` (int when value is whole, float otherwise) |
+| Equation | Source in topological (DAG) order; `f(x,y) = expr` cells become `f = lambda x, y: expr` |
+| Recurrence | Allocation line, then initial conditions, then `for n in range(1, len(arr)):` loop |
+| Comment | `# ...` lines |
+| Folder | `# --- Folder Name ---` section header |
+
+### Preamble
+
+Only names actually referenced in the session are imported (detected via `get_free_names` AST analysis):
+
+- `import numpy as np` and `import math` — always
+- `from numpy import sin, cos, ...` — only names used, wrapped at 4 per line
+- `import numpy.random as random` — when `random` is used
+- `from scipy.special import ...` / `from scipy.linalg import ...` — when used
+
+### Spatial setup block
+
+When cells reference Pringle's runtime variables (`x`, `y`, `u`, `v`, `cfg`, `camera`), a setup block is emitted after the preamble:
+
+```python
+# --- Pringle spatial setup (from session grid config) ---
+import types
+cfg = types.SimpleNamespace(x_min=-5.0, x_max=5.0, ...)
+_x1d = np.linspace(cfg.x_min, cfg.x_max, cfg.n)
+_y1d = np.linspace(cfg.y_min, cfg.y_max, cfg.n)
+x, y = np.meshgrid(_x1d, _y1d, indexing='xy')
+```
+
+This block is omitted entirely when none of these names appear as free variables (e.g., a session with only `f(x,y) = expr` lambda cells, where `x`/`y` are lambda parameters, not free names).
+
+### Folder/comment placement (Option B)
+
+Non-evaluable cells cannot follow topological order. Placement rules:
+- **Folders** — anchored to the first evaluable member cell in topo order; the section header appears immediately before that cell in the script.
+- **Comments** — anchored to the next evaluable cell in visual order; the comment appears immediately before that cell in the script.
+- Unanchored cells (empty folders, trailing comments) are emitted at the end.
+
+### Trailing note
+
+Magic/renderer-local variable names (`z`, `y`, `xyz`, `points`, `vectors`) that were assigned in the session are listed in a trailing comment block noting they are plain numpy arrays outside Pringle.
+
+### Implementation
+
+All export logic lives in `pringle/export.py`. The `session.py` module handles only YAML save/load.
+
 ## Versioning
 
 The `version: 1` field enables future migration. `load_session` raises `ValueError` for unrecognised version numbers. Old sessions without `z_min`/`z_max` default to ±5.0.

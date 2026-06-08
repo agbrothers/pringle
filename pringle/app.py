@@ -269,7 +269,7 @@ class _PlayOverlay(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("play_overlay")
-        self.setFixedSize(300, 108)
+        self.setFixedSize(200, 108)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 18, 20, 14)
         layout.setSpacing(10)
@@ -280,7 +280,7 @@ class _PlayOverlay(QFrame):
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.clicked.connect(self.play_clicked)
 
-        label = QLabel("Trust and verify this code before running it.")
+        label = QLabel("Trust and verify this code\n before running it.")
         label.setObjectName("play_overlay_label")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         label.setWordWrap(True)
@@ -380,6 +380,7 @@ class PringleWindow(QMainWindow):
         self._header.new_requested.connect(self._on_new)
         self._header.open_requested.connect(self._on_open)
         self._header.save_requested.connect(self._on_save)
+        self._header.export_requested.connect(self._on_export_as_script)
         self._header.screenshot_requested.connect(self._save_image)
         self._header.settings_toggled.connect(self._on_settings_toggled)
         root_layout.addWidget(self._header)
@@ -487,6 +488,7 @@ class PringleWindow(QMainWindow):
             (QKeySequence("Ctrl+P"),          self._on_open),
             (QKeySequence.StandardKey.Save,   self._on_save),
             (QKeySequence("Ctrl+Shift+S"),    self._on_save_as),
+            (QKeySequence("Ctrl+Shift+E"),    self._on_export_as_script),
             (QKeySequence.StandardKey.Undo,   self._on_undo),
             (QKeySequence.StandardKey.Redo,   self._on_redo),
             (QKeySequence.StandardKey.Copy,   self._on_copy),
@@ -563,11 +565,13 @@ class PringleWindow(QMainWindow):
         )
 
         save_btn = QPushButton("Save")
+        save_btn.setObjectName("unsaved_save_btn")
         save_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         save_btn.setStyleSheet(_pill.format(c="#E9A15F", b="#E9A15F"))
 
         discard_btn = QPushButton("Discard")
+        discard_btn.setObjectName("unsaved_discard_btn")
         discard_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         discard_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         discard_btn.setStyleSheet(_pill.format(c="#888", b="#333"))
@@ -701,6 +705,25 @@ class PringleWindow(QMainWindow):
         )
         if path:
             self._write_session(path)
+
+    def _on_export_as_script(self) -> None:
+        if self._session_path:
+            default = str(Path(self._session_path).with_suffix(".py"))
+        else:
+            default = "session.py"
+        # Two filters triggers macOS's Format dropdown (same UX as the YAML save dialog).
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export as Python Script", default, "Python (*.py);;All Files (*)"
+        )
+        if not path:
+            return
+        if not path.lower().endswith(".py"):
+            path += ".py"
+        from pringle.export import export_as_script
+        try:
+            export_as_script(path, self._cell_list)
+        except Exception as exc:
+            QMessageBox.critical(self, "Export error", str(exc))
 
     def _save_image(self) -> None:
         from PIL import Image

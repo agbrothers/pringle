@@ -44,7 +44,7 @@ The crosshair makes the orbit pivot visible during WASD panning and mouse orbiti
 
 ## View Settings (Axis Settings Dialog)
 
-The header bar (`PringleHeaderBar`) spans the full window width above the left/right splitter. Its layout (left to right): logo · **PRINGLE** wordmark · **New** · **Open** · **Save** · **📷** (screenshot) · stretch · **⚙** (view settings). All buttons use a pill style (`border-radius: 10px`). The **Save** button text and border turn `#E9A15F` when the session has unsaved changes. The **📷** button saves a PNG snapshot of the current canvas frame; its border flashes `#E9A15F` briefly on click. Dismissing the header buttons is done via the ⚙ toggle.
+The header bar (`PringleHeaderBar`) spans the full window width above the left/right splitter. Its layout (left to right): logo · **PRINGLE** wordmark · **New** · **Open** · **Save** · **Export** · **📷** (screenshot) · stretch · **⚙** (view settings). All buttons use a pill style (`border-radius: 10px`). The **Save** button text and border turn `#E9A15F` when the session has unsaved changes. The **📷** button saves a PNG snapshot of the current canvas frame; its border flashes `#E9A15F` briefly on click. Dismissing the header buttons is done via the ⚙ toggle.
 
 Clicking the ⚙ gear icon in the top-right corner of the viewport opens a floating non-modal **Axis Settings dialog** (`AxisSettingsDialog`). It is not embedded in the left panel or below the viewport. Clicking ⚙ again or the dialog's X button closes it.
 
@@ -251,6 +251,7 @@ Selecting "Add Constraint" appends a constraint sub-cell below the primary cell,
 | `Ctrl+Shift+S` | Save As (open file dialog) |
 | `Ctrl+O` | Open session (file dialog) |
 | `Ctrl+N` | New empty session |
+| `Ctrl+Shift+E` | Export session as standalone Python script (native save dialog, defaults to same name as current session with `.py` extension) |
 | 📷 toolbar button | Save current canvas frame as PNG (native save dialog, defaults to `pringle_screenshot.png`) |
 | `Ctrl+Enter` / `Cmd+Enter` | Add new folder cell below focused cell (in the expression panel); force re-evaluate focused cell when focus is on the viewport |
 | `Shift+Enter` | Add new equation cell below focused cell (in the expression panel) |

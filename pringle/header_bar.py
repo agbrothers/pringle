@@ -25,6 +25,7 @@ class PringleHeaderBar(QWidget):
     new_requested        = pyqtSignal()
     open_requested       = pyqtSignal()
     save_requested       = pyqtSignal()
+    export_requested     = pyqtSignal()
     screenshot_requested = pyqtSignal()
     settings_toggled     = pyqtSignal(bool)   # checked state
 
@@ -66,19 +67,23 @@ class PringleHeaderBar(QWidget):
         row.addSpacing(16)
 
         # File buttons
-        self._new_btn  = QPushButton("New")
-        self._open_btn = QPushButton("Open")
-        self._save_btn = QPushButton("Save")
-        for btn in (self._new_btn, self._open_btn, self._save_btn):
+        self._new_btn    = QPushButton("New")
+        self._open_btn   = QPushButton("Open")
+        self._save_btn   = QPushButton("Save")
+        self._export_btn = QPushButton("Export")
+        for btn in (self._new_btn, self._open_btn, self._save_btn, self._export_btn):
             btn.setObjectName("header_file_btn")
             btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             row.addWidget(btn)
             row.addSpacing(4)
 
+        self._export_btn.setToolTip("Export session as standalone Python script (Ctrl+Shift+E)")
+
         self._new_btn.clicked.connect(self.new_requested)
         self._open_btn.clicked.connect(self.open_requested)
         self._save_btn.clicked.connect(self.save_requested)
+        self._export_btn.clicked.connect(self.export_requested)
 
         # Screenshot button
         self._screenshot_btn = QPushButton("📷")
