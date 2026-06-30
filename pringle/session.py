@@ -348,6 +348,7 @@ def restore_cell_list(
 
     # Single rebuild now that all cells have their final IDs
     cell_list._rebuild_namespace()
+    cell_list._update_last_cell()
 
     # Stop debounce timers that setPlainText started during cell creation.
     # Without this they fire ~300ms after load and mark the session modified.

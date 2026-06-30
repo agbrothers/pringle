@@ -29,7 +29,8 @@ from PyQt6.QtGui import QFontMetricsF, QKeyEvent, QTextCursor, QTextOption
 from pringle.style import CellStyle
 from pringle.cell_widget import ColorSwatchHandle, _move_line
 
-_COMMENT_COLOR = (0.133333, 0.133333, 0.133333, 1.0) 
+_COMMENT_COLOR = (0.1, 0.1, 0.1, 1.0) 
+# _COMMENT_COLOR = "#1a1a1a"
 
 # Strip a leading "# " or "#" from source text so the widget text area
 # only contains the comment body.
@@ -247,11 +248,11 @@ class CommentCellWidget(QWidget):
         del_btn.clicked.connect(lambda: self.delete_requested.emit(self.cell_id))
         body.addWidget(del_btn)
 
-        line = QFrame()
-        line.setObjectName("separator")
-        line.setFrameShape(QFrame.Shape.HLine)
-        line.setFixedHeight(1)
-        inner_v.addWidget(line)
+        # line = QFrame()
+        # line.setObjectName("separator")
+        # line.setFrameShape(QFrame.Shape.HLine)
+        # line.setFixedHeight(1)
+        # inner_v.addWidget(line)
 
     # ------------------------------------------------------------------
     # CellWidget-compatible interface

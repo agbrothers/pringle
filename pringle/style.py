@@ -26,7 +26,7 @@ def palette_color(index: int) -> tuple[float, float, float, float]:
     return PALETTE[index % len(PALETTE)]
 
 
-COLORMAPS: tuple[str, ...] = ("viridis", "plasma", "inferno", "hot", "hsv")
+COLORMAPS: tuple[str, ...] = ("viridis", "turbo", "inferno", "hot", "hsv")
 
 
 @dataclass

@@ -56,8 +56,9 @@ When Pringle opens a saved YAML session:
 1. **Load YAML** — restore all cell content, style, slider values, folder membership, and viewport/camera state from file (two-pass restore: Pass 1 creates cells, Pass 2 applies folder membership and collapse/visible states)
 2. **Restore RNG state** — each cell that previously had a pinned RNG state has `_pending_rng_state` populated from the session file so the first rebuild reproduces identical random draws
 3. **Single rebuild** — `_rebuild_namespace()` evaluates all cells in DAG order; each cell with a `_pending_rng_state` restores that state before evaluating so random draws are reproducible
-4. **Cancel debounce timers** — `setPlainText` during cell creation arms a 300 ms debounce timer on each cell widget; these are stopped immediately after the single rebuild so they cannot re-dirty the session after `_modified` is reset
-5. **First render** — renderer draws the scene
+4. **Update last-cell marker** — `_update_last_cell()` sets `property("last", True)` on the last visible cell so QSS can render a bottom border on it (FEAT-184); called after Pass 2 so folder collapse state is already applied
+5. **Cancel debounce timers** — `setPlainText` during cell creation arms a 300 ms debounce timer on each cell widget; these are stopped immediately after the single rebuild so they cannot re-dirty the session after `_modified` is reset
+6. **First render** — renderer draws the scene
 
 ---
 

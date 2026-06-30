@@ -57,7 +57,7 @@ from pringle.preprocess import is_slider_cell
 
 _MAX_UNDO = 50
 _SLOW_EVAL_MS = 100
-
+_COMMENT_COLOR = (0.1, 0.1, 0.1, 1.0) 
 
 # ---------------------------------------------------------------------------
 # Off-thread evaluation helpers (PERF-015)
@@ -463,7 +463,7 @@ class CellListWidget(QWidget):
 
         if style is None:
             if is_sl:
-                style = CellStyle(color=(0.13, 0.13, 0.13, 1.0))
+                style = CellStyle(color=_COMMENT_COLOR)
             else:
                 style = CellStyle(color=palette_color(self._cell_index))
                 self._cell_index += 1
@@ -522,6 +522,7 @@ class CellListWidget(QWidget):
                 if source and not self._skip_rebuild:
                     self._rebuild_namespace()
                 self._update_placeholder()
+                self._update_last_cell()
                 return cell
 
         # Append before the stretch
@@ -539,6 +540,7 @@ class CellListWidget(QWidget):
         if source and not self._skip_rebuild:
             self._rebuild_namespace()
         self._update_placeholder()
+        self._update_last_cell()
         return cell
 
     def add_comment_cell(
@@ -580,6 +582,7 @@ class CellListWidget(QWidget):
                     cell.focus()
                     QTimer.singleShot(0, lambda c=cell: self._scroll.ensureWidgetVisible(c))
                 self._update_placeholder()
+                self._update_last_cell()
                 return cell
 
         stretch_pos = self._layout.count() - 1
@@ -591,6 +594,7 @@ class CellListWidget(QWidget):
             cell.focus()
             QTimer.singleShot(0, lambda c=cell: self._scroll.ensureWidgetVisible(c))
         self._update_placeholder()
+        self._update_last_cell()
         return cell
 
     def add_folder(
@@ -620,12 +624,14 @@ class CellListWidget(QWidget):
                 self._cells.insert(idx + 1, folder)
                 self._layout.insertWidget(idx + 2, folder)
                 self._update_placeholder()
+                self._update_last_cell()
                 return folder
 
         stretch_pos = self._layout.count() - 1
         self._layout.insertWidget(stretch_pos, folder)
         self._cells.append(folder)
         self._update_placeholder()
+        self._update_last_cell()
         return folder
 
     def remove_cell(self, cell_id: str) -> None:
@@ -662,6 +668,7 @@ class CellListWidget(QWidget):
             self._on_cell_deleted(cell_id)
         self._rebuild_namespace()
         self._update_placeholder()
+        self._update_last_cell()
 
     def cell_sources(self) -> list[tuple[str, str]]:
         """Return (cell_id, source) pairs in visual order."""
@@ -863,6 +870,19 @@ class CellListWidget(QWidget):
 
     def _update_placeholder(self) -> None:
         self._placeholder.setVisible(len(self._cells) == 0)
+
+    def _update_last_cell(self) -> None:
+        """Mark the last visible cell with property last=True for border QSS (FEAT-184)."""
+        # isHidden() checks explicit hide() calls (folder collapse), not ancestor visibility,
+        # so this works correctly in headless tests and when the window is not yet shown.
+        last = next((c for c in reversed(self._cells) if not c.isHidden()), None)
+        qt_style = QApplication.style()
+        for cell in self._cells:
+            is_last = cell is last
+            if cell.property("last") != is_last:
+                cell.setProperty("last", is_last)
+                qt_style.unpolish(cell)
+                qt_style.polish(cell)
 
     def _focus_targets(self) -> list[tuple[str, "QWidget"]]:
         """Flat ordered list of (id, widget) for all focusable cell/subcell fields.
@@ -1182,6 +1202,7 @@ class CellListWidget(QWidget):
         self._folder_collapsed[folder_id] = collapsed
         for member in self._folder_members(folder_id):
             member.setVisible(not collapsed)
+        self._update_last_cell()
 
     def _on_folder_visibility_changed(self, folder_id: str, visible: bool) -> None:
         """Update renderer visibility for all member cells when folder eye is toggled."""
@@ -1263,7 +1284,7 @@ class CellListWidget(QWidget):
             return
 
         from dataclasses import replace as _replace
-        style = _replace(cell.style, color=(0.13, 0.13, 0.13, 1.0))
+        style = _replace(cell.style, color=_COMMENT_COLOR)
         slider = SliderWidget(
             name=sl_name, value=sl_val, style=style, cell_id=cell_id,
         )
@@ -1684,6 +1705,7 @@ class CellListWidget(QWidget):
         for i, c in enumerate(self._cells):
             self._layout.insertWidget(i + 1, c)  # +1 skips placeholder at index 0
         self._container.setUpdatesEnabled(True)
+        self._update_last_cell()
 
     def _move_cell(self, from_idx: int, to_idx: int) -> None:
         from pringle.folder_cell_widget import FolderCellWidget

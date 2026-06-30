@@ -110,7 +110,7 @@ class ColorSwatchHandle(QWidget):
         rect = self.rect()
 
         if getattr(self, "_cell_visible", True) is False:
-            painter.fillRect(rect, QColor("#222222"))
+            painter.fillRect(rect, QColor("#1a1a1a"))
             return
 
         if self._style.colormap:
@@ -633,7 +633,7 @@ class CellWidget(QWidget):
         content = QWidget()
         content.setObjectName("cell_content")  # active-cell band target (FEAT-148)
         content_layout = QVBoxLayout(content)
-        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setContentsMargins(0, 1, 1, 1)  # top/bottom inset exposes #cell_content border (theme.qss)
         content_layout.setSpacing(0)
         outer_h.addWidget(content, 1)
 
@@ -739,12 +739,12 @@ class CellWidget(QWidget):
 
         outer.addLayout(preview_row)
 
-        # Separator inside content_layout so the swatch spans the full cell height
-        line = QFrame()
-        line.setObjectName("separator")
-        line.setFrameShape(QFrame.Shape.HLine)
-        line.setFixedHeight(1)
-        content_layout.addWidget(line)
+        # # Separator inside content_layout so the swatch spans the full cell height
+        # line = QFrame()
+        # line.setObjectName("separator")
+        # line.setFrameShape(QFrame.Shape.HLine)
+        # line.setFixedHeight(1)
+        # content_layout.addWidget(line)
 
     # ------------------------------------------------------------------
     # Public API

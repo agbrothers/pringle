@@ -422,7 +422,7 @@ class SliderWidget(QWidget):
         content = QWidget()
         content.setObjectName("cell_content")  # active-cell band target (FEAT-148)
         outer = QVBoxLayout(content)
-        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setContentsMargins(0, 1, 1, 1)  # top/bottom inset exposes #cell_content border (theme.qss)
         outer.setSpacing(2)
         outer_h.addWidget(content, 1)
 
@@ -531,12 +531,12 @@ class SliderWidget(QWidget):
             _field.new_cell_requested.connect(lambda: self.enter_pressed.emit(self.cell_id))
             _field.folder_requested.connect(lambda: self.new_folder_requested.emit(self.cell_id))
 
-        # Separator inside content so the swatch spans the full cell height
-        line = QFrame()
-        line.setObjectName("separator")
-        line.setFrameShape(QFrame.Shape.HLine)
-        line.setFixedHeight(1)
-        outer.addWidget(line)
+        # # Separator inside content so the swatch spans the full cell height
+        # line = QFrame()
+        # line.setObjectName("separator")
+        # line.setFrameShape(QFrame.Shape.HLine)
+        # line.setFixedHeight(1)
+        # outer.addWidget(line)
 
     # ------------------------------------------------------------------
     # Public API

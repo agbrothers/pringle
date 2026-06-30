@@ -8,6 +8,8 @@
    for tunable colours: pringle.theme.load_stylesheet() substitutes each @name
    token below at load time, and tests read the same values via
    pringle.theme.theme_var(). To retune a colour, edit it here only. */
+/* @var cell-bg:        #111111; */
+/* @var cell-border:    #1a1a1a; */
 /* @var active-cell-bg: #181818; */
 
 /* ── Global base ─────────────────────────────────────────────────── */
@@ -32,7 +34,7 @@ QPushButton#header_file_btn {
     padding: 4px 12px;
     background: transparent;
     border: 1px solid #222;
-    border-radius: 5px;
+    border-radius: 1px;
     min-width: 40px;
 }
 QPushButton#header_file_btn:hover  { color: #eee; border-color: #666; }
@@ -42,11 +44,11 @@ QPushButton#header_file_btn[modified="false"] { color: #888;    border-color: #2
 
 QPushButton#header_screenshot_btn {
     color: #888;
-    font-size: 14px;
+    font-size: 8;
     padding: 4px 6px;
     background: transparent;
     border: 1px solid #222;
-    border-radius: 5px;
+    border-radius: 1px;
 }
 QPushButton#header_screenshot_btn:hover   { color: #eee; border-color: #666; }
 QPushButton#header_screenshot_btn:pressed { background: #222; }
@@ -73,6 +75,13 @@ DragHandle:hover { color: #aaa; }
    scoped under #cell_content so it cannot leak into the cell's pop-ups (style
    popover, colour picker), which are parented to the cell root — a sibling of
    #cell_content. The swatch/drag-handle column keeps its own colour. */
+CellWidget #cell_content,
+SliderWidget #cell_content,
+CommentCellWidget #cell_content { background: @cell-bg; border-top: 1px solid @cell-border; border-right: 1px solid @cell-border; border-radius: 0px; }
+CellWidget #cell_content QWidget,
+SliderWidget #cell_content QWidget,
+CommentCellWidget #cell_content QWidget { background: @cell-bg; }
+
 CellWidget[active="true"] #cell_content,
 CellWidget[active="true"] #cell_content QWidget,
 SliderWidget[active="true"] #cell_content,
@@ -81,6 +90,12 @@ CommentCellWidget[active="true"] #cell_content,
 CommentCellWidget[active="true"] #cell_content QWidget { background: @active-cell-bg; }
 /* FolderCellWidget intentionally excluded: its #222222 card must not change
    colour when the rename QLineEdit gains focus. */
+
+/* Bottom border on the last visible cell only (FEAT-184) */
+CellWidget[last="true"] #cell_content,
+SliderWidget[last="true"] #cell_content,
+CommentCellWidget[last="true"] #cell_content,
+FolderCellWidget[last="true"] #cell_content { border-bottom: 1px solid @cell-border; }
 
 /* ── Cell text edit ──────────────────────────────────────────────── */
 CellTextEdit { border: none; background: transparent; }
@@ -113,12 +128,13 @@ CellWidget QPushButton {
 CellWidget QPushButton:hover { color: #bbb; }
 
 /* ── Separator lines ─────────────────────────────────────────────── */
-QFrame#separator  { color: #1f1f1f; max-height: 1px; }
+QFrame#separator  { color: transparent; max-height: 1px; }
+/* QFrame#separator  { color: #111111; max-height: 2px; } */
 
 /* ── Cell list toolbar ────────────────────────────────────────────── */
 QWidget#cell_toolbar {
     background: #111111;
-    border-bottom: 1px solid #1f1f1f;
+    border-bottom: 1px solid #111111;
 }
 QToolButton#toolbar_add_btn {
     color: #444;
@@ -241,7 +257,7 @@ QPushButton#folder_del:hover { color: #ccc; }
 QFrame#folder_sep { color: #222222; max-height: 1px; }
 
 /* ── Comment cell ─────────────────────────────────────────────────── */
-CommentCellWidget { background: #111111; }
+CommentCellWidget { background: @cell-bg; }
 QPlainTextEdit#comment_edit {
     background: transparent;
     color: #4a5260;
@@ -366,3 +382,28 @@ QPushButton#play_overlay_btn {
 QPushButton#play_overlay_btn:hover  { color: #eee; border-color: #aaa; }
 QPushButton#play_overlay_btn:pressed { background: #2a2a2a; }
 QLabel#play_overlay_label { color: #666; font-size: 11px; }
+
+/* Unsaved changes modal — shown when a session is closed without saving */
+QPushButton#unsaved_save_btn {
+    color: #E9A15F;
+    font-size: 12px;
+    padding: 4px 12px;
+    background: transparent;
+    border: 1px solid #E9A15F;
+    border-radius: 5px;
+    min-width: 40px;
+}
+QPushButton#unsaved_save_btn:hover  { color: #eee; border-color: #666; }
+QPushButton#unsaved_save_btn:pressed { background: #222; }
+
+QPushButton#unsaved_discard_btn {
+    color: #222;
+    font-size: 12px;
+    padding: 4px 12px;
+    background: transparent;
+    border: 1px solid #222;
+    border-radius: 5px;
+    min-width: 40px;
+}
+QPushButton#unsaved_discard_btn:hover  { color: #eee; border-color: #666; }
+QPushButton#unsaved_discard_btn:pressed { background: #222; }

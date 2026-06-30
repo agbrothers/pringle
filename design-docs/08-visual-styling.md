@@ -115,6 +115,28 @@ Opacity < 1.0 is fully supported via **Weighted Blended OIT (WBOIT)**. When `opa
 
 `alpha_mode="auto"` (the default when `opacity == 1.0`) uses standard depth write for correct z-occlusion of opaque geometry.
 
+## Panel Appearance Knobs
+
+Tunable colors for the cell panel live in two places:
+
+**`theme.qss` `@var` declarations** — single source of truth for the panel background/border palette. Edit these to re-skin the panel without touching Python:
+
+| Variable | Controls |
+|---|---|
+| `@cell-bg` | Background fill of all cell types (`CellWidget`, `SliderWidget`, `CommentCellWidget`) |
+| `@cell-border` | Border color; top + right borders on all cells, plus bottom border on the last visible cell |
+| `@active-cell-bg` | Background of the focused/active cell (FEAT-148) |
+
+**Cell swatch colors:**
+
+| Knob | Location |
+|---|---|
+| Equation cell swatch (hidden/off state) | `ColorSwatchHandle.paintEvent` in `cell_widget.py` — hardcoded `#222222` |
+| Slider cell default swatch color | `add_cell()` and `_maybe_morph_to_slider()` in `cell_list.py` — `CellStyle(color=(r, g, b, 1.0))` |
+| Equation cell default swatch colors | `palette_color()` cycle in `style.py` |
+
+**Last-cell bottom border (`[last="true"]`, FEAT-184):** All cells render only a top and right border; the bottom border is suppressed to avoid a doubled-line between adjacent cells (bottom of cell N + top of cell N+1 would be 2 px). The last *visible* cell gets a `last=True` Qt dynamic property set by `_update_last_cell()` in `cell_list.py`, which QSS matches to add a `border-bottom` only on that widget. `_update_last_cell()` is called after every add/remove/move/indent/outdent/folder-collapse and once after session load (post–Pass 2). Visibility is determined by `not cell.isHidden()` — tracks explicit `setVisible(False)` calls from folder collapse, not ancestor render state.
+
 ## Session Persistence
 
 `CellStyle` is serialized alongside the cell's expression content in the session file (JSON). When a session is loaded, styles are restored and applied to the visual objects before the first render.
