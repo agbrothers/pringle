@@ -27,9 +27,9 @@ cells:
 - id: 64bf0ce3-dd1f-42c6-a1f3-d94ecb30d068
   style:
     color:
-    - 0.133333
-    - 0.133333
-    - 0.133333
+    - 0.1
+    - 0.1
+    - 0.1
     - 1.0
     opacity: 1.0
     line_width: 0.05

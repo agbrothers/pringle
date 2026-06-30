@@ -186,9 +186,9 @@ cells:
 - id: 31164d24-7d45-4d80-b6af-82dec5c45f0e
   style:
     color: &id001
-    - 0.133333
-    - 0.133333
-    - 0.133333
+    - 0.1
+    - 0.1
+    - 0.1
     - 1.0
     opacity: 1.0
     line_width: 0.05

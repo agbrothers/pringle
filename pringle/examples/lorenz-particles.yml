@@ -163,10 +163,10 @@ cells:
   folder_id: 53079b25-6819-49cd-821d-1d5fd81abbcf
 - id: 6a473971-7dff-4340-8d02-6796194583bd
   style:
-    color:
-    - 0.133333
-    - 0.133333
-    - 0.133333
+    color: &id001
+    - 0.1
+    - 0.1
+    - 0.1
     - 1.0
     opacity: 1.0
     line_width: 0.05
@@ -189,11 +189,7 @@ cells:
   sub_cells: []
 - id: 1867a669-deb3-4fd2-96c7-8c699dcc16a5
   style:
-    color:
-    - 0.133333
-    - 0.133333
-    - 0.133333
-    - 1.0
+    color: *id001
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
@@ -215,11 +211,7 @@ cells:
   sub_cells: []
 - id: 6a77ee56-e881-44f7-852e-879856958c81
   style:
-    color:
-    - 0.133333
-    - 0.133333
-    - 0.133333
-    - 1.0
+    color: *id001
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
@@ -241,11 +233,7 @@ cells:
   sub_cells: []
 - id: 4b81e855-6688-49ff-9acb-7e93c6f419c4
   style:
-    color:
-    - 0.133333
-    - 0.133333
-    - 0.133333
-    - 1.0
+    color: *id001
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
@@ -303,11 +291,7 @@ cells:
   folder_id: 856e61ba-4577-4bac-af9f-b64a5c676df0
 - id: 3d0d0d26-be4e-4376-b3db-e54839b361d3
   style:
-    color:
-    - 0.133333
-    - 0.133333
-    - 0.133333
-    - 1.0
+    color: *id001
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
@@ -329,11 +313,7 @@ cells:
   sub_cells: []
 - id: 99f66037-49c4-4b42-a943-3ce880e6b96a
   style:
-    color:
-    - 0.133333
-    - 0.133333
-    - 0.133333
-    - 1.0
+    color: *id001
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1

@@ -47,10 +47,10 @@ cells:
   sub_cells: []
 - id: 08000001-0000-4000-8000-000000000003
   style:
-    color:
-    - 0.133333
-    - 0.133333
-    - 0.133333
+    color: &id001
+    - 0.1
+    - 0.1
+    - 0.1
     - 1.0
     opacity: 1.0
     line_width: 0.05
@@ -73,11 +73,7 @@ cells:
   sub_cells: []
 - id: 08000001-0000-4000-8000-000000000004
   style:
-    color:
-    - 0.133333
-    - 0.133333
-    - 0.133333
-    - 1.0
+    color: *id001
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
@@ -99,11 +95,7 @@ cells:
   sub_cells: []
 - id: 08000001-0000-4000-8000-000000000005
   style:
-    color:
-    - 0.133333
-    - 0.133333
-    - 0.133333
-    - 1.0
+    color: *id001
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1

@@ -1,0 +1,461 @@
+version: 1
+grid:
+  x_min: -5.0
+  x_max: 5.0
+  y_min: -5.0
+  y_max: 5.0
+  z_min: -1.5
+  z_max: 0.5
+  n: 128
+cells:
+- id: 4c30a93d-9b49-4ef1-adb6-c1f8fb05c2ba
+  style:
+    color:
+    - 0.55
+    - 0.55
+    - 0.55
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: folder
+  name: PARAMETERS
+  collapsed: false
+  visible: true
+  sub_cells: []
+- id: 5ac6e2ad-8e6b-4483-8825-2e94308a9c27
+  style:
+    color: &id001
+    - 0.1
+    - 0.1
+    - 0.1
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 4c30a93d-9b49-4ef1-adb6-c1f8fb05c2ba
+  type: slider
+  source: k = 400.0
+  name: k
+  value: 400.0
+  min_val: 50.0
+  max_val: 600.0
+  step: 50.0
+  is_playing: false
+  anim_mode: pingpong
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+- id: 0729b452-7d33-4784-9fe6-b347f6183f6e
+  style:
+    color: *id001
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 4c30a93d-9b49-4ef1-adb6-c1f8fb05c2ba
+  type: slider
+  source: T = 100.0
+  name: T
+  value: 100.0
+  min_val: 10.0
+  max_val: 200.0
+  step: 10.0
+  is_playing: false
+  anim_mode: pingpong
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+- id: 32b75940-cb4a-47c9-8d55-44da61be502c
+  style:
+    color: *id001
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 4c30a93d-9b49-4ef1-adb6-c1f8fb05c2ba
+  type: slider
+  source: β = 4.0
+  name: β
+  value: 4.0
+  min_val: 0.5
+  max_val: 10.0
+  step: 0.5
+  is_playing: false
+  anim_mode: pingpong
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+- id: 726b0a72-eac7-4b8e-bde0-dc534784db3a
+  style:
+    color: *id001
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 4c30a93d-9b49-4ef1-adb6-c1f8fb05c2ba
+  type: slider
+  source: lr = 0.05
+  name: lr
+  value: 0.05
+  min_val: 0.005
+  max_val: 0.5
+  step: 0.005
+  is_playing: false
+  anim_mode: pingpong
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+- id: a0b5c18b-3d57-43b0-9c9c-48aaf5766642
+  style:
+    color:
+    - 0.55
+    - 0.55
+    - 0.55
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: folder
+  name: POTENTIAL FIELD
+  collapsed: false
+  visible: true
+  sub_cells: []
+- id: 999db3d7-2ca0-4b96-a92b-b169adf0b61c
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# log-sum-exp attraction field from k source points in [-4,4]^2
+
+    # E(v) = -β_inv * logsumexp(β * D(sources, v)) where D uses squared-distance'
+  folder_id: a0b5c18b-3d57-43b0-9c9c-48aaf5766642
+- id: 8eb9d8f7-33d6-4d0b-ad21-eed5b05052fb
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.12
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: a0b5c18b-3d57-43b0-9c9c-48aaf5766642
+  type: equation
+  source: sources = random.random((k, 2)) * 8 - 4
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 4c737f32-2a13-471d-94a1-d05a66c25a98
+  style:
+    color:
+    - 0.1
+    - 0.65
+    - 0.75
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: a0b5c18b-3d57-43b0-9c9c-48aaf5766642
+  type: equation
+  source: D(M, v) = -(sum(M**2, axis=1)[:,None] + sum(v**2, axis=0)[None,:] - 2*(M@v))
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 1184304d-e7e0-45b7-8515-a8e25fc178b3
+  style:
+    color:
+    - 0.13
+    - 0.13
+    - 0.13
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: a0b5c18b-3d57-43b0-9c9c-48aaf5766642
+  type: equation
+  source: β_inv = 1/β
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 15148a98-e464-4d16-b917-8fe794b51075
+  style:
+    color:
+    - 0.9
+    - 0.3
+    - 0.65
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: a0b5c18b-3d57-43b0-9c9c-48aaf5766642
+  type: equation
+  source: E(v) = -β_inv * logsumexp(β * D(sources, v), axis=0)
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 82ea00d9-962c-4d7d-9644-1e4c99f9b83b
+  style:
+    color:
+    - 0.13
+    - 0.13
+    - 0.13
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: a0b5c18b-3d57-43b0-9c9c-48aaf5766642
+  type: equation
+  source: grid_pts = array([x, y]).reshape(2, -1)
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 1ca14164-214b-4ef1-b008-933710397640
+  style:
+    color:
+    - 0.13
+    - 0.13
+    - 0.13
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: a0b5c18b-3d57-43b0-9c9c-48aaf5766642
+  type: equation
+  source: grid_shape = x.shape
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 174d3bf4-938a-4d5a-a52d-e7933fd37e80
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 0.85
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: viridis
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: a0b5c18b-3d57-43b0-9c9c-48aaf5766642
+  type: equation
+  source: z = E(grid_pts).reshape(*grid_shape)
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: 266a05ce-adf1-4d91-8dde-c5e06a83b1e8
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.12
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: a0b5c18b-3d57-43b0-9c9c-48aaf5766642
+  type: equation
+  source: sources_3d = concatenate((sources, E(sources.T)[:,None]), axis=1)
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: 71479e11-8c0f-45b6-be25-a4a4f405292b
+  style:
+    color:
+    - 0.55
+    - 0.55
+    - 0.55
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: folder
+  name: TRAJECTORIES
+  collapsed: false
+  visible: true
+  sub_cells: []
+- id: 1ff5359d-07c6-48ed-afbe-5bf2ea7d9f17
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# gradient descent on E: T steps, k particles
+
+    # traj and traj_3d are data-mode (PERF-016 regression targets)
+
+    # Before fix:  ~1-2 s per add/remove cell
+
+    # After fix:   skipped when upstream unchanged'
+  folder_id: 71479e11-8c0f-45b6-be25-a4a4f405292b
+- id: 6700e52f-c5b3-42a0-bed4-1e04bab763cf
+  style:
+    color:
+    - 0.5
+    - 0.35
+    - 0.2
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 71479e11-8c0f-45b6-be25-a4a4f405292b
+  type: equation
+  source: W(M, v) = exp(β * D(M, v) - logsumexp(β * D(M, v), axis=0))
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 5d5c7023-f24f-4170-9b1e-31126aaa91b1
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 71479e11-8c0f-45b6-be25-a4a4f405292b
+  type: equation
+  source: grad_E(M, v) = 2 * (v - M.T @ W(M, v))
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 6b6d64ce-93b3-460e-889f-eecf50d60d10
+  style:
+    color:
+    - 0.2
+    - 0.7
+    - 0.3
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 71479e11-8c0f-45b6-be25-a4a4f405292b
+  type: equation
+  source: traj = zeros((T, k, 2))
+  visible: false
+  sub_cells:
+  - type: recursion
+    source: traj[n] = traj[n-1] - lr * grad_E(sources, traj[n-1].T).T
+  - type: initial_condition
+    source: traj[0] = random.random((k, 2)) * 10 - 5
+  rng_seed: 7
+- id: f3756946-1fab-4528-a49c-70327d92c0fe
+  style:
+    color:
+    - 0.2
+    - 0.7
+    - 0.3
+    - 1.0
+    opacity: 0.6
+    line_width: 0.03
+    point_size: 0.06
+    scatter_render_mode: line
+    colormap: hot
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 71479e11-8c0f-45b6-be25-a4a4f405292b
+  type: equation
+  source: "traj_3d = concatenate((\n    traj,\n    E(traj.reshape(-1, 2).T).reshape(T,\
+    \ k, 1) + 0.03,\n), axis=-1).transpose(1, 0, 2)"
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+view:
+  show_axes: true
+  show_bbox: true
+  show_crosshair: false
+  show_light_bg: false
+  show_shadow: false
+  shadow_opacity: 0.5
+  camera_position:
+  - 0.0
+  - -14.0
+  - 9.0
+  orbit_target:
+  - 0.0
+  - 0.0
+  - -0.5

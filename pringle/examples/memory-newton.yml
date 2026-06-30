@@ -90,9 +90,9 @@ cells:
 - id: 407da943-4edc-464a-be48-531d006cc408
   style:
     color:
-    - 0.85
-    - 0.22
-    - 0.22
+    - 0.20085451006889343
+    - 0.5066300630569458
+    - 0.9731593728065491
     - 1.0
     opacity: 1.0
     line_width: 0.15
@@ -182,9 +182,9 @@ cells:
     normalize_arrows: false
   folder_id: 8240fc8f-6c68-402b-846b-1e9e0d6d4e14
   type: slider
-  source: p_y = -3.52
+  source: p_y = -3.0
   name: p_y
-  value: -3.52
+  value: -3.0
   min_val: -6.0
   max_val: 10.0
   step: 0.16
@@ -208,9 +208,9 @@ cells:
     normalize_arrows: false
   folder_id: 8240fc8f-6c68-402b-846b-1e9e0d6d4e14
   type: slider
-  source: p_x = 0.9520000000000001
+  source: p_x = -1.8
   name: p_x
-  value: 0.9520000000000001
+  value: -1.8
   min_val: -3.6
   max_val: 10.0
   step: 0.136
@@ -253,11 +253,11 @@ cells:
     normalize_arrows: false
   folder_id: 4a5246fd-7acd-4225-8bf4-142e31dd506c
   type: slider
-  source: β = 2.0
+  source: β = 2.06
   name: β
-  value: 2.0
+  value: 2.06
   min_val: 0.15
-  max_val: 6.0
+  max_val: 10.0
   step: 0.02
   is_playing: false
   anim_mode: pingpong
@@ -339,7 +339,7 @@ cells:
     normalize_arrows: false
   folder_id: 4a5246fd-7acd-4225-8bf4-142e31dd506c
   type: equation
-  source: E(v) = -β_inv * logsumexp(β * S(M, v), axis=0)
+  source: E(q) = -β_inv * logsumexp(β * S(M, q), axis=0)
   visible: false
   sub_cells: []
   rng_seed: 0
@@ -481,7 +481,7 @@ cells:
     normalize_arrows: false
   folder_id: 02debaa2-7e09-43e1-a167-ec41fd80c073
   type: equation
-  source: 'InvDistSq(M[0], M[1]) '
+  source: InvDistSq(M[0], M[1])
   visible: false
   sub_cells: []
   rng_seed: 0
@@ -501,7 +501,7 @@ cells:
     normalize_arrows: false
   folder_id: 02debaa2-7e09-43e1-a167-ec41fd80c073
   type: equation
-  source: 'InvDist(M[0], M[1]) '
+  source: InvDist(M[0], M[1])
   visible: false
   sub_cells: []
   rng_seed: 0
@@ -560,7 +560,7 @@ cells:
     normalize_arrows: false
   folder_id: cff87070-04f4-47a7-af6e-7a903048a4cd
   type: equation
-  source: d_InvDistSqBatch(M, v) = -(M[..., None] - v[None, ...])[..., 0]
+  source: d_InvDistSqBatch(M, v) = - (M[..., None] - v[None, ...])[..., 0]
   visible: false
   sub_cells: []
   rng_seed: 0
@@ -708,7 +708,7 @@ cells:
     source: path_xy[n] = path_xy[n-1] - η * dE(M, path_xy[n-1][:, None])
   - type: initial_condition
     source: path_xy[0] = p_xy
-  rng_seed: 0
+  rng_seed: 8
 - id: 14d23b5b-cfb4-4602-880f-ae325bceca96
   style:
     color:
@@ -748,6 +748,193 @@ cells:
   source: path = concatenate((path_xy, path_E[:, None]), axis=1)
   visible: true
   sub_cells: []
+  rng_seed: 1
+- id: 663d195a-f80b-421c-921e-7e072264cdfd
+  style:
+    color:
+    - 0.5
+    - 0.35
+    - 0.2
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: dda72d9c-f9e0-4d0f-9a51-e809c6420b8c
+  type: equation
+  source: newton_xy = zeros((200, 2))
+  visible: false
+  sub_cells:
+  - type: recursion
+    source: "newton_xy[n] = newton_xy[n-1] - \\\n    E(newton_xy[n-1][:, None]) /\
+      \ dE(M, newton_xy[n-1][:, None])"
+  - type: initial_condition
+    source: newton_xy[0] = p_xy
+  rng_seed: 6
+- id: cdcdee3d-45f5-439c-86d5-bdcefad0eff5
+  style:
+    color:
+    - 0.1
+    - 0.65
+    - 0.75
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: dda72d9c-f9e0-4d0f-9a51-e809c6420b8c
+  type: equation
+  source: newton_E = E(newton_xy.T)
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 577c1866-8d2d-41a8-821f-9d51e5f3d62b
+  style:
+    color:
+    - 0.9
+    - 0.3
+    - 0.65
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: line
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: dda72d9c-f9e0-4d0f-9a51-e809c6420b8c
+  type: equation
+  source: newton = concatenate((newton_xy, newton_E[:, None]), axis=1)
+  visible: false
+  sub_cells: []
+  rng_seed: 6
+- id: 983d94f0-a7bb-4011-aa8a-c1c7b5dd56c8
+  style:
+    color:
+    - 0.5
+    - 0.35
+    - 0.2
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: dda72d9c-f9e0-4d0f-9a51-e809c6420b8c
+  type: equation
+  source: 0.5 + 0.5*0.5 + 0.5*0.5*0.5
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: ca8fb62a-f9fd-4edf-9d26-63a62a34d62c
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: dda72d9c-f9e0-4d0f-9a51-e809c6420b8c
+  type: equation
+  source: 0.5 + 0.5**2 - 0.5**3
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: e6eb4682-3486-4eb8-8c01-f6fe2637615b
+  style:
+    color: *id001
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: dda72d9c-f9e0-4d0f-9a51-e809c6420b8c
+  type: slider
+  source: b_0 = 10.0
+  name: b_0
+  value: 10.0
+  min_val: 0.0
+  max_val: 10.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+- id: 7ffa7659-aa6b-48f9-b277-e9b800476b88
+  style:
+    color:
+    - 0.85
+    - 0.55
+    - 0.05
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: dda72d9c-f9e0-4d0f-9a51-e809c6420b8c
+  type: equation
+  source: b_1 = b_0*0.5**1
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: b3a69fe3-8b5d-46d6-8874-9af694729457
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: dda72d9c-f9e0-4d0f-9a51-e809c6420b8c
+  type: equation
+  source: b_2 = b_0*0.5**1 + b_0*0.5**2
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 6f2ffd6a-a244-425d-806d-5393f865c755
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: dda72d9c-f9e0-4d0f-9a51-e809c6420b8c
+  type: equation
+  source: b_3 = b_0*0.5**1 + b_0*0.5**2 + b_0*0.5**3
+  visible: false
+  sub_cells: []
   rng_seed: 0
 - id: b29f380a-521b-4261-a1d9-cf6c466bb916
   style:
@@ -765,7 +952,7 @@ cells:
     normalize_arrows: false
   type: folder
   name: UTILS
-  collapsed: false
+  collapsed: true
   visible: true
   sub_cells: []
 - id: aa4cdd8c-794c-4caa-b5ed-c8cf9c0c9be3
@@ -858,10 +1045,10 @@ view:
   show_shadow: false
   shadow_opacity: 0.5
   camera_position:
-  - -1.1952706908385697
-  - 9.51942672785875
-  - 14.647208588556609
+  - -7.691253470647255
+  - 3.5918382033496865
+  - 11.276739523230203
   orbit_target:
-  - 0.0
-  - 0.0
+  - 0.08434305340051651
+  - -0.576179563999176
   - 0.0

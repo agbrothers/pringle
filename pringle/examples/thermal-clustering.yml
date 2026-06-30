@@ -1,0 +1,1416 @@
+version: 1
+grid:
+  x_min: -6.0
+  x_max: 6.0
+  y_min: -6.0
+  y_max: 6.0
+  z_min: -10.0
+  z_max: 10.0
+  n: 128
+cells:
+- id: 8f3f5783-49ae-46c9-a776-651682ed78d2
+  style:
+    color:
+    - 0.55
+    - 0.55
+    - 0.55
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: folder
+  name: DATA
+  collapsed: false
+  visible: true
+  sub_cells: []
+- id: 528d8787-599d-412c-b34c-bd70034813c5
+  style:
+    color:
+    - 0.8470588235294118
+    - 0.2196078431372549
+    - 0.2196078431372549
+    - 1.0
+    opacity: 1.0
+    line_width: 0.2
+    point_size: 0.2
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 8f3f5783-49ae-46c9-a776-651682ed78d2
+  type: equation
+  source: M = random.random((50, 2)) * 6 - 3
+  visible: false
+  sub_cells: []
+  rng_seed: 4
+- id: 116c66e6-0b2d-4db2-9a30-e296f6923b6f
+  style:
+    color:
+    - 0.8470588235294118
+    - 0.2196078431372549
+    - 0.2196078431372549
+    - 1.0
+    opacity: 1.0
+    line_width: 0.25
+    point_size: 0.25
+    scatter_render_mode: spheres
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 8f3f5783-49ae-46c9-a776-651682ed78d2
+  type: equation
+  source: M_ = array([[1,1], [-1,-1], [-1.5,-1.5]])
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 33157602-ffa7-48ca-9036-f8a8fbc611a5
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 8f3f5783-49ae-46c9-a776-651682ed78d2
+  type: equation
+  source: M_z = E(M.T, β, β_inv)
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 407da943-4edc-464a-be48-531d006cc408
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.2
+    point_size: 0.2
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 8f3f5783-49ae-46c9-a776-651682ed78d2
+  type: equation
+  source: M_e = concatenate((M, M_z[:,None]), axis=1)
+  visible: true
+  sub_cells: []
+  rng_seed: 1
+- id: 4a5246fd-7acd-4225-8bf4-142e31dd506c
+  style:
+    color:
+    - 0.55
+    - 0.55
+    - 0.55
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: folder
+  name: ENERGY
+  collapsed: true
+  visible: false
+  sub_cells: []
+- id: c02f0b7e-b696-45be-abc1-1be6ea03b7e3
+  style:
+    color: &id001
+    - 0.1
+    - 0.1
+    - 0.1
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 4a5246fd-7acd-4225-8bf4-142e31dd506c
+  type: slider
+  source: β = 10.0
+  name: β
+  value: 10.0
+  min_val: 0.15
+  max_val: 10.0
+  step: 0.02
+  is_playing: false
+  anim_mode: pingpong
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+- id: cf894430-9ecf-4e06-98b1-7ee6cf714784
+  style:
+    color:
+    - 0.1
+    - 0.65
+    - 0.75
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 4a5246fd-7acd-4225-8bf4-142e31dd506c
+  type: equation
+  source: F = exp
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 19adc578-975b-480d-b78d-33767c844e83
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 4a5246fd-7acd-4225-8bf4-142e31dd506c
+  type: equation
+  source: Q = log
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 300bbaab-5e9e-4920-8a27-c3b466ee9d6d
+  style:
+    color:
+    - 0.85
+    - 0.55
+    - 0.05
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 4a5246fd-7acd-4225-8bf4-142e31dd506c
+  type: equation
+  source: S = InvDistSqBatch
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 51201238-835c-4660-abee-a2ed5c559ed5
+  style:
+    color:
+    - 0.9
+    - 0.3
+    - 0.65
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 4a5246fd-7acd-4225-8bf4-142e31dd506c
+  type: equation
+  source: E(v, β, β_inv) = -β_inv * logsumexp(β * S(M, v), axis=0)
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 24a85e7f-9eca-4db7-8869-b73de4e0f1fb
+  style:
+    color:
+    - 0.2196078431372549
+    - 0.4
+    - 0.8784313725490196
+    - 1.0
+    opacity: 0.95
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: hsv
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 4a5246fd-7acd-4225-8bf4-142e31dd506c
+  type: equation
+  source: z = 1*E(grid, β, β_inv).reshape(*shape)+0.1
+  visible: true
+  sub_cells:
+  - type: constraint
+    source: z < 2
+  rng_seed: 0
+- id: 02debaa2-7e09-43e1-a167-ec41fd80c073
+  style:
+    color:
+    - 0.55
+    - 0.55
+    - 0.55
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: folder
+  name: SIMILARITY
+  collapsed: true
+  visible: true
+  sub_cells: []
+- id: ab0e60fa-5671-45e9-a9dd-659646fcdc8a
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# ASSUME SHAPES:
+
+    M = (k, 2)
+
+    V = (2, n)'
+  folder_id: 02debaa2-7e09-43e1-a167-ec41fd80c073
+- id: 87b1e760-86ef-45de-aa64-80145ee800e4
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 02debaa2-7e09-43e1-a167-ec41fd80c073
+  type: equation
+  source: InvDistSqBatch(M, v) = -0.5*norm((M[..., None]-v[None, ...]), axis=1)**2
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: f6dfa9d5-1c7d-421f-96e1-a5686d80df08
+  style:
+    color:
+    - 0.5
+    - 0.35
+    - 0.2
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 02debaa2-7e09-43e1-a167-ec41fd80c073
+  type: equation
+  source: InvDistSq(m, v) = -sum((m-v)**2, axis=0)
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: cf3308e0-d54d-445f-a8eb-7333e9a93674
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 02debaa2-7e09-43e1-a167-ec41fd80c073
+  type: equation
+  source: InvDist(m, v) = -norm(m - v, axis=0)
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: cff87070-04f4-47a7-af6e-7a903048a4cd
+  style:
+    color:
+    - 0.55
+    - 0.55
+    - 0.55
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: folder
+  name: DERIVATIVES
+  collapsed: true
+  visible: true
+  sub_cells: []
+- id: 28606a6a-9c33-4c9f-9db9-3a3a11ace2b0
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: "# ASSUME SHAPES:\nM = (k, 2) -> (k, 2, 1)\nv = (2, n) -> (1, 2, n)\n\n\
+    \ -> (k, n)"
+  folder_id: cff87070-04f4-47a7-af6e-7a903048a4cd
+- id: 948332f7-4631-4bf2-87a2-c46266a55c1a
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: cff87070-04f4-47a7-af6e-7a903048a4cd
+  type: equation
+  source: d_InvDistSqBatch(M, v) = -(M[..., None] - v[None, ...])
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: ecf810d8-b9ce-40bf-956a-3a874a2fa7f5
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: cff87070-04f4-47a7-af6e-7a903048a4cd
+  type: equation
+  source: d_logsumexp(M, v, β) = exp(β * S(M, v)) / exp(β * S(M, v)).sum(axis=0)
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: ab7cf435-c93b-4a32-a03b-4e8720283e99
+  style:
+    color:
+    - 0.1
+    - 0.65
+    - 0.75
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: "# ASSUME SHAPES:\nM = (k, 2) \nv = (2, n) \n\nPerforms a weighted sum over\
+    \ M over the `k` axis. \n\nnumerator:   (k, n) -> (k, 1, n)\ndenominator: (k,\
+    \ 2, n)\n\n -> (k, n)"
+  folder_id: cff87070-04f4-47a7-af6e-7a903048a4cd
+- id: 443b8cca-1131-4da4-be47-a9cfad5418de
+  style:
+    color:
+    - 0.1
+    - 0.65
+    - 0.75
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: cff87070-04f4-47a7-af6e-7a903048a4cd
+  type: equation
+  source: dF = d_logsumexp
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 4b1e3a0a-5fb2-4ece-9b96-932ac0556502
+  style:
+    color:
+    - 0.9
+    - 0.3
+    - 0.65
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: cff87070-04f4-47a7-af6e-7a903048a4cd
+  type: equation
+  source: dS = d_InvDistSqBatch
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: ccea18a3-132e-487a-837a-e3a45aa62f6a
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: cff87070-04f4-47a7-af6e-7a903048a4cd
+  type: equation
+  source: dE(M, v, β) = (dF(M, v, β)[:, None] * dS(M, v)).sum(axis=0).T
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: b6cfe2ad-bfd1-41dd-9750-628f63abf2a1
+  style:
+    color:
+    - 0.55
+    - 0.55
+    - 0.55
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: folder
+  name: DESCENT
+  collapsed: false
+  visible: true
+  sub_cells: []
+- id: 4e9d4231-32b8-4dde-863a-2c94428c9111
+  style:
+    color: *id001
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: b6cfe2ad-bfd1-41dd-9750-628f63abf2a1
+  type: slider
+  source: η = 1.0
+  name: η
+  value: 1.0
+  min_val: 0.0
+  max_val: 10.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+- id: 3209e4c6-236f-41bb-a33f-f29c053ddd22
+  style:
+    color: *id001
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: b6cfe2ad-bfd1-41dd-9750-628f63abf2a1
+  type: slider
+  source: T = 200.0
+  name: T
+  value: 200.0
+  min_val: 0.0
+  max_val: 200.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+- id: c72b3584-7cbd-4b92-9410-a230b8bd74f4
+  style:
+    color: *id001
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: b6cfe2ad-bfd1-41dd-9750-628f63abf2a1
+  type: slider
+  source: eps = 0.001
+  name: eps
+  value: 0.001
+  min_val: 0.0
+  max_val: 10.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+- id: cfe635f1-8b9c-4227-a15b-b086a8221f52
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: b6cfe2ad-bfd1-41dd-9750-628f63abf2a1
+  type: equation
+  source: "def descend(pts, M, T:int, β):\n    ## GRADIENT DESCENT\n    for t in arange(T):\n\
+    \        pts = pts - η * dE(M, pts, β).T\n    return pts"
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: a84df7c7-9e1b-498b-8d51-66a616f001ab
+  style:
+    color:
+    - 0.85
+    - 0.55
+    - 0.05
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: b6cfe2ad-bfd1-41dd-9750-628f63abf2a1
+  type: equation
+  source: "def get_attractors(A, M, β, T, eps=0.001):\n    tails = descend(A.T, M,\
+    \ T, β).T\n    # COMPUTE THE GRAD NORMS AT THE END OF EACH DESCENT TRAIL\n   \
+    \ grads = norm(dE(M, tails.T, β).T, axis=0)\n    # Cull all points with gradients\
+    \ over a curvature threshold. \n    mask = grads < eps\n    candidates = tails[mask]\n\
+    \    # QUANTIZE THE REMAINING POINTS \n    bins = np.round(candidates, 2)\n  \
+    \  attractors = np.unique(bins, axis=0)\n    #attractors = pd.DataFrame(points).drop_duplicates().numpy()\n\
+    \    return attractors "
+  visible: false
+  sub_cells: []
+  rng_seed: 2
+- id: 1ac89d88-fe47-4a2e-883b-d67622468131
+  style:
+    color:
+    - 0.55
+    - 0.55
+    - 0.55
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: folder
+  name: BETA BISECTION
+  collapsed: false
+  visible: true
+  sub_cells: []
+- id: d753ae77-ba63-44a6-8a51-35d0a210cf30
+  style:
+    color: *id001
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 1ac89d88-fe47-4a2e-883b-d67622468131
+  type: slider
+  source: max_iter = 100.0
+  name: max_iter
+  value: 100.0
+  min_val: 0.0
+  max_val: 200.0
+  step: 2.0
+  is_playing: false
+  anim_mode: pingpong
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+- id: 099ea4fa-1847-47e5-948f-7f354e445a7f
+  style:
+    color: *id001
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 1ac89d88-fe47-4a2e-883b-d67622468131
+  type: slider
+  source: k = 6.0
+  name: k
+  value: 6.0
+  min_val: 0.0
+  max_val: 10.0
+  step: 1.0
+  is_playing: false
+  anim_mode: pingpong
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+- id: 133ceda9-cb1f-4f23-bed0-2bba6c3d4260
+  style:
+    color: *id001
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 1ac89d88-fe47-4a2e-883b-d67622468131
+  type: slider
+  source: β_0 = 10.0
+  name: β_0
+  value: 10.0
+  min_val: 0.0
+  max_val: 10.0
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+- id: 9f696d93-1f94-4522-853a-b44e20e37388
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 1ac89d88-fe47-4a2e-883b-d67622468131
+  type: equation
+  source: "def get_temperature(k, M, β_0, max_iter, T, eps=0.01):\n\n    β_i = 0.5\
+    \ * β_0\n    A = M\n    for i in range(1, max_iter):\n        ## FIND ATTRACTORS\
+    \ FOR THIS TEMPERATURE\n        attractors = get_attractors(A, M, β_i, T, eps)\n\
+    \        k_i = len(attractors)\n        \n        ## COMPARE TO TARGET NUMBER\
+    \ OF ATTRACTORS\n        if k_i == k:\n            break\n        elif k_i > k:\n\
+    \            β_i -= 0.5**i * β_0\n        elif k_i < k:\n            β_i += 0.5**i\
+    \ * β_0\n            M = A\n    return β_i"
+  visible: false
+  sub_cells: []
+  rng_seed: 1
+- id: f44a31f4-a4cd-406c-bd47-7d89a2cba608
+  style:
+    color:
+    - 0.85
+    - 0.55
+    - 0.05
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 1ac89d88-fe47-4a2e-883b-d67622468131
+  type: equation
+  source: β_star = get_temperature(k, M, β_0, max_iter, T)
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 8848d431-4160-4412-b8a9-83e39d96bd35
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 1ac89d88-fe47-4a2e-883b-d67622468131
+  type: equation
+  source: attractors = get_attractors(M, M, β_star, T, eps=0.01)
+  visible: true
+  sub_cells: []
+  rng_seed: 4
+- id: f556ec5a-a6a7-4e20-87de-04e6c5e24d4b
+  style:
+    color:
+    - 0.2
+    - 0.7
+    - 0.3
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 1ac89d88-fe47-4a2e-883b-d67622468131
+  type: equation
+  source: len(attractors)
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 31a90d35-024e-4dfa-b199-6e73ba0e25f7
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 1ac89d88-fe47-4a2e-883b-d67622468131
+  type: equation
+  source: β_star
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: b0e35b3c-de29-4bd5-a8fa-afb76e40e76e
+  style:
+    color:
+    - 0.13
+    - 0.13
+    - 0.13
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# FINDINGS
+
+    β_2 = 1.09375
+
+    β_3 = 1.25
+
+    β_4 = 1.5625
+
+    β_5 = 2.5'
+  folder_id: 1ac89d88-fe47-4a2e-883b-d67622468131
+- id: 92dd10db-f431-49fb-9154-f2376c655063
+  style:
+    color:
+    - 0.55
+    - 0.55
+    - 0.55
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: folder
+  name: CLUSTERING
+  collapsed: true
+  visible: true
+  sub_cells: []
+- id: e1003c43-2bd5-402e-b0f3-0a51baabf472
+  style:
+    color:
+    - 0.2
+    - 0.7
+    - 0.3
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 92dd10db-f431-49fb-9154-f2376c655063
+  type: equation
+  source: m = cfg.n//1
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: f0133022-0a9f-495f-83aa-324b414f050e
+  style:
+    color:
+    - 0.2
+    - 0.7
+    - 0.3
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 92dd10db-f431-49fb-9154-f2376c655063
+  type: equation
+  source: X = linspace(cfg.x_min, cfg.x_max, m)
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 33cb8896-d8a0-4e67-b1b9-3461cdc9a79f
+  style:
+    color:
+    - 0.2
+    - 0.7
+    - 0.3
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 92dd10db-f431-49fb-9154-f2376c655063
+  type: equation
+  source: Y = linspace(cfg.y_min, cfg.y_max, m)
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: f2022706-383d-4bbf-b915-40e7adaa8b40
+  style:
+    color:
+    - 0.22
+    - 0.4
+    - 0.88
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '## PLOT MEMS AND ATTRACTORS'
+  folder_id: 92dd10db-f431-49fb-9154-f2376c655063
+- id: ae543cbf-0df2-4fa7-85d9-76d6e60b041a
+  style:
+    color:
+    - 0.8470588235294118
+    - 0.2196078431372549
+    - 0.2196078431372549
+    - 1.0
+    opacity: 1.0
+    line_width: 0.2
+    point_size: 0.2
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 92dd10db-f431-49fb-9154-f2376c655063
+  type: equation
+  source: memories_ = np.concatenate((M, -0.01*ones((len(M),1))), axis=1)
+  visible: true
+  sub_cells: []
+  rng_seed: 5
+- id: 02385ab6-028d-429e-bbd6-580e4040050f
+  style:
+    color:
+    - 1.0
+    - 1.0
+    - 1.0
+    - 1.0
+    opacity: 1.0
+    line_width: 0.3
+    point_size: 0.3
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 92dd10db-f431-49fb-9154-f2376c655063
+  type: equation
+  source: attractors_ = np.concatenate((attractors, -0.01*ones((len(attractors),1))),
+    axis=1)
+  visible: true
+  sub_cells: []
+  rng_seed: 1
+- id: 60656aa2-e5b8-454c-8758-99db068eb587
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 92dd10db-f431-49fb-9154-f2376c655063
+  type: equation
+  source: data = stack(meshgrid(X, Y, indexing="xy")).reshape(2, -1)
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 17c125d3-49d1-4f0a-b69b-ac529dc1cd00
+  style:
+    color:
+    - 0.1
+    - 0.65
+    - 0.75
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# PLOT CLUSTERS'
+  folder_id: 92dd10db-f431-49fb-9154-f2376c655063
+- id: 1e56cdb3-1589-48d7-8188-0a9501bb8c0a
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 92dd10db-f431-49fb-9154-f2376c655063
+  type: equation
+  source: traj = descend(data, M, T, β_star).T
+  visible: false
+  sub_cells: []
+  rng_seed: 2
+- id: aa31e213-53d2-417c-b0e0-742896c8be73
+  style:
+    color:
+    - 0.2
+    - 0.7
+    - 0.3
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 92dd10db-f431-49fb-9154-f2376c655063
+  type: equation
+  source: "assignments = np.argmin(\n    norm(\n        traj[..., None] - attractors.T[None,\
+    \ ...], \n        axis=1\n    ), axis=-1)"
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 0d0e5b89-1f61-446f-a58c-80939c22321d
+  style:
+    color:
+    - 0.2896772623062134
+    - 0.6974136233329773
+    - 0.9918516874313354
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.05
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 92dd10db-f431-49fb-9154-f2376c655063
+  type: equation
+  source: A = data.T[assignments == 0]
+  visible: true
+  sub_cells: []
+  rng_seed: 1
+- id: e63e3ce6-c26b-4d91-a259-6d14e6ec16c7
+  style:
+    color:
+    - 0.9979094862937927
+    - 0.8032501935958862
+    - 0.2715953290462494
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.05
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 92dd10db-f431-49fb-9154-f2376c655063
+  type: equation
+  source: B = data.T[assignments == 1]
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: c5e9c43b-2212-4dc6-bce9-3a4226297c2b
+  style:
+    color:
+    - 0.4134737253189087
+    - 0.8114900588989258
+    - 0.015457388944923878
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.05
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 92dd10db-f431-49fb-9154-f2376c655063
+  type: equation
+  source: C = data.T[assignments == 2]
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: ea630007-4d7b-400e-9b5a-b76365646c7c
+  style:
+    color:
+    - 0.8850385546684265
+    - 0.032806895673274994
+    - 0.0
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.05
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 92dd10db-f431-49fb-9154-f2376c655063
+  type: equation
+  source: D = data.T[assignments == 3]
+  visible: true
+  sub_cells: []
+  rng_seed: 1
+- id: febe350b-3cb7-4f96-ac96-06e3f35ad177
+  style:
+    color:
+    - 0.5280689597129822
+    - 0.0631265714764595
+    - 0.843320369720459
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.05
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 92dd10db-f431-49fb-9154-f2376c655063
+  type: equation
+  source: E_ = data.T[assignments == 4]
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: 733e1988-5e47-4bea-90e0-75309b622fd4
+  style:
+    color:
+    - 0.9568627450980393
+    - 0.4470588235294118
+    - 0.8313725490196079
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.05
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 92dd10db-f431-49fb-9154-f2376c655063
+  type: equation
+  source: F_ = data.T[assignments == 5]
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: f6bff1f5-823a-452c-a224-f83f4977baf8
+  style:
+    color:
+    - 0.9541466236114502
+    - 0.5014877319335938
+    - 0.0
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.05
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 92dd10db-f431-49fb-9154-f2376c655063
+  type: equation
+  source: G = data.T[assignments == 6]
+  visible: true
+  sub_cells: []
+  rng_seed: 1
+- id: f6a553b6-712a-43b3-8967-2555d9f6fd11
+  style:
+    color:
+    - 0.24313725490196078
+    - 0.13725490196078433
+    - 0.050980392156862744
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.05
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 92dd10db-f431-49fb-9154-f2376c655063
+  type: equation
+  source: H = data.T[assignments == 7]
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: 289ea800-2847-4b87-9856-fddece82c88c
+  style:
+    color:
+    - 0.024490730836987495
+    - 0.0
+    - 0.5000076293945312
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.05
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: 92dd10db-f431-49fb-9154-f2376c655063
+  type: equation
+  source: I = data.T[assignments == 8]
+  visible: true
+  sub_cells: []
+  rng_seed: 0
+- id: b29f380a-521b-4261-a1d9-cf6c466bb916
+  style:
+    color:
+    - 0.55
+    - 0.55
+    - 0.55
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: folder
+  name: UTILS
+  collapsed: true
+  visible: true
+  sub_cells: []
+- id: aa4cdd8c-794c-4caa-b5ed-c8cf9c0c9be3
+  style:
+    color:
+    - 0.1
+    - 0.65
+    - 0.75
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: b29f380a-521b-4261-a1d9-cf6c466bb916
+  type: equation
+  source: grid = array([x, y]).reshape(2, -1)
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 5dea88bd-46a7-4785-ad8b-9b39f3299a9c
+  style:
+    color:
+    - 0.6
+    - 0.2
+    - 0.8
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: b29f380a-521b-4261-a1d9-cf6c466bb916
+  type: equation
+  source: shape = x.shape
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: 975fdc94-9ee8-4d39-b8f1-0778b354b11b
+  style:
+    color:
+    - 0.9
+    - 0.3
+    - 0.65
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: b29f380a-521b-4261-a1d9-cf6c466bb916
+  type: equation
+  source: β_inv = 1/β
+  visible: false
+  sub_cells: []
+  rng_seed: 0
+- id: c3d6b665-b0e1-4362-a117-20c0af20934a
+  style:
+    color: *id001
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  folder_id: b29f380a-521b-4261-a1d9-cf6c466bb916
+  type: slider
+  source: eps = 1e-06
+  name: eps
+  value: 1.0e-06
+  min_val: 0.0
+  max_val: 1.0e-06
+  step: 0.1
+  is_playing: false
+  anim_mode: pingpong
+  anim_speed_multiplier: 1.0
+  sub_cells: []
+- id: 415dee6d-3c8f-47f4-918a-20ab277ba084
+  style:
+    color:
+    - 0.85
+    - 0.22
+    - 0.22
+    - 1.0
+    opacity: 1.0
+    line_width: 0.05
+    point_size: 0.1
+    scatter_render_mode: circles
+    colormap: null
+    colormap_reversed: false
+    normalize_arrows: false
+  type: comment
+  source: '# Source - https://stackoverflow.com/a/76626685
+
+    # Posted by Klops, modified by community. See post ''Timeline'' for change history
+
+    # Retrieved 2026-06-07, License - CC BY-SA 4.0
+
+
+    import numpy as np
+
+    import time
+
+    import pandas as pd
+
+
+    points = np.random.random(size = (38867362, 3)) * 10000
+
+    points = ((points - np.min(points, axis=0)) // 3).astype(int)
+
+
+    df = pd.DataFrame(points)
+
+
+    start_time = time.time()
+
+    df.drop_duplicates()
+
+    print("::INFO:: Total time taken by drop_duplicates: ", time.time() - start_time)
+
+    '
+  folder_id: b29f380a-521b-4261-a1d9-cf6c466bb916
+view:
+  show_axes: false
+  show_bbox: false
+  show_crosshair: false
+  show_light_bg: false
+  show_shadow: false
+  shadow_opacity: 0.5
+  camera_position:
+  - -3.5636439291283275
+  - -5.409980437548322
+  - 10.641625244212698
+  orbit_target:
+  - 0.0
+  - 0.0
+  - 0.0

@@ -234,10 +234,10 @@ cells:
   rng_seed: 0
 - id: 09000001-0000-4000-8000-000000000002
   style:
-    color:
-    - 0.133333
-    - 0.133333
-    - 0.133333
+    color: &id001
+    - 0.1
+    - 0.1
+    - 0.1
     - 1.0
     opacity: 1.0
     line_width: 0.05
@@ -260,11 +260,7 @@ cells:
   sub_cells: []
 - id: cad9a8a5-05d0-4224-aa3e-18418eb95cb5
   style:
-    color:
-    - 0.13
-    - 0.13
-    - 0.13
-    - 1.0
+    color: *id001
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
@@ -285,11 +281,7 @@ cells:
   sub_cells: []
 - id: 0e52f0ad-b343-4f1a-8e7e-c32348a8d49d
   style:
-    color:
-    - 0.13
-    - 0.13
-    - 0.13
-    - 1.0
+    color: *id001
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
@@ -310,11 +302,7 @@ cells:
   sub_cells: []
 - id: 10caf409-e9b8-413f-b932-0f5e3df1182a
   style:
-    color:
-    - 0.13
-    - 0.13
-    - 0.13
-    - 1.0
+    color: *id001
     opacity: 1.0
     line_width: 0.05
     point_size: 0.1
