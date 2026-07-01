@@ -44,7 +44,7 @@ The crosshair makes the orbit pivot visible during WASD panning and mouse orbiti
 
 ## View Settings (Axis Settings Dialog)
 
-The header bar (`PringleHeaderBar`) spans the full window width above the left/right splitter. Its layout (left to right): logo · **PRINGLE** wordmark · **New** · **Open** · **Save** · **Export** · **📷** (screenshot) · stretch · **⚙** (view settings). All buttons use a pill style (`border-radius: 10px`). The **Save** button text and border turn `#E9A15F` when the session has unsaved changes. The **📷** button saves a PNG snapshot of the current canvas frame; its border flashes `#E9A15F` briefly on click. Dismissing the header buttons is done via the ⚙ toggle.
+The header bar (`PringleHeaderBar`) spans the full window width above the left/right splitter. Its layout (left to right): logo · **PRINGLE** wordmark · **New** · **Open** · **Save** · **Export** · stretch · **camera icon** (screenshot) · **globe icon** (view settings). File buttons use a pill style (`border-radius: 10px`). The **Save** button text and border turn `#E9A15F` when the session has unsaved changes. The **camera** button (SVG `camera-fill.svg`) saves a PNG snapshot of the current canvas frame, defaulting to `~/Downloads/pringle_screenshot.png`; its border flashes `#E9A15F` briefly on click. The **globe** button (SVG `globe.svg`) toggles the Axis Settings popover and turns blue (`#4a9eff`) when open. Both icon buttons are right-aligned after the stretch.
 
 Clicking the ⚙ gear icon in the top-right corner of the viewport opens a floating non-modal **Axis Settings dialog** (`AxisSettingsDialog`). It is not embedded in the left panel or below the viewport. Clicking ⚙ again or the dialog's X button closes it.
 
@@ -252,7 +252,7 @@ Selecting "Add Constraint" appends a constraint sub-cell below the primary cell,
 | `Ctrl+O` | Open session (file dialog) |
 | `Ctrl+N` | New empty session |
 | `Ctrl+Shift+E` | Export session as standalone Python script (native save dialog, defaults to same name as current session with `.py` extension) |
-| 📷 toolbar button | Save current canvas frame as PNG (native save dialog, defaults to `pringle_screenshot.png`) |
+| camera toolbar button | Save current canvas frame as PNG (native save dialog, defaults to `~/Downloads/pringle_screenshot.png`) |
 | `Ctrl+Enter` / `Cmd+Enter` | Add new folder cell below focused cell (in the expression panel); force re-evaluate focused cell when focus is on the viewport |
 | `Shift+Enter` | Add new equation cell below focused cell (in the expression panel) |
 | `Cmd+/` | **In equation/slider cell:** toggle `# ` on current line or all selected lines (single undo step). **In comment cell:** cell-level uncomment — morphs back to equation/slider. |
@@ -307,7 +307,7 @@ Clicking a cell's **color dot** opens a compact popover. For data cells (`show_r
 │  Size    ────────  0.05  ( ) Spheres     │
 │                                          │
 │  Colormap:                               │
-│  [viridis][plasma][inferno][hot][hsv][⇄] │
+│  [viridis][turbo][inferno][hot][hsv][⇄]  │
 └──────────────────────────────────────────┘
 ```
 
@@ -340,5 +340,5 @@ These are the areas not captured elsewhere that v1 should address before shippin
 | **Empty session state** | A placeholder message in empty panels: "Press + to add an expression" |
 | **Grid regeneration on bound change** | Changing axis bounds re-evaluates all spatial cells — show a brief loading indicator if >200ms |
 | **Slider value display** | Show current numeric value next to the drag handle; double-click to type an exact value |
-| **Visibility toggle position** | Eye icon (👁) at the right of the cell row, always visible (not just on hover) |
-| **Folder cell** | A collapsible group; drag cells into/out of folders; folder has its own visibility toggle |
+| **Visibility toggle position** | *(implemented)* SVG `eye-fill.svg` / `eye-slash.svg` at the right of the folder header row; white on hover; no pressed-button chrome |
+| **Folder cell** | *(implemented)* Collapsible group header with caret SVG toggle, eye visibility toggle, rename, and drag handle |
