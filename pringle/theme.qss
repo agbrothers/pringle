@@ -8,8 +8,8 @@
    for tunable colours: pringle.theme.load_stylesheet() substitutes each @name
    token below at load time, and tests read the same values via
    pringle.theme.theme_var(). To retune a colour, edit it here only. */
-/* @var cell-bg:        #111111; */
-/* @var cell-border:    #1a1a1a; */
+/* @var cell-bg:        #151515; */
+/* @var cell-border:    #111111; */
 /* @var active-cell-bg: #181818; */
 
 /* ── Global base ─────────────────────────────────────────────────── */
@@ -42,30 +42,18 @@ QPushButton#header_file_btn:pressed { background: #222; }
 QPushButton#header_file_btn[modified="true"]  { color: #E9A15F; border-color: #E9A15F; }
 QPushButton#header_file_btn[modified="false"] { color: #888;    border-color: #222; }
 
-QPushButton#header_screenshot_btn {
-    color: #888;
-    font-size: 8;
-    padding: 4px 6px;
-    background: transparent;
-    border: 1px solid #222;
-    border-radius: 1px;
-}
-QPushButton#header_screenshot_btn:hover   { color: #eee; border-color: #666; }
-QPushButton#header_screenshot_btn:pressed { background: #222; }
+QPushButton#header_screenshot_btn { background: transparent; border: none; }
+QPushButton#header_screenshot_btn:pressed { background: #222; border-radius: 4px; }
 
 QPushButton#header_wrench_btn {
-    color: #555;
-    font-size: 32px;
     background: transparent;
     border: none;
     border-radius: 5px;
 }
-QPushButton#header_wrench_btn:hover   { color: #ccc; }
-QPushButton#header_wrench_btn:checked { color: #4a9eff; }
+QPushButton#header_wrench_btn:checked { background: transparent; }
 
 /* ── DragHandle (SliderWidget / FolderCellWidget) ────────────────── */
-DragHandle { color: transparent; font-size: 14px; padding: 0; }
-DragHandle:hover { color: #aaa; }
+DragHandle { padding: 0; }
 
 /* ── Active cell highlight (FEAT-148) ─────────────────────────────── */
 /* The focused cell's body turns @active-cell-bg. Every cell type paints its
@@ -103,7 +91,7 @@ CellTextEdit { border: none; background: transparent; }
 /* ── Sub-cell ────────────────────────────────────────────────────── */
 SubCell CellTextEdit {
     border: 1px dashed #555;
-    border-radius: 3px;
+    border-radius: 0px;
     padding: 1px 4px;
     font-size: 12px;
     color: #ddd;
@@ -202,8 +190,7 @@ SliderWidget QPushButton {
     font-size: 13px;
 }
 SliderWidget QPushButton:hover { color: #bbb; }
-QPushButton#slider_controls_btn { color: #444; font-size: 14px; }
-QPushButton#slider_controls_btn:hover { color: #aaa; }
+QPushButton#slider_controls_btn { background: transparent; }
 
 /* ── Slider controls popover ──────────────────────────────────────── */
 SliderControlsPopover {
@@ -224,15 +211,15 @@ SliderControlsPopover QComboBox::drop-down { border: none; }
 
 /* ── Folder cell ──────────────────────────────────────────────────── */
 FolderCellWidget #cell_content {
-    background: #222222;
-    border-radius: 1px;
+    background: #1a1a1a;
+    border-radius: 0px;
 }
+FolderCellWidget DragHandle { background: #1a1a1a; }
 QWidget#folder_header {
     background: transparent;
     border: none;
 }
-QPushButton#folder_toggle { color: #777; font-size: 10px; background: transparent; }
-QPushButton#folder_toggle:hover { color: #ccc; }
+QPushButton#folder_toggle { background: transparent; }
 QPushButton#folder_name {
     font-weight: bold;
     font-size: 11px;
@@ -254,7 +241,9 @@ QLineEdit#folder_name_edit {
 }
 QPushButton#folder_del { color: #444; background: transparent; }
 QPushButton#folder_del:hover { color: #ccc; }
-QFrame#folder_sep { color: #222222; max-height: 1px; }
+QPushButton#folder_eye { background: transparent; border: none; }
+QPushButton#folder_eye:checked,
+QPushButton#folder_eye:pressed { background: transparent; border: none; }
 
 /* ── Comment cell ─────────────────────────────────────────────────── */
 CommentCellWidget { background: @cell-bg; }

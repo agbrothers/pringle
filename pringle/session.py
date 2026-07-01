@@ -342,9 +342,8 @@ def restore_cell_list(
             cell_list._folder_collapsed[folder_id] = True
             for member in cell_list._folder_members(folder_id):
                 member.setVisible(False)
-            if hasattr(folder, "_toggle_btn"):
-                folder._toggle_btn.setText("▶")
-                folder._collapsed = True
+            folder._collapsed = False  # reset so set_collapsed sees a change
+            folder.set_collapsed(True)
 
     # Single rebuild now that all cells have their final IDs
     cell_list._rebuild_namespace()

@@ -14,15 +14,16 @@ from __future__ import annotations
 
 import math
 import uuid
+from importlib.resources import files
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QMenu,
     QLabel, QPlainTextEdit, QSizePolicy, QFrame,
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QPoint
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QPoint, QSize, QByteArray
 from PyQt6.QtGui import (
     QKeyEvent, QFont, QFontMetricsF,
     QPainter, QColor, QLinearGradient, QBrush,
-    QTextCursor,
+    QTextCursor, QIcon, QPixmap
 )
 
 from pringle.style import CellStyle
@@ -39,17 +40,52 @@ class DragHandle(QLabel):
     drag_moved = pyqtSignal(int)
     drag_ended = pyqtSignal()
 
+    _svg_cache: bytes | None = None
+
     def __init__(self, parent=None):
-        super().__init__("⠿", parent)
+        super().__init__(parent)
         self.setFixedWidth(16)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setCursor(Qt.CursorShape.SizeVerCursor)
         self._dragging = False
+        self._px_normal = self._make_pixmap("#555")
+        self._px_hover  = self._make_pixmap("#aaa")
+        self._px_active = self._make_pixmap("#ccc")
+        self.setPixmap(self._px_normal)
+
+    @classmethod
+    def _raw_svg(cls) -> bytes:
+        if cls._svg_cache is None:
+            cls._svg_cache = files("pringle").joinpath("assets/grip-vertical.svg").read_bytes()
+        return cls._svg_cache
+
+    @classmethod
+    def _make_pixmap(cls, color: str) -> QPixmap:
+        from PyQt6.QtSvg import QSvgRenderer
+        svg = cls._raw_svg().replace(b"currentColor", color.encode())
+        renderer = QSvgRenderer(QByteArray(svg))
+        px = QPixmap(QSize(20, 32))  # 2× physical for HiDPI
+        px.fill(Qt.GlobalColor.transparent)
+        p = QPainter(px)
+        renderer.render(p)
+        p.end()
+        px.setDevicePixelRatio(2)  # set AFTER painting — avoids clipping the render
+        return px
+
+    def enterEvent(self, event):
+        if not self._dragging:
+            self.setPixmap(self._px_hover)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        if not self._dragging:
+            self.setPixmap(self._px_normal)
+        super().leaveEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self._dragging = True
-            self.setStyleSheet("color: #666; font-size: 14px; padding: 0;")
+            self.setPixmap(self._px_active)
             self.drag_started.emit()
         event.accept()
 
@@ -61,7 +97,7 @@ class DragHandle(QLabel):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and self._dragging:
             self._dragging = False
-            self.setStyleSheet("")
+            self.setPixmap(self._px_normal)
             self.drag_ended.emit()
         event.accept()
 
@@ -196,7 +232,7 @@ class SubCell(QWidget):
         self._build_ui()
 
     def _build_ui(self):
-        self.setStyleSheet("SubCell { border-top: 1px dashed #444; }")
+        self.setStyleSheet("SubCell { border-top: 1px solid #444; }")
         row = QHBoxLayout(self)
         row.setContentsMargins(4, 2, 6, 2)
         row.setSpacing(4)
@@ -838,10 +874,10 @@ class CellWidget(QWidget):
     def _update_sub_border(self) -> None:
         """Show dashed border on outer frame when sub-cells are present."""
         has_subs = len(self._sub_cells) > 0
-        self._outer_frame.setStyleSheet(
-            "QFrame#cellFrame { border: 1px dashed #555; border-radius: 4px; margin: 1px; }"
-            if has_subs else ""
-        )
+        # self._outer_frame.setStyleSheet(
+        #     "QFrame#cellFrame { border: 1px dashed #555; border-radius: 4px; margin: 1px; }"
+        #     if has_subs else ""
+        # )
 
     def constraint_exprs(self) -> list[str]:
         return [s.source() for s in self._sub_cells if s.sub_type() == "constraint" and s.source().strip()]

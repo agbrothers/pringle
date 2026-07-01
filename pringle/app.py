@@ -727,8 +727,9 @@ class PringleWindow(QMainWindow):
 
     def _save_image(self) -> None:
         from PIL import Image
+        default = str(Path.home() / "Downloads" / "pringle_screenshot.png")
         path, _ = QFileDialog.getSaveFileName(
-            self, "Save Image", "pringle_screenshot.png", "PNG Images (*.png)"
+            self, "Save Image", default, "PNG Images (*.png)"
         )
         if not path:
             return

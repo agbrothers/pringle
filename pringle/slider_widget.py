@@ -22,7 +22,9 @@ from PyQt6.QtWidgets import (
     QAbstractSpinBox, QApplication, QWidget, QHBoxLayout, QLabel, QLineEdit, QSlider,
     QDoubleSpinBox, QPushButton, QFrame, QVBoxLayout, QSizePolicy,
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize, QByteArray, QEvent
+from PyQt6.QtGui import QIcon, QPixmap, QPainter
+from importlib.resources import files
 
 from pringle.style import CellStyle, palette_color
 from pringle.cell_widget import DragHandle, ColorSwatchHandle
@@ -331,6 +333,24 @@ class _NameLineEdit(QLineEdit):
         super().keyPressEvent(event)
 
 
+def _svg_icon(filename: str, color: str, size: QSize = QSize(14, 14)) -> QIcon:
+    from PyQt6.QtSvg import QSvgRenderer
+    svg = files("pringle").joinpath(f"assets/{filename}").read_bytes()
+    svg = svg.replace(b"currentColor", color.encode())
+    renderer = QSvgRenderer(QByteArray(svg))
+    icon = QIcon()
+    for scale in (1, 2):
+        physical = QSize(size.width() * scale, size.height() * scale)
+        px = QPixmap(physical)
+        px.fill(Qt.GlobalColor.transparent)
+        p = QPainter(px)
+        renderer.render(p)
+        p.end()
+        px.setDevicePixelRatio(scale)
+        icon.addPixmap(px)
+    return icon
+
+
 class SliderWidget(QWidget):
     """Slider cell for a named scalar parameter."""
 
@@ -490,12 +510,17 @@ class SliderWidget(QWidget):
         self._max_box.committed.connect(lambda _: self._on_range_changed())
         row2.addWidget(self._max_box)
 
-        self._controls_btn = QPushButton("↺")
+        self._icon_gear_normal = _svg_icon("gear-fill.svg", "#444")
+        self._icon_gear_hover  = _svg_icon("gear-fill.svg", "#aaa")
+        self._controls_btn = QPushButton()
         self._controls_btn.setObjectName("slider_controls_btn")
-        self._controls_btn.setFixedSize(24, 24)
+        self._controls_btn.setIcon(self._icon_gear_normal)
+        self._controls_btn.setIconSize(QSize(12, 12))
+        self._controls_btn.setFixedSize(22, 22)
         self._controls_btn.setFlat(True)
         self._controls_btn.setToolTip("Step / speed / direction")
         self._controls_btn.clicked.connect(self._on_controls_clicked)
+        self._controls_btn.installEventFilter(self)
         row2.addWidget(self._controls_btn)
 
         outer.addLayout(row2)
@@ -766,6 +791,14 @@ class SliderWidget(QWidget):
         red = "border: 1px solid #c0392b;"
         self._min_box.setStyleSheet(red if self._value < self._min else "")
         self._max_box.setStyleSheet(red if self._value > self._max else "")
+
+    def eventFilter(self, obj, event):
+        if obj is self._controls_btn:
+            if event.type() == QEvent.Type.Enter:
+                self._controls_btn.setIcon(self._icon_gear_hover)
+            elif event.type() == QEvent.Type.Leave:
+                self._controls_btn.setIcon(self._icon_gear_normal)
+        return super().eventFilter(obj, event)
 
     def _on_controls_clicked(self) -> None:
         from pringle.slider_controls_popover import SliderControlsPopover

@@ -5,7 +5,7 @@ A folder cell acts as a visual group divider.  Member cells are tracked
 by CellListWidget via an explicit folder_id mapping on each cell.
 
 Layout:
-  [drag handle] [▶/▼] [name (clickable)] [👁] [✕]
+  [drag handle] [caret] [name (clickable)] [eye] [✕]
 
 Signals
 -------
@@ -19,15 +19,35 @@ folder_visibility_changed(cell_id, visible)
 from __future__ import annotations
 
 import uuid
+from importlib.resources import files
 
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout,
     QPushButton, QLineEdit, QFrame, QSizePolicy,
 )
-from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtCore import pyqtSignal, Qt, QSize, QByteArray, QEvent
+from PyQt6.QtGui import QIcon, QPixmap, QPainter
 
 from pringle.style import CellStyle
 from pringle.cell_widget import DragHandle
+
+
+def _svg_icon(filename: str, color: str, size: QSize = QSize(12, 12)) -> QIcon:
+    from PyQt6.QtSvg import QSvgRenderer
+    svg = files("pringle").joinpath(f"assets/{filename}").read_bytes()
+    svg = svg.replace(b"currentColor", color.encode())
+    renderer = QSvgRenderer(QByteArray(svg))
+    icon = QIcon()
+    for scale in (1, 2):
+        physical = QSize(size.width() * scale, size.height() * scale)
+        px = QPixmap(physical)
+        px.fill(Qt.GlobalColor.transparent)
+        p = QPainter(px)
+        renderer.render(p)
+        p.end()
+        px.setDevicePixelRatio(scale)  # set AFTER painting — avoids clipping the render
+        icon.addPixmap(px)
+    return icon
 
 
 class FolderCellWidget(QWidget):
@@ -37,7 +57,7 @@ class FolderCellWidget(QWidget):
     content_changed = pyqtSignal(str)           # cell_id (name change)
     drag_started = pyqtSignal(str)              # cell_id
     drag_moved = pyqtSignal(str, int)           # cell_id, global_y
-    drag_ended = pyqtSignal(str)               # cell_id
+    drag_ended = pyqtSignal(str)                # cell_id
     collapse_changed = pyqtSignal(str, bool)    # cell_id, collapsed
     folder_visibility_changed = pyqtSignal(str, bool)  # cell_id, visible
 
@@ -63,10 +83,11 @@ class FolderCellWidget(QWidget):
 
     def _build_ui(self):
         outer_h = QHBoxLayout(self)
-        outer_h.setContentsMargins(0, 3, 0, 0)
+        outer_h.setContentsMargins(0, 1, 0, 0)
         outer_h.setSpacing(0)
 
         self._drag_handle = DragHandle(self)
+        self._drag_handle.setContentsMargins(0, 1, 0, 0)
         self._drag_handle.drag_started.connect(lambda: self.drag_started.emit(self.cell_id))
         self._drag_handle.drag_moved.connect(lambda y: self.drag_moved.emit(self.cell_id, y))
         self._drag_handle.drag_ended.connect(lambda: self.drag_ended.emit(self.cell_id))
@@ -75,7 +96,7 @@ class FolderCellWidget(QWidget):
         content = QWidget()
         content.setObjectName("cell_content")  # active-cell band target (FEAT-148)
         outer = QVBoxLayout(content)
-        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setContentsMargins(0, 3, 0, 3)
         outer.setSpacing(0)
         outer_h.addWidget(content, 1)
 
@@ -83,11 +104,15 @@ class FolderCellWidget(QWidget):
         header = QWidget()
         header.setObjectName("folder_header")
         row = QHBoxLayout(header)
-        row.setContentsMargins(6, 2, 6, 2)
+        row.setContentsMargins(6, 8, 6, 8)
         row.setSpacing(4)
 
-        self._toggle_btn = QPushButton("▼")
+        self._icon_caret_down  = _svg_icon("caret-down-fill.svg",  "#777", QSize(12, 12))
+        self._icon_caret_right = _svg_icon("caret-right-fill.svg", "#777", QSize(12, 12))
+        self._toggle_btn = QPushButton()
         self._toggle_btn.setObjectName("folder_toggle")
+        self._toggle_btn.setIcon(self._icon_caret_down)
+        self._toggle_btn.setIconSize(QSize(12, 12))
         self._toggle_btn.setFixedSize(20, 20)
         self._toggle_btn.setFlat(True)
         self._toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -110,13 +135,20 @@ class FolderCellWidget(QWidget):
         self._committing = False
         row.addWidget(self._name_edit, 1)
 
-        self._eye_btn = QPushButton("👁")
+        self._icon_eye_on    = _svg_icon("eye-fill.svg",  "#777", QSize(18, 18))
+        self._icon_eye_off   = _svg_icon("eye-slash.svg", "#444", QSize(18, 18))
+        self._icon_eye_hover = _svg_icon("eye-fill.svg",  "#fff", QSize(18, 18))
+        self._eye_btn = QPushButton()
+        self._eye_btn.setObjectName("folder_eye")
+        self._eye_btn.setIcon(self._icon_eye_on)
+        self._eye_btn.setIconSize(QSize(18, 18))
         self._eye_btn.setFixedSize(22, 22)
         self._eye_btn.setFlat(True)
         self._eye_btn.setCheckable(True)
         self._eye_btn.setChecked(True)
         self._eye_btn.setToolTip("Toggle folder visibility in viewport")
         self._eye_btn.toggled.connect(self._on_eye_toggled)
+        self._eye_btn.installEventFilter(self)
         row.addWidget(self._eye_btn)
 
         del_btn = QPushButton("✕")
@@ -133,12 +165,6 @@ class FolderCellWidget(QWidget):
         self._body = QWidget()
         self._body.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         outer.addWidget(self._body)
-
-        # Separator
-        sep = QFrame()
-        sep.setObjectName("folder_sep")
-        sep.setFrameShape(QFrame.Shape.HLine)
-        outer.addWidget(sep)
 
     # ------------------------------------------------------------------
     # CellWidget interface (so CellListWidget can treat it uniformly)
@@ -186,7 +212,7 @@ class FolderCellWidget(QWidget):
         if self._collapsed == collapsed:
             return
         self._collapsed = collapsed
-        self._toggle_btn.setText("▶" if collapsed else "▼")
+        self._toggle_btn.setIcon(self._icon_caret_right if collapsed else self._icon_caret_down)
         self._body.setVisible(not collapsed)
         self.collapse_changed.emit(self.cell_id, collapsed)
 
@@ -197,11 +223,20 @@ class FolderCellWidget(QWidget):
     # Internal
     # ------------------------------------------------------------------
 
+    def eventFilter(self, obj, event):
+        if obj is self._eye_btn:
+            if event.type() == QEvent.Type.Enter and self._folder_visible:
+                self._eye_btn.setIcon(self._icon_eye_hover)
+            elif event.type() == QEvent.Type.Leave:
+                self._eye_btn.setIcon(self._icon_eye_on if self._folder_visible else self._icon_eye_off)
+        return super().eventFilter(obj, event)
+
     def _on_toggle(self):
         self.toggle()
 
     def _on_eye_toggled(self, checked: bool) -> None:
         self._folder_visible = checked
+        self._eye_btn.setIcon(self._icon_eye_on if checked else self._icon_eye_off)
         self.folder_visibility_changed.emit(self.cell_id, checked)
 
     def _on_edit_clicked(self):

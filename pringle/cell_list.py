@@ -435,7 +435,8 @@ class CellListWidget(QWidget):
 
     def _apply_indent(self, cell, indented: bool) -> None:
         m = cell.contentsMargins()
-        left = 16 if indented else 0
+        left = 0
+        # left = 16 if indented else 0
         cell.setContentsMargins(left, m.top(), m.right(), m.bottom())
 
     def _is_render_visible(self, cell) -> bool:
